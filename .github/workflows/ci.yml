@@ -50,4 +50,53 @@ jobs:
       # every OS.
       - name: shellcheck
         if: runner.os == 'Linux'
-        run: shellcheck bin/swoop extensions/*/*
+        run: shellcheck bin/swoop extensions/*/* scripts/*
+      - name: release-gate tests
+        if: runner.os == 'Linux'
+        run: scripts/release-gate-test
+
+  # A pull request that bumps VERSION must add the matching CHANGELOG section.
+  # One that leaves VERSION alone is not this job's business.
+  version-changelog:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: A VERSION bump needs a matching CHANGELOG section
+        run: |
+          base='${{ github.event.pull_request.base.sha }}'
+          if git show "$base:VERSION" > /tmp/base-version 2>/dev/null && cmp -s /tmp/base-version VERSION; then
+            echo "VERSION unchanged, nothing to check."
+            exit 0
+          fi
+          scripts/release-gate check
+
+  # Cut the tag once a VERSION lands on main with no tag behind it. Runs on
+  # every push to main and is idempotent: a merge that did not bump VERSION
+  # finds the tag already there and stops. It needs the tests green first,
+  # because a tag is the one thing here that is awkward to take back.
+  tag:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Tag v$VERSION if it does not exist
+        run: |
+          scripts/release-gate check
+          v="v$(scripts/release-gate version)"
+          if git rev-parse -q --verify "refs/tags/$v" >/dev/null; then
+            echo "$v already exists."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$v" -m "$v"
+          git push origin "refs/tags/$v"
+          echo "tagged $v"

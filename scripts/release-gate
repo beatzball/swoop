@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# release-gate: the mechanical half of cutting a version, in a script rather
+# than inline in a workflow so scripts/release-gate-test can exercise it.
+#
+#   release-gate check [DIR]     VERSION must have a matching CHANGELOG
+#                                section. Exit 1, with the reason, if not.
+#   release-gate notes [DIR]     print that section, heading dropped, for
+#                                use as a release body.
+#   release-gate version [DIR]   print the version.
+#
+# VERSION is the single source of truth for the version number; a bump to it
+# is what declares a release. The changelog is written by hand, in prose, and
+# only the bookkeeping is automated: a tool that derives the changelog from
+# commit subjects would replace it with a worse one.
+set -euo pipefail
+
+usage() { echo "usage: release-gate check|notes|version [DIR]" >&2; exit 2; }
+cmd="${1:-}"; dir="${2:-.}"
+[ -n "$cmd" ] || usage
+ver_file="$dir/VERSION"
+log_file="$dir/CHANGELOG.md"
+[ -f "$ver_file" ] || { echo "release-gate: no $ver_file" >&2; exit 1; }
+[ -f "$log_file" ] || { echo "release-gate: no $log_file" >&2; exit 1; }
+
+# tr rather than $(cat): a trailing newline is normal, anything else is not.
+v="$(tr -d '[:space:]' < "$ver_file")"
+
+case "$cmd" in
+  version)
+    printf '%s\n' "$v"
+    ;;
+  check)
+    # Exactly X.Y.Z. A loose glob would accept "1.2.3.4" or "v1.2.3".
+    case "$v" in
+      *[!0-9.]*|.*|*.|*..*) echo "release-gate: VERSION is '$v', which is not X.Y.Z" >&2; exit 1 ;;
+    esac
+    [ "$(printf '%s' "$v" | tr -cd . | wc -c | tr -d ' ')" = 2 ] || {
+      echo "release-gate: VERSION is '$v', which is not X.Y.Z" >&2; exit 1; }
+    # grep -F: the brackets in "## [0.1.0]" are literal, and the dots in a
+    # version are not wildcards.
+    if ! grep -qF "## [$v]" "$log_file"; then
+      echo "release-gate: VERSION is $v but CHANGELOG.md has no '## [$v]' section." >&2
+      echo "  Write the section first. The tag job uses it as the release notes." >&2
+      exit 1
+    fi
+    printf 'VERSION %s has a CHANGELOG section.\n' "$v"
+    ;;
+  notes)
+    # From the line after "## [v]" up to the next "## " heading or the link
+    # list at the bottom, blank lines at both ends trimmed.
+    awk -v h="## [$v]" '
+      index($0, h) == 1 { on = 1; next }
+      on && (/^## / || /^\[/) { exit }
+      on { print }
+    ' "$log_file" | sed -e :a -e '/^\n*$/{$d;N;ba' -e '}' | sed '/./,$!d'
+    ;;
+  *)
+    usage
+    ;;
+esac

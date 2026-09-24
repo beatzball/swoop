@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+# Tests for scripts/release-gate. Each case builds a throwaway directory with
+# a VERSION and a CHANGELOG and checks the gate's verdict. Run by CI on Linux
+# and by hand anywhere: scripts/release-gate-test
+set -euo pipefail
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+gate="$here/release-gate"
+pass=0; fail=0
+
+ok()   { pass=$((pass + 1)); echo "PASS $1"; }
+bad()  { fail=$((fail + 1)); echo "FAIL $1"; }
+
+fixture() { # version changelog-text
+  d="$(mktemp -d)"
+  printf '%s\n' "$1" > "$d/VERSION"
+  printf '%s' "$2" > "$d/CHANGELOG.md"
+  echo "$d"
+}
+
+log='# Changelog
+
+## [Unreleased]
+
+## [0.1.0] - 2026-09-24
+
+### Added
+
+- The first thing.
+- The second thing.
+
+## [0.0.1] - 2026-09-01
+
+- Nothing yet.
+
+[Unreleased]: https://example.invalid/compare/v0.1.0...HEAD
+[0.1.0]: https://example.invalid/tag/v0.1.0
+'
+
+d="$(fixture 0.1.0 "$log")"
+if "$gate" check "$d" >/dev/null; then ok "check passes when the section exists"; else bad "check passes when the section exists"; fi
+
+d="$(fixture 0.2.0 "$log")"
+if ! "$gate" check "$d" 2>/dev/null; then ok "check fails when the section is missing"; else bad "check fails when the section is missing"; fi
+
+for v in v0.1.0 0.1 0.1.0.0 .1.0 0..1 0.1.0-rc1; do
+  d="$(fixture "$v" "$log")"
+  if ! "$gate" check "$d" 2>/dev/null; then ok "check rejects '$v'"; else bad "check rejects '$v'"; fi
+done
+
+d="$(fixture 0.1.0 "$log")"
+if [ "$("$gate" version "$d")" = 0.1.0 ]; then ok "version prints the version"; else bad "version prints the version"; fi
+
+d="$(fixture 0.1.0 "$log")"
+notes="$("$gate" notes "$d")"
+want='### Added
+
+- The first thing.
+- The second thing.'
+if [ "$notes" = "$want" ]; then ok "notes prints only that section"; else bad "notes prints only that section"; printf '%s\n' "--- got:" "$notes"; fi
+
+d="$(mktemp -d)"; printf '0.1.0\n' > "$d/VERSION"
+if ! "$gate" check "$d" 2>/dev/null; then ok "check fails without a changelog"; else bad "check fails without a changelog"; fi
+
+echo "$pass passed, $fail failed"
+[ "$fail" -eq 0 ]
