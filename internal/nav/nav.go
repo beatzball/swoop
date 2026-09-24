@@ -94,14 +94,13 @@ func Enter(st *State, id, kind, title, query string, pos int, runCmd string) str
 	st.Stack = append(st.Stack, Frame{View: id, Title: title, Query: query, Pos: pos})
 	// clear-query first, so the reload that follows sees an empty bar and
 	// the view answers with its "nothing typed yet" rows. Then fzf's own
-	// matching goes off and typing is bound, so every keystroke asks the
-	// extension for new rows.
+	// matching goes off: inside a view the extension filters, and the
+	// launcher shows exactly what it returns.
 	return strings.Join([]string{
 		"clear-query",
 		"disable-search",
 		wrap("change-prompt", title+" > "),
 		"reload-sync(swoop-nav rows {q})",
-		"rebind(change)",
 	}, "+")
 }
 
@@ -117,13 +116,11 @@ func Esc(st *State, query string) string {
 	}
 	frame := *top
 	st.Stack = st.Stack[:len(st.Stack)-1]
-	// Typing is unbound and matching is back on before the root rows are
-	// reloaded; then the old text goes back into the bar, fzf is told to
-	// finish that search (wait), and the cursor lands on the saved row.
-	// Same rows plus same text give the same order, so the row is the one
-	// the user left.
+	// Matching is back on before the root rows are reloaded; then the old
+	// text goes back into the bar, fzf is told to finish that search
+	// (wait), and the cursor lands on the saved row. Same rows plus same
+	// text give the same order, so the row is the one the user left.
 	return strings.Join([]string{
-		"unbind(change)",
 		"enable-search",
 		wrap("change-prompt", RootPrompt),
 		"reload-sync(swoop-nav rows {q})",
@@ -133,11 +130,11 @@ func Esc(st *State, query string) string {
 	}, "+")
 }
 
-// Change decides what typing does: inside a view, ask for new rows.
-func Change(st *State) string {
-	if st.Top() == nil {
-		return "ignore"
-	}
+// Change decides what typing does: ask for new rows, everywhere. Inside a
+// view the extension filters. At the root the apps come from the cache and
+// the extensions are asked with the text, which is how a calculator row
+// appears for "2+2" while fzf keeps matching the apps itself.
+func Change(*State) string {
 	return "reload-sync(swoop-nav rows {q})"
 }
 

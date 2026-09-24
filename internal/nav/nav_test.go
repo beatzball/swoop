@@ -26,7 +26,7 @@ func TestEnterOnNothingIsIgnored(t *testing.T) {
 func TestEnterOnViewRowPushesAndLoads(t *testing.T) {
 	st := &State{}
 	got := Enter(st, "ext/define/define", "view", "Define Word", "de", 3, "")
-	want := "clear-query+disable-search+change-prompt(Define Word > )+reload-sync(swoop-nav rows {q})+rebind(change)"
+	want := "clear-query+disable-search+change-prompt(Define Word > )+reload-sync(swoop-nav rows {q})"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -41,7 +41,7 @@ func TestEscClearsThenPopsThenCloses(t *testing.T) {
 		t.Fatalf("text in the bar: got %q", got)
 	}
 	got := Esc(st, "")
-	want := "unbind(change)+enable-search+change-prompt(  )+reload-sync(swoop-nav rows {q})+change-query(de)+wait+pos(3)"
+	want := "enable-search+change-prompt(  )+reload-sync(swoop-nav rows {q})+change-query(de)+wait+pos(3)"
 	if got != want {
 		t.Fatalf("pop: got  %q\nwant %q", got, want)
 	}
@@ -53,13 +53,11 @@ func TestEscClearsThenPopsThenCloses(t *testing.T) {
 	}
 }
 
-func TestChange(t *testing.T) {
-	if got := Change(&State{}); got != "ignore" {
-		t.Fatalf("root: got %q", got)
-	}
-	st := &State{Stack: []Frame{{View: "x"}}}
-	if got := Change(st); got != "reload-sync(swoop-nav rows {q})" {
-		t.Fatalf("view: got %q", got)
+func TestChangeReloadsEverywhere(t *testing.T) {
+	for _, st := range []*State{{}, {Stack: []Frame{{View: "x"}}}} {
+		if got := Change(st); got != "reload-sync(swoop-nav rows {q})" {
+			t.Fatalf("got %q", got)
+		}
 	}
 }
 

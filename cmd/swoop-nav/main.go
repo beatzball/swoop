@@ -13,9 +13,12 @@
 package main
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -25,6 +28,12 @@ import (
 )
 
 const envState = "SWOOP_STATE"
+
+// envApps names the file bin/swoop filled at startup with the built-in
+// rows, pictures included. Root reloads read it instead of listing apps
+// again: they do not change while the launcher is open, and a reload
+// happens on every keystroke.
+const envApps = "SWOOP_APPS"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -58,9 +67,13 @@ func main() {
 		if len(os.Args) > 4 {
 			title = os.Args[4]
 		}
-		// The run command removes the state file itself: become replaces
+		// The run command removes the run's files itself: become replaces
 		// fzf, so nothing after it in bin/swoop ever runs.
-		run := "rm -f " + nav.ShellQuote(path) + "; exec swoop-run " + nav.ShellQuote(id)
+		run := "rm -f " + nav.ShellQuote(path)
+		if apps := os.Getenv(envApps); apps != "" {
+			run += " " + nav.ShellQuote(apps)
+		}
+		run += "; exec swoop-run " + nav.ShellQuote(id)
 		fmt.Println(nav.Enter(st, id, kind, title, query, pos, run))
 	case "esc":
 		fmt.Println(nav.Esc(st, query))
@@ -85,29 +98,23 @@ func main() {
 	}
 }
 
-// rows prints the current pane. At the root that is the same pipeline
-// bin/swoop ran at startup; the pictures are already in the terminal, so
-// swoop-icons only rewrites the rows and its picture output is dropped.
+// rows prints the current pane. At the root that is the cached built-in
+// rows plus whatever the extensions answer for the text, in one order by
+// title, so a calculator's row for "2+2" sits in the same list as the apps.
+// Inside a view it is whatever the view's extension answers.
 func rows(st *nav.State, query string) error {
+	query = strings.TrimSpace(query)
 	top := st.Top()
 	if top == nil {
-		list := exec.Command("swoop-list")
-		icons := exec.Command("swoop-icons", "-out", os.DevNull)
-		pipe, err := list.StdoutPipe()
+		items, err := cachedApps()
 		if err != nil {
 			return err
 		}
-		icons.Stdin = pipe
-		icons.Stdout = os.Stdout
-		icons.Stderr = os.Stderr
-		list.Stderr = os.Stderr
-		if err := list.Start(); err != nil {
-			return err
-		}
-		if err := icons.Run(); err != nil {
-			return err
-		}
-		return list.Wait()
+		items = append(items, ext.ListAll(ext.Discover(ext.Dirs()), query)...)
+		sort.SliceStable(items, func(i, j int) bool {
+			return strings.ToLower(items[i].Title) < strings.ToLower(items[j].Title)
+		})
+		return protocol.Write(os.Stdout, items)
 	}
 	name, viewID, ok := ext.Route(top.View)
 	if !ok {
@@ -117,9 +124,34 @@ func rows(st *nav.State, query string) error {
 	if !found {
 		return fmt.Errorf("extension %q is not installed", name)
 	}
-	items, err := e.View(viewID, strings.TrimSpace(query))
+	items, err := e.View(viewID, query)
 	if err != nil {
 		return err
 	}
 	return protocol.Write(os.Stdout, items)
+}
+
+// cachedApps reads the rows bin/swoop cached at startup. Without the cache
+// (swoop-nav run by hand) it lists the apps directly, without pictures.
+func cachedApps() ([]protocol.Item, error) {
+	path := os.Getenv(envApps)
+	var data []byte
+	var err error
+	if path != "" {
+		data, err = os.ReadFile(path)
+	} else {
+		data, err = exec.Command("swoop-list").Output()
+	}
+	if err != nil {
+		return nil, err
+	}
+	var items []protocol.Item
+	sc := bufio.NewScanner(bytes.NewReader(data))
+	sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
+	for sc.Scan() {
+		if it, err := protocol.Parse(sc.Text()); err == nil {
+			items = append(items, it)
+		}
+	}
+	return items, nil
 }

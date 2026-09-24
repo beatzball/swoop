@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+# calc: type arithmetic in the bar and get the answer as a row. This is an
+# extension whose `list` depends on the text typed: for "2+2" it prints one
+# row, for anything that is not arithmetic it prints nothing. Enter copies
+# the result. The arithmetic is done by bc, which ships with macOS and
+# every Linux.
+set -euo pipefail
+
+row() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" calc '' "$2" "$3"; }
+
+case "${1:-}" in
+  list)
+    expr="${2:-}"
+    # Only digits, operators, parentheses, a decimal point and spaces reach
+    # bc: it is a language with its own commands, and "quit" or a variable
+    # name typed into a launcher must not do anything. One digit at least,
+    # one operator at least, so a bare number is not a row.
+    [[ "$expr" =~ ^[0-9.+*/^%()[:space:]-]+$ ]] || exit 0
+    [[ "$expr" == *[0-9]* && "$expr" == *[-+*/^%]* ]] || exit 0
+    # scale=10 for fractions; the sed calls trim trailing zeros and a
+    # trailing dot, so 10/4 is 2.5 and 4/2 is 2. bc reports a bad
+    # expression on stderr and prints nothing; then there is no row.
+    result="$(printf 'scale=10; %s\n' "$expr" | bc 2>/dev/null | tr -d '\\\n' | sed -E 's/(\.[0-9]*[1-9])0+$/\1/; s/\.0+$//; s/^(-?)\./\10./')"
+    [ -n "$result" ] || exit 0
+    # The title carries the expression: at the root fzf matches on titles,
+    # and this row must match what was typed to be shown at all.
+    row "$result" "$expr = $result" 'Enter copies the result'
+    ;;
+  preview)
+    printf '= %s\n' "${2:-}"
+    ;;
+  run)
+    printf '%s' "${2:-}" | pbcopy
+    ;;
+  *)
+    echo "usage: calc list <expression> | preview <result> | run <result>" >&2
+    exit 2
+    ;;
+esac
