@@ -157,37 +157,14 @@ func (s Store) newest() (*Entry, error) {
 	return &all[0], nil
 }
 
-// compact rewrites the file with only the newest MaxEntries once it has
-// grown past twice that. Written to a temp name and renamed, so a reader
-// never sees half a file.
+// compact keeps only the newest MaxEntries once the file has grown past
+// twice that.
 func (s Store) compact() error {
 	all, err := s.All()
 	if err != nil || len(all) <= 2*MaxEntries {
 		return err
 	}
-	keep := all[:MaxEntries]
-	tmp := s.Path + ".tmp"
-	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	w := bufio.NewWriter(f)
-	for i := len(keep) - 1; i >= 0; i-- {
-		line, err := json.Marshal(keep[i])
-		if err != nil {
-			f.Close()
-			return err
-		}
-		w.Write(append(line, '\n'))
-	}
-	if err := w.Flush(); err != nil {
-		f.Close()
-		return err
-	}
-	if err := f.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmp, s.Path)
+	return s.rewrite(all[:MaxEntries])
 }
 
 // Title is the one-line form of an entry for a row: the first line that
@@ -205,4 +182,65 @@ func Title(text string, max int) string {
 		return line
 	}
 	return ""
+}
+
+// Delete removes the entry with that id. The file is rewritten without it,
+// to a temp name and renamed, like compaction.
+func (s Store) Delete(id string) error {
+	n, err := strconv.ParseInt(id, 10, 64)
+	if err != nil {
+		return errors.New("clip: bad id")
+	}
+	all, err := s.All()
+	if err != nil {
+		return err
+	}
+	kept := all[:0]
+	found := false
+	for _, e := range all {
+		if e.ID == n {
+			found = true
+			continue
+		}
+		kept = append(kept, e)
+	}
+	if !found {
+		return errors.New("clip: no such entry")
+	}
+	return s.rewrite(kept)
+}
+
+// Clear removes every entry.
+func (s Store) Clear() error {
+	return s.rewrite(nil)
+}
+
+// rewrite replaces the file with newestFirst, oldest at the top of the
+// file as Append would have written them.
+func (s Store) rewrite(newestFirst []Entry) error {
+	if err := os.MkdirAll(filepath.Dir(s.Path), 0o700); err != nil {
+		return err
+	}
+	tmp := s.Path + ".tmp"
+	f, err := os.OpenFile(tmp, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	w := bufio.NewWriter(f)
+	for i := len(newestFirst) - 1; i >= 0; i-- {
+		line, err := json.Marshal(newestFirst[i])
+		if err != nil {
+			f.Close()
+			return err
+		}
+		w.Write(append(line, '\n'))
+	}
+	if err := w.Flush(); err != nil {
+		f.Close()
+		return err
+	}
+	if err := f.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.Path)
 }

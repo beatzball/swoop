@@ -13,3 +13,5 @@ func openPasteboard() (pasteboard, error) {
 func (pasteboard) ChangeCount() int64   { return 0 }
 func (pasteboard) Concealed() bool      { return true }
 func (pasteboard) Text() (string, bool) { return "", false }
+func (pasteboard) Types() string        { return "" }
+func (pasteboard) Frontmost() string    { return "" }

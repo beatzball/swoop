@@ -7,18 +7,26 @@
 //	swoop-clipd run             the watcher itself, in the foreground
 //	swoop-clipd list [query]    result lines, newest first
 //	swoop-clipd get <id>        the full text of one entry
+//	swoop-clipd delete <id>     remove one entry
+//	swoop-clipd clear           remove every entry
 //	swoop-clipd status          say whether a watcher runs
+//	swoop-clipd types           the marks on the clipboard right now
+//	swoop-clipd frontmost       the bundle id of the app in front
 //
-// Privacy: an entry whose pasteboard types include the concealed or
-// transient marks that password managers set is never stored. Entries are
-// cut at 64 KB and the file is kept to 500 entries. The file is the user's
-// own, mode 0600, under the data directory.
+// Privacy, two rules. An entry whose pasteboard types include the concealed
+// or transient marks (org.nspasteboard.ConcealedType, TransientType) is
+// never stored; some password managers set them. And a copy made while an
+// app on the ignore list is in front is never stored; the list defaults to
+// the known password managers and lives in ~/.config/swoop/clipboard.ignore,
+// because not every manager sets the mark. Entries are cut at 64 KB and the
+// file is kept to 500 entries, mode 0600, under the data directory.
 package main
 
 import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/beatzball/swoop/internal/clip"
@@ -32,7 +40,7 @@ const interval = 300 * time.Millisecond
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: swoop-clipd start|run|list [query]|get <id>|status")
+		fmt.Fprintln(os.Stderr, "usage: swoop-clipd start|run|list [query]|get <id>|delete <id>|clear|status|types|frontmost")
 		os.Exit(2)
 	}
 	store := clip.Default()
@@ -64,6 +72,24 @@ func main() {
 		if e, err = store.Get(os.Args[2]); err == nil {
 			fmt.Print(e.Text)
 		}
+	case "delete":
+		if len(os.Args) != 3 {
+			fmt.Fprintln(os.Stderr, "usage: swoop-clipd delete <id>")
+			os.Exit(2)
+		}
+		err = store.Delete(os.Args[2])
+	case "clear":
+		err = store.Clear()
+	case "types":
+		var pb pasteboard
+		if pb, err = openPasteboard(); err == nil {
+			fmt.Println(pb.Types())
+		}
+	case "frontmost":
+		var pb pasteboard
+		if pb, err = openPasteboard(); err == nil {
+			fmt.Println(pb.Frontmost())
+		}
 	default:
 		fmt.Fprintln(os.Stderr, "swoop-clipd: unknown command", os.Args[1])
 		os.Exit(2)
@@ -75,7 +101,10 @@ func main() {
 }
 
 // run is the watcher: whenever the pasteboard's change count moves and
-// the content is plain text that is not marked private, store it.
+// the content is plain text that is not marked private and was not copied
+// while an ignored app was in front, store it. The ignore list is read on
+// every change, so an edit to it takes effect without a restart; it is a
+// few lines and a change is rare.
 func run(store clip.Store) error {
 	unlock, err := lock(store)
 	if err != nil {
@@ -95,6 +124,13 @@ func run(store clip.Store) error {
 		}
 		last = n
 		if pb.Concealed() {
+			continue
+		}
+		ignore, err := clip.LoadIgnore(clip.IgnorePath())
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "swoop-clipd:", err)
+		}
+		if ignore[strings.ToLower(pb.Frontmost())] {
 			continue
 		}
 		text, ok := pb.Text()

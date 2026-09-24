@@ -36,3 +36,17 @@ func (pasteboard) Text() (string, bool) {
 	defer C.free(unsafe.Pointer(p))
 	return C.GoString(p), true
 }
+
+// Types lists the pasteboard's current types, one per line.
+func (pasteboard) Types() string {
+	p := C.swoop_pb_types()
+	defer C.free(unsafe.Pointer(p))
+	return C.GoString(p)
+}
+
+// Frontmost is the bundle id of the app in front right now.
+func (pasteboard) Frontmost() string {
+	p := C.swoop_frontmost_app()
+	defer C.free(unsafe.Pointer(p))
+	return C.GoString(p)
+}

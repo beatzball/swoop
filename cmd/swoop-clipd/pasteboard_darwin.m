@@ -32,3 +32,27 @@ char *swoop_pb_text(void) {
 		return utf8 ? strdup(utf8) : NULL;
 	}
 }
+
+// All the types on the pasteboard, one per line, for `swoop-clipd types`:
+// the way to learn what a given app marks its copies with.
+char *swoop_pb_types(void) {
+	@autoreleasepool {
+		NSArray<NSPasteboardType> *types = [[NSPasteboard generalPasteboard] types];
+		if (types == nil) return strdup("");
+		NSString *joined = [types componentsJoinedByString:@"\n"];
+		const char *utf8 = [joined UTF8String];
+		return utf8 ? strdup(utf8) : strdup("");
+	}
+}
+
+// The bundle id of the app in front, or "" if none. The pasteboard does
+// not say who wrote to it; the app in front at that moment is the best
+// guess there is, and it is what an ignore list is matched against.
+char *swoop_frontmost_app(void) {
+	@autoreleasepool {
+		NSRunningApplication *app = [[NSWorkspace sharedWorkspace] frontmostApplication];
+		NSString *bid = app ? [app bundleIdentifier] : nil;
+		const char *utf8 = bid ? [bid UTF8String] : NULL;
+		return strdup(utf8 ? utf8 : "");
+	}
+}

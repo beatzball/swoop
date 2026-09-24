@@ -118,3 +118,29 @@ func TestTitle(t *testing.T) {
 		}
 	}
 }
+
+func TestDeleteAndClear(t *testing.T) {
+	s := temp(t)
+	now := time.Unix(1000, 0)
+	_ = s.Append("keep", now)
+	_ = s.Append("drop", now.Add(time.Second))
+	_ = s.Append("also keep", now.Add(2*time.Second))
+	all, _ := s.All()
+	if err := s.Delete(strconv.FormatInt(all[1].ID, 10)); err != nil {
+		t.Fatal(err)
+	}
+	all, _ = s.All()
+	if len(all) != 2 || all[0].Text != "also keep" || all[1].Text != "keep" {
+		t.Fatalf("after delete: %+v", all)
+	}
+	if err := s.Delete("42"); err == nil {
+		t.Fatal("deleting an unknown id must fail")
+	}
+	if err := s.Clear(); err != nil {
+		t.Fatal(err)
+	}
+	all, _ = s.All()
+	if len(all) != 0 {
+		t.Fatalf("after clear: %+v", all)
+	}
+}
