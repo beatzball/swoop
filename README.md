@@ -34,8 +34,19 @@ if [[ -n "$GHOSTTY_QUICK_TERMINAL" ]] && [[ -x /absolute/path/to/swoop/bin/swoop
 fi
 ```
 
+Two more steps, or the hotkey does nothing:
+
+1. Ghostty does not reload its config when the file changes. Press
+   `cmd+shift+,` in any Ghostty window, or quit and reopen it.
+2. A `global:` keybind needs macOS Accessibility access. Ghostty asks for it
+   on that reload. If no dialog appears, open System Settings, then Privacy &
+   Security, then Accessibility, and switch Ghostty on.
+
 Now alt+space shows swoop. Enter opens the app, swoop exits, and the panel
 closes on its own. Next alt+space starts fresh.
+
+If alt+space is already taken on your Mac, pick another key, such as
+`global:cmd+shift+space=toggle_quick_terminal`.
 
 ![swoop listing apps and filtering as you type](demo/spike.gif)
 
