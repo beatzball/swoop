@@ -53,6 +53,33 @@ If alt+space is already taken on your Mac, pick another key, such as
 The plan, every design decision, and the work in progress live in the
 [issues](https://github.com/beatzball/swoop/issues). Start there.
 
+## Write an extension
+
+An extension is a folder with one program in it, named the same:
+
+```
+~/.config/swoop/extensions/hello/hello
+```
+
+The program answers three commands. Each is one run, then exit:
+
+```
+hello list             # print one line per result
+hello preview <id>     # print the right-hand pane for one result
+hello run <id>         # do it
+```
+
+A result line is five fields separated by tabs. Only the last three are shown:
+
+```
+id	kind	icon	title	subtitle
+```
+
+That is the whole contract. A shell script is enough; `extensions/system/system`
+in this repository is one, and it is what puts Sleep and Lock Screen in the
+list. Any language works, as long as it starts fast: `list` runs when the
+launcher opens and `preview` on every cursor move.
+
 ## License
 
 [MIT](LICENSE)

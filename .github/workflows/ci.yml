@@ -45,8 +45,9 @@ jobs:
         run: go test ./...
       - name: go build
         run: go build -o bin/ ./cmd/...
-      # The launcher script is bash. shellcheck ships on the Ubuntu runner;
-      # once is enough, the script is the same on every OS.
-      - name: shellcheck bin/swoop
+      # The launcher script and the bundled extensions are bash. shellcheck
+      # ships on the Ubuntu runner; once is enough, they are the same on
+      # every OS.
+      - name: shellcheck
         if: runner.os == 'Linux'
-        run: shellcheck bin/swoop
+        run: shellcheck bin/swoop extensions/*/*
