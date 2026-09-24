@@ -112,13 +112,23 @@ startup time is felt directly.
 - Errors are returned, not logged and swallowed. A tool that fails exits
   non-zero with one line on stderr
 
-## 9. Comments explain why
+## 9. Versions and the changelog
+
+`VERSION` is the version. `CHANGELOG.md` is written by hand, in prose, as
+changes land: a pull request that changes what a user sees adds a line under
+"Unreleased" in the same PR. Cutting a version is one PR that bumps
+`VERSION` and turns "Unreleased" into a dated `## [x.y.z]` section; CI
+refuses the bump without the section, and tags `vx.y.z` on `main` once it
+merges. Before 1.0, a change that breaks the extension contract bumps the
+middle number and says so.
+
+## 10. Comments explain why
 
 A comment that explains *why* is worth more than the code it sits above. When
 you move a line, its comment moves with it. When you rename, update names
 inside comments. Never drop a comment to save space.
 
-## 10. Recordings and screenshots
+## 11. Recordings and screenshots
 
 Anything recorded for the README or an issue runs from a temp directory, with
 a throwaway repo, so no username or home path can reach a frame. Check the
