@@ -102,9 +102,17 @@ func main() {
 
 // run is the watcher: whenever the pasteboard's change count moves and
 // the content is plain text that is not marked private and was not copied
-// while an ignored app was in front, store it. The ignore list is read on
-// every change, so an edit to it takes effect without a restart; it is a
-// few lines and a change is rare.
+// while an ignored app was in front, store it.
+//
+// "In front" is checked twice: the app in front now, and the one in front
+// at the previous tick. A password manager that copies and then hides its
+// window has already handed the front to another app by the time the
+// change is noticed, and the previous tick still remembers it.
+//
+// The ignore list is read on every change, so an edit to it takes effect
+// without a restart; it is a few lines and a change is rare. With
+// SWOOP_CLIPD_DEBUG set, every change is logged with the apps and the
+// marks seen, never the text, which is how a new manager is diagnosed.
 func run(store clip.Store) error {
 	unlock, err := lock(store)
 	if err != nil {
@@ -115,22 +123,31 @@ func run(store clip.Store) error {
 	if err != nil {
 		return err
 	}
+	debug := os.Getenv("SWOOP_CLIPD_DEBUG") != ""
 	last := pb.ChangeCount()
+	prevFront := pb.Frontmost()
 	for {
 		time.Sleep(interval)
+		front := pb.Frontmost()
 		n := pb.ChangeCount()
 		if n == last {
+			prevFront = front
 			continue
 		}
 		last = n
-		if pb.Concealed() {
-			continue
-		}
+		concealed := pb.Concealed()
 		ignore, err := clip.LoadIgnore(clip.IgnorePath())
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "swoop-clipd:", err)
 		}
-		if ignore[strings.ToLower(pb.Frontmost())] {
+		ignored := ignore[strings.ToLower(front)] || ignore[strings.ToLower(prevFront)]
+		if debug {
+			fmt.Fprintf(os.Stderr, "%s change=%d front=%q prev=%q concealed=%v ignored=%v types=%q\n",
+				time.Now().Format("15:04:05.000"), n, front, prevFront, concealed, ignored,
+				strings.ReplaceAll(pb.Types(), "\n", " "))
+		}
+		prevFront = front
+		if concealed || ignored {
 			continue
 		}
 		text, ok := pb.Text()

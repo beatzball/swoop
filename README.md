@@ -65,6 +65,10 @@ write your own, one bundle id per line, at `~/.config/swoop/clipboard.ignore`.
 Copy a password from your manager and run `bin/swoop-clipd types` to see what
 it marks, and `osascript -e 'id of app "Its Name"'` to get its bundle id.
 
+If a manager still gets through, start the watcher with `SWOOP_CLIPD_DEBUG=1`
+and read `watcher.log` next to the history: each change is logged with the app
+in front and the marks seen, never the text.
+
 `swoop-clipd status` says whether it is running; `swoop-clipd delete <id>` and
 `swoop-clipd clear` remove entries; kill it if you would rather it did not run.
 
