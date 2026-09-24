@@ -1,0 +1,52 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Actions are pinned to a commit, with the tag in a comment, because a tag can
+# be moved and a commit cannot. Dependabot bumps both together. The token gets
+# read access only: nothing here writes to the repository.
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    # bash on every OS, including Windows, so the same commands run everywhere.
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: go version
+        run: go version
+      # The same four checks as `make test` and `make build`, spelled out so
+      # the Windows runner does not need make.
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "these files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: go vet
+        run: go vet ./...
+      - name: go test
+        run: go test ./...
+      - name: go build
+        run: go build -o bin/ ./cmd/...
+      # The launcher script is bash. shellcheck ships on the Ubuntu runner;
+      # once is enough, the script is the same on every OS.
+      - name: shellcheck bin/swoop
+        if: runner.os == 'Linux'
+        run: shellcheck bin/swoop
