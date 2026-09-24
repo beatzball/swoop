@@ -30,20 +30,26 @@ export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIO
 #                all three go through swoop-nav, which prints the actions:
 #                Enter runs a row or opens a view; Esc clears the bar,
 #                then pops a view, then closes; typing inside a view asks
-#                the extension for new rows. change starts unbound: at the
-#                root fzf does its own matching and must not reload
+#                the extension for new rows; typing at the root asks the
+#                extensions with the text while fzf matches the apps
 icons="$(mktemp "${TMPDIR:-/tmp}/swoop-icons.XXXXXX")"
 rows="$(mktemp "${TMPDIR:-/tmp}/swoop-rows.XXXXXX")"
+# The built-in rows, pictures attached, listed once. Every reload at the
+# root reads this file and asks only the extensions again, with the text
+# in the bar: that is how a calculator row appears while you type.
+SWOOP_APPS="$(mktemp "${TMPDIR:-/tmp}/swoop-apps.XXXXXX")"
+export SWOOP_APPS
 # Where swoop-nav keeps the stack of panes for this run. Enter, Esc, and
 # typing all go through swoop-nav, which prints the fzf actions to take;
 # see internal/nav for the rules. The file is removed on exit, and by the
 # run command itself when Enter replaces fzf.
 SWOOP_STATE="$(mktemp "${TMPDIR:-/tmp}/swoop-state.XXXXXX")"
 export SWOOP_STATE
-swoop-list | swoop-icons -out "$icons" > "$rows"
+swoop-list | swoop-icons -out "$icons" > "$SWOOP_APPS"
+swoop-nav rows > "$rows"
 fzf < "$rows" \
   --ansi \
-  --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons' '$rows')+unbind(change)" \
+  --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons' '$rows')" \
   --delimiter $'\t' \
   --with-nth $'{3} {4}  \t{5}' \
   --nth 1 \
@@ -58,7 +64,7 @@ fzf < "$rows" \
   --bind 'enter:transform:swoop-nav enter {1} {2} {4}' \
   --bind 'esc:transform:swoop-nav esc' \
   --bind 'change:transform:swoop-nav change' || status=$?
-rm -f "$icons" "$rows" "$SWOOP_STATE"
+rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_APPS"
 # Esc and ctrl-c make fzf exit 130. Closing the launcher is not a failure,
 # and Ghostty treats a fast non-zero exit as one: it keeps the pane open
 # with "Process exited" until a key is pressed. Anything else is real.
