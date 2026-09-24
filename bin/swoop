@@ -25,7 +25,16 @@ export PATH="$here:$PATH"
 #   --preview    swoop-preview draws the highlighted result on the right:
 #                its icon as a real picture, then a few facts. nowrap keeps
 #                the picture's placeholder rows whole
-swoop-list | fzf \
+#   --ansi       rows carry colour, and the icon cells carry their picture's
+#                id in that colour; without --ansi the pictures are gone
+#   start:       the icons themselves wait in a file until fzf is up: the
+#                terminal keeps pictures per screen, and fzf draws on the
+#                alternate screen, so anything sent earlier would be lost.
+#                The file is removed as soon as it is sent
+icons="$(mktemp "${TMPDIR:-/tmp}/swoop-icons.XXXXXX")"
+swoop-list | swoop-icons -out "$icons" | fzf \
+  --ansi \
+  --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons')" \
   --delimiter $'\t' \
   --with-nth $'{3} {4}  \t{5}' \
   --nth 1 \

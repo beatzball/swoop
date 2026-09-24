@@ -26,4 +26,4 @@ func Describe(path string) Info {
 var ErrNoIcon = errors.New("bundle: icons not implemented on this OS yet")
 
 // IconPNG always reports ErrNoIcon here.
-func (Info) IconPNG() ([]byte, error) { return nil, ErrNoIcon }
+func (Info) IconPNG(int) ([]byte, error) { return nil, ErrNoIcon }
