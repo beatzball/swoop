@@ -61,13 +61,19 @@ An extension is a folder with one program in it, named the same:
 ~/.config/swoop/extensions/hello/hello
 ```
 
-The program answers three commands. Each is one run, then exit:
+The program answers four commands. Each is one run, then exit:
 
 ```
-hello list             # print one line per result
-hello preview <id>     # print the right-hand pane for one result
-hello run <id>         # do it
+hello list                 # print one line per result
+hello preview <id>         # print the right-hand pane for one result
+hello run <id>             # do it
+hello view <id> [query]    # print the rows of a pane, for a row of kind "view"
 ```
+
+A row of kind `view` opens a pane instead of running: the launcher asks
+`view` for its rows, again on every keystroke, and shows exactly what comes
+back. `extensions/define/define` is one: Enter on "Define Word" and you are
+typing into the dictionary.
 
 A result line is five fields separated by tabs. Only the last three are shown:
 

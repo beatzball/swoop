@@ -169,3 +169,24 @@ esac`)
 		t.Fatalf("run did not receive the raw id: %q %v", got, err)
 	}
 }
+
+func TestViewPassesIDAndQuery(t *testing.T) {
+	skipOnWindows(t)
+	dir := t.TempDir()
+	fake(t, dir, "words", `
+case "$1" in
+  view) printf '%s\tword\t\t%s\t\n' "$2-$3" "got $2 with ${3:-nothing}" ;;
+esac`)
+	e := Discover([]string{dir})[0]
+	items, err := e.View("define", "de")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != 1 || items[0].ID != "ext/words/define-de" || items[0].Title != "got define with de" {
+		t.Fatalf("view rows wrong: %+v", items)
+	}
+	items, err = e.View("define", "")
+	if err != nil || items[0].Title != "got define with nothing" {
+		t.Fatalf("empty query should be omitted: %+v %v", items, err)
+	}
+}

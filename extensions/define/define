@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# define: look up a word. The first extension that opens a view: its one
+# root row is "Define Word", and Enter on it replaces the list with words.
+# With nothing typed, the words you looked up last. As you type, the
+# words that start with what you typed, in alphabetical order, from the
+# system word list. The preview is the definition, from the system
+# dictionary through swoop-dict. Enter records the word and opens it in
+# Dictionary.app.
+set -euo pipefail
+
+recent="${XDG_DATA_HOME:-$HOME/.local/share}/swoop/define/recent"
+words=/usr/share/dict/words
+
+row() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5"; }
+
+case "${1:-}" in
+  list)
+    row define view '' 'Define Word' 'Look up a word in the dictionary'
+    ;;
+  view)
+    # $2 is the view id (only "define" exists), $3 the text in the bar.
+    query="${3:-}"
+    if [ -z "$query" ]; then
+      # Most recent first, each word once.
+      [ -f "$recent" ] || exit 0
+      tail -r "$recent" | awk '!seen[$0]++' | while IFS= read -r w; do
+        row "$w" word '' "$w" 'recent'
+      done
+    else
+      # Prefix matches, case-insensitive, in the list's own alphabetical
+      # order. Capped: fzf is not filtering here, so a long list costs a
+      # reload on every keystroke.
+      grep -i -- "^$query" "$words" 2>/dev/null | head -200 | while IFS= read -r w; do
+        row "$w" word '' "$w" ''
+      done
+    fi
+    ;;
+  preview)
+    swoop-dict "${2:-}"
+    ;;
+  run)
+    mkdir -p "$(dirname "$recent")"
+    printf '%s\n' "${2:-}" >> "$recent"
+    open "dict://${2:-}"
+    ;;
+  *)
+    echo "usage: define list | view define [query] | preview <word> | run <word>" >&2
+    exit 2
+    ;;
+esac

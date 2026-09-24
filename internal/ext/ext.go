@@ -149,25 +149,41 @@ func (e Extension) command(ctx context.Context, args ...string) *exec.Cmd {
 // should not hide the good ones. A non-zero exit is an error and hides
 // all of them, because the output can no longer be trusted.
 func (e Extension) List(query string) ([]protocol.Item, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), listTimeout)
-	defer cancel()
 	args := []string{"list"}
 	if query != "" {
 		args = append(args, query)
 	}
+	return e.rows(args...)
+}
+
+// View runs `<exe> view <id> [query]`: the rows of the pane that opens
+// when the user presses Enter on one of the extension's "view" rows. The
+// extension does the filtering and chooses the order; the launcher shows
+// exactly what comes back. Same prefixing and same rules as List.
+func (e Extension) View(viewID, query string) ([]protocol.Item, error) {
+	args := []string{"view", viewID}
+	if query != "" {
+		args = append(args, query)
+	}
+	return e.rows(args...)
+}
+
+func (e Extension) rows(args ...string) ([]protocol.Item, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), listTimeout)
+	defer cancel()
 	cmd := e.command(ctx, args...)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return nil, fmt.Errorf("%s: list took longer than %s", e.Name, listTimeout)
+			return nil, fmt.Errorf("%s: %s took longer than %s", e.Name, args[0], listTimeout)
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("%s: list: %s", e.Name, msg)
+		return nil, fmt.Errorf("%s: %s: %s", e.Name, args[0], msg)
 	}
 	var items []protocol.Item
 	sc := bufio.NewScanner(bytes.NewReader(out))
