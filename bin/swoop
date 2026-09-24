@@ -48,6 +48,7 @@ export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIO
 icons="$(mktemp "${TMPDIR:-/tmp}/swoop-icons.XXXXXX")"
 rows="$(mktemp "${TMPDIR:-/tmp}/swoop-rows.XXXXXX")"
 swoop-list | swoop-icons -out "$icons" > "$rows"
+# shellcheck disable=SC2016  # the $(...) in the enter binding is for fzf's shell, not this one
 fzf < "$rows" \
   --ansi \
   --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons' '$rows')" \
