@@ -19,6 +19,7 @@ import (
 	"strconv"
 
 	"github.com/beatzball/swoop/internal/bundle"
+	"github.com/beatzball/swoop/internal/ext"
 	"github.com/beatzball/swoop/internal/picture"
 )
 
@@ -33,6 +34,18 @@ func main() {
 
 	out := bufio.NewWriter(os.Stdout)
 	defer out.Flush()
+
+	if name, raw, ok := ext.Route(id); ok {
+		e, found := ext.Find(name)
+		if !found {
+			fmt.Fprintf(out, "extension %q is not installed\n", name)
+			return
+		}
+		if err := e.Preview(raw, out); err != nil {
+			fmt.Fprintln(os.Stderr, "swoop-preview:", err)
+		}
+		return
+	}
 
 	info := bundle.Describe(id)
 	if data, err := info.IconPNG(previewIconPx); err == nil {

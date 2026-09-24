@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# system: a swoop extension for a few things a Mac can do for you. It is
+# also the smallest complete example of what an extension is: one script
+# that answers `list`, `preview <id>`, and `run <id>`, and prints result
+# lines of five tab-separated fields: id, kind, icon, title, subtitle.
+set -euo pipefail
+
+row() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" command "$2" "$3" "$4"; }
+
+case "${1:-}" in
+  list)
+    # Icons are Nerd Font glyphs; libghostty ships that font. Any single
+    # glyph or emoji works.
+    row sleep ''  'Sleep'            'Put the Mac to sleep now'
+    row lock  ''  'Lock Screen'      'Turn the display off; the lock follows your settings'
+    row dark  ''  'Toggle Dark Mode' 'Switch between light and dark appearance'
+    row trash ''  'Empty Trash'      'Empty the Trash, with the Finder confirmation'
+    ;;
+  preview)
+    case "${2:-}" in
+      sleep) echo 'Runs: pmset sleepnow' ;;
+      lock)  echo 'Runs: pmset displaysleepnow'
+             echo
+             echo 'Locks if "Require password after screen saver begins or'
+             echo 'display is turned off" is on in System Settings.' ;;
+      dark)  echo 'Tells System Events to flip dark mode.' ;;
+      trash) echo 'Tells Finder to empty the Trash.'
+             echo 'Finder still asks you to confirm.' ;;
+      *) echo "unknown id: ${2:-}" >&2; exit 2 ;;
+    esac
+    ;;
+  run)
+    case "${2:-}" in
+      sleep) pmset sleepnow ;;
+      lock)  pmset displaysleepnow ;;
+      dark)  osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to not dark mode' ;;
+      trash) osascript -e 'tell application "Finder" to empty trash' ;;
+      *) echo "unknown id: ${2:-}" >&2; exit 2 ;;
+    esac
+    ;;
+  *)
+    echo "usage: system list | preview <id> | run <id>" >&2
+    exit 2
+    ;;
+esac

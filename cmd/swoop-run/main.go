@@ -3,14 +3,16 @@
 // become replaces the fzf process with this one, so there is no shell in
 // between and nothing left running when the app is up.
 //
-// Today every id is an application bundle path. When more kinds exist, the
-// kind will have to travel with the id; that is an open question on the
-// protocol spec, not something to guess at here.
+// An id that starts with "ext/<name>/" belongs to that extension and is
+// handed to it with the prefix removed. Every other id is a built-in
+// source's; today that means an application bundle path.
 package main
 
 import (
 	"fmt"
 	"os"
+
+	"github.com/beatzball/swoop/internal/ext"
 )
 
 func main() {
@@ -18,8 +20,19 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: swoop-run <id>")
 		os.Exit(2)
 	}
-	if err := run(os.Args[1]); err != nil {
+	if err := dispatch(os.Args[1]); err != nil {
 		fmt.Fprintln(os.Stderr, "swoop-run:", err)
 		os.Exit(1)
 	}
+}
+
+func dispatch(id string) error {
+	if name, raw, ok := ext.Route(id); ok {
+		e, found := ext.Find(name)
+		if !found {
+			return fmt.Errorf("extension %q is not installed", name)
+		}
+		return e.Run(raw)
+	}
+	return run(id)
 }

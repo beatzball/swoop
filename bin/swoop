@@ -10,6 +10,9 @@ status=0
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="$here:$PATH"
+# The extensions bundled in the repository, next to the user's own in
+# ~/.config/swoop/extensions. The user's win when names collide.
+export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIONS}"
 
 # The line is: id, kind, icon, title, subtitle, tab-separated.
 #   --with-nth   a template: show "icon title", then a tab, then the subtitle;
