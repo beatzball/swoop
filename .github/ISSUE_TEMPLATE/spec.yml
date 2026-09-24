@@ -1,0 +1,31 @@
+name: Spec
+description: A contract between parts. A protocol, an interface, a file format.
+title: "Spec: "
+labels: ["spec"]
+body:
+  - type: textarea
+    id: defines
+    attributes:
+      label: What this defines
+      description: The boundary this spec sits on, and who is on each side.
+    validations:
+      required: true
+  - type: textarea
+    id: interface
+    attributes:
+      label: Interface
+      description: The exact shape. Fields, arguments, exit codes, file layout.
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Examples
+      description: Real input and output, in code blocks.
+  - type: textarea
+    id: open
+    attributes:
+      label: Open questions
+      description: A checklist. Tick each as it is settled, with the answer.
+      value: |
+        - [ ]

@@ -1,0 +1,39 @@
+name: Design
+description: A decision to make. The issue is the design doc.
+title: "Design: "
+labels: ["design"]
+body:
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What must be decided, in one or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: known
+    attributes:
+      label: What is known
+      description: Facts, measurements, prior art. Link sources.
+  - type: textarea
+    id: options
+    attributes:
+      label: Options
+      description: At most two. Name each, say what it costs and what it gives.
+      value: |
+        **A.**
+
+        **B.**
+    validations:
+      required: true
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommendation
+      description: Which one, and the one reason that decides it.
+  - type: textarea
+    id: decision
+    attributes:
+      label: Decision
+      description: Leave empty until made. Then write the pick and the date. If it changes later, edit here and date the change.
+      value: Not yet made.
