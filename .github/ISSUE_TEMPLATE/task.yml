@@ -1,0 +1,26 @@
+name: Task
+description: A unit of work. Closed by a pull request.
+title: "Task: "
+labels: ["task"]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What exists when this is done, in one or two sentences.
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done when
+      description: A checklist a reviewer can verify without asking you.
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: textarea
+    id: depends
+    attributes:
+      label: Depends on
+      description: Issues that must close first. Link them.

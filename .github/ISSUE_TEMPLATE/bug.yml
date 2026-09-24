@@ -1,0 +1,28 @@
+name: Bug
+description: Something does not do what it says.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: happened
+    attributes:
+      label: What happened
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Commands in a code block. Smallest case that shows it.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version and OS
+      placeholder: "launtz 0.1.0, macOS 26.3, fzf 0.74.3, Ghostty 1.3.1"
