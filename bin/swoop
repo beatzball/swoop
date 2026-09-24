@@ -26,6 +26,13 @@ export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIO
 #                the next 8-column stop, so subtitles line up after the title
 #   --tiebreak   prefer matches at the start, then shorter titles, so typing
 #                "saf" puts Safari above "Safari Technology Preview"
+#   enter:       become replaces fzf with swoop-run for the picked id, so
+#                nothing is left running. transform first checks there IS
+#                a pick: Enter on an empty list does nothing instead of
+#                handing swoop-run an empty id. The check goes through
+#                printf because fzf substitutes {1} as '' in some cases
+#                and as nothing at all in others (seen with --ansi), and
+#                a bare [ -n ] is true
 #   --preview    swoop-preview draws the highlighted result on the right:
 #                its icon as a real picture, then a few facts. nowrap keeps
 #                the picture's placeholder rows whole
@@ -55,6 +62,10 @@ fzf < "$rows" \
   --pointer '▶' \
   --preview 'swoop-preview {1}' \
   --preview-window 'right,45%,border-left,nowrap' \
-  --bind 'enter:become(swoop-run {1})' || status=$?
+  --bind 'enter:transform:[ -n "$(printf %s {1})" ] && echo "become(swoop-run {1})" || echo ignore' || status=$?
 rm -f "$icons" "$rows"
-exit "${status:-0}"
+# Esc and ctrl-c make fzf exit 130. Closing the launcher is not a failure,
+# and Ghostty treats a fast non-zero exit as one: it keeps the pane open
+# with "Process exited" until a key is pressed. Anything else is real.
+[ "$status" -eq 130 ] && status=0
+exit "$status"
