@@ -22,6 +22,7 @@ bench: build
 	SWOOP_EXTENSIONS=extensions hyperfine --warmup 5 -N 'extensions/define/define view define de'
 	hyperfine --warmup 5 -N 'bin/swoop-dict swoop'
 	SWOOP_EXTENSIONS=extensions hyperfine --warmup 5 -N 'bin/swoop-nav rows 2+2'
+	hyperfine --warmup 5 -N 'bin/swoop-clipd list'
 
 clean:
 	find bin -type f ! -name swoop -delete

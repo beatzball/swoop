@@ -9,6 +9,14 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **Clipboard history.** A watcher, `swoop-clipd`, starts with the launcher
+  and keeps what you copy, text only, newest first, in a file of your own
+  under the data directory. Enter on "Clipboard History" opens it; typing
+  filters; the preview shows the whole entry; Enter copies it back. Anything
+  a password manager marks as concealed or transient is never kept.
+
 ## [0.1.0] - 2026-09-24
 
 The first version a person can build and use. macOS only; Linux and Windows

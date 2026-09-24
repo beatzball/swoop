@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# clipboard: what you copied, newest first. One root row, "Clipboard
+# History", that opens a view. The history itself is kept by swoop-clipd,
+# a watcher that bin/swoop starts; this script only asks it.
+set -euo pipefail
+
+case "${1:-}" in
+  list)
+    printf '%s\t%s\t%s\t%s\t%s\n' clipboard view '' 'Clipboard History' 'What you copied, newest first'
+    ;;
+  view)
+    # $2 is the view id, $3 the text in the bar.
+    swoop-clipd list "${3:-}"
+    ;;
+  preview)
+    swoop-clipd get "${2:-}"
+    ;;
+  run)
+    # Back onto the clipboard. Pasting into the app behind the launcher
+    # needs a keystroke sent to it, which needs the macOS frame; for now
+    # you paste yourself.
+    swoop-clipd get "${2:-}" | pbcopy
+    ;;
+  *)
+    echo "usage: clipboard list | view clipboard [query] | preview <id> | run <id>" >&2
+    exit 2
+    ;;
+esac
