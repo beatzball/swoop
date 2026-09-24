@@ -2,9 +2,9 @@
 *.log
 
 # Go build output. Binaries are built into bin/ locally and never committed;
-# bin/launtz (the fzf wiring script) is the one tracked file there.
+# bin/swoop (the fzf wiring script) is the one tracked file there.
 bin/*
-!bin/launtz
+!bin/swoop
 *.test
 dist/
 

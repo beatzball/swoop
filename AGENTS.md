@@ -17,7 +17,7 @@ including in the history after you delete it.
 
 - Real names, usernames, or email addresses
 - Absolute home paths such as `/Users/<name>/...` or `/home/<name>/...`. Use
-  repo-relative paths, `$HOME`, or a placeholder like `/absolute/path/to/launtz`
+  repo-relative paths, `$HOME`, or a placeholder like `/absolute/path/to/swoop`
 - Provenance trailers of any kind: session links, agent attribution,
   `Co-Authored-By` for a tool, "generated with" footers
 
@@ -75,28 +75,28 @@ are the human's calls. If you believe one is needed, say so and stop.
 
 ## 6. Small programs, one job each
 
-launtz is built the Unix way. Each tool is its own binary with its own tests,
+swoop is built the Unix way. Each tool is its own binary with its own tests,
 and could be moved to its own repository without surgery:
 
 | program | job |
 |---|---|
-| `launtz-list` | print result lines |
-| `launtz-preview` | print the preview for one result |
-| `launtz-run` | do the action for one result |
-| `launtz-img` | print a picture as Kitty graphics escapes |
-| `launtz` | wire the above into one `fzf` call |
-| `launtz-shell-<os>` | the only per-OS code: a window, a hotkey, a terminal surface |
+| `swoop-list` | print result lines |
+| `swoop-preview` | print the preview for one result |
+| `swoop-run` | do the action for one result |
+| `swoop-img` | print a picture as Kitty graphics escapes |
+| `swoop` | wire the above into one `fzf` call |
+| `swoop-shell-<os>` | the only per-OS code: a window, a hotkey, a terminal surface |
 
 - Tools talk through stdout lines. The line format is a `spec` issue. Do not
   add a field without changing the spec first
 - Nothing under `cmd/` imports another `cmd/`. Shared code goes in `internal/`
 - Per-OS code uses Go build tags, never a runtime check on the OS name
-- The frame (`launtz-shell-*`) holds no launcher logic. It shows and hides a
-  window, owns the hotkey, hosts the surface, and runs `launtz`
+- The frame (`swoop-shell-*`) holds no launcher logic. It shows and hides a
+  window, owns the hotkey, hosts the surface, and runs `swoop`
 
 ## 7. Speed is a feature
 
-`launtz-list` and `launtz-preview` run on keystrokes and cursor moves. Their
+`swoop-list` and `swoop-preview` run on keystrokes and cursor moves. Their
 startup time is felt directly.
 
 - Do not add a heavy import to a hot-path tool. Check with `go build` size
