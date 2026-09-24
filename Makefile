@@ -16,7 +16,8 @@ test:
 
 bench: build
 	hyperfine --warmup 5 -N 'bin/swoop-list'
-	hyperfine --warmup 5 'bin/swoop-list | fzf --filter saf --delimiter "\t" --nth 4'
+	hyperfine --warmup 5 'bin/swoop-list | fzf --filter saf --delimiter "\t" --with-nth "{3} {4}" --nth 1'
+	hyperfine --warmup 5 -N 'bin/swoop-preview /Applications/Safari.app'
 
 clean:
 	find bin -type f ! -name swoop -delete
