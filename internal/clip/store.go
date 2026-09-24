@@ -73,9 +73,14 @@ func (s Store) Append(text string, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	if _, err := f.Write(append(line, '\n')); err != nil {
-		return err
+	_, werr := f.Write(append(line, '\n'))
+	// Closed before compacting, not deferred: compact renames a new file
+	// over this one, and Windows refuses to replace a file that is open.
+	if cerr := f.Close(); werr == nil {
+		werr = cerr
+	}
+	if werr != nil {
+		return werr
 	}
 	return s.compact()
 }
