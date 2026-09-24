@@ -1,0 +1,5 @@
+# Keep LF line endings on every OS. Git on Windows defaults to converting
+# text files to CRLF on checkout, and gofmt then reports every Go file as
+# unformatted, so CI was red on Windows for no real reason. With eol=lf the
+# checkout is byte-identical everywhere.
+* text=auto eol=lf
