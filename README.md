@@ -1,6 +1,6 @@
 # launtz
 
-An open-source launcher in the shape of Raycast, built the Unix way: fzf does
+An open-source keyboard launcher built the Unix way: fzf does
 the finding, libghostty does the drawing, and every extension is a program
 that prints lines.
 
