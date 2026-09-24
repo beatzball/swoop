@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# swoop: the launcher, as one fzf call. Runs in any terminal on any OS.
+#
+# swoop-list prints result lines; fzf shows and filters them; Enter hands the
+# picked id to swoop-run, which replaces fzf (become) so nothing is left
+# running. The built binaries live beside this script, in bin/, which is why
+# it is the one tracked file there (see .gitignore).
+set -euo pipefail
+
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+export PATH="$here:$PATH"
+
+# The line is: id, kind, icon, title, subtitle, tab-separated.
+#   --with-nth   a template: show "icon title", then a tab, then the subtitle;
+#                the id and kind stay hidden. {1} in the enter binding is still
+#                the ORIGINAL first field, the id: placeholders read the input
+#                line, only --nth reads the transformed one
+#   --nth 1      match on field 1 of the TRANSFORMED line, "icon title", never
+#                on the subtitle, so typing "app" does not match every row
+#                that lives under /Applications
+#   --tabstop 1  the one tab left in the row is a 1-column gap, not a jump to
+#                the next 8-column stop, so subtitles line up after the title
+#   --tiebreak   prefer matches at the start, then shorter titles, so typing
+#                "saf" puts Safari above "Safari Technology Preview"
+swoop-list | fzf \
+  --delimiter $'\t' \
+  --with-nth $'{3} {4}  \t{5}' \
+  --nth 1 \
+  --tabstop 1 \
+  --tiebreak 'begin,length' \
+  --layout reverse \
+  --no-info \
+  --prompt '  ' \
+  --pointer '▶' \
+  --bind 'enter:become(swoop-run {1})'
