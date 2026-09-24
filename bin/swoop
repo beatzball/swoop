@@ -6,6 +6,7 @@
 # running. The built binaries live beside this script, in bin/, which is why
 # it is the one tracked file there (see .gitignore).
 set -euo pipefail
+status=0
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 export PATH="$here:$PATH"
@@ -25,7 +26,21 @@ export PATH="$here:$PATH"
 #   --preview    swoop-preview draws the highlighted result on the right:
 #                its icon as a real picture, then a few facts. nowrap keeps
 #                the picture's placeholder rows whole
-swoop-list | fzf \
+#   --ansi       rows carry colour, and the icon cells carry their picture's
+#                id in that colour; without --ansi the pictures are gone
+#   start:       the icons themselves wait in a file until fzf is up: the
+#                terminal keeps pictures per screen, and fzf draws on the
+#                alternate screen, so anything sent earlier would be lost.
+#                fzf fires start within milliseconds, so the rows and the
+#                icon file are both finished BEFORE fzf starts; otherwise
+#                start could send a half-written file. That costs about
+#                20 ms of delay before the list appears, and no race
+icons="$(mktemp "${TMPDIR:-/tmp}/swoop-icons.XXXXXX")"
+rows="$(mktemp "${TMPDIR:-/tmp}/swoop-rows.XXXXXX")"
+swoop-list | swoop-icons -out "$icons" > "$rows"
+fzf < "$rows" \
+  --ansi \
+  --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons' '$rows')" \
   --delimiter $'\t' \
   --with-nth $'{3} {4}  \t{5}' \
   --nth 1 \
@@ -37,4 +52,6 @@ swoop-list | fzf \
   --pointer '▶' \
   --preview 'swoop-preview {1}' \
   --preview-window 'right,45%,border-left,nowrap' \
-  --bind 'enter:become(swoop-run {1})'
+  --bind 'enter:become(swoop-run {1})' || status=$?
+rm -f "$icons" "$rows"
+exit "${status:-0}"

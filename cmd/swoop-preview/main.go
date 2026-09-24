@@ -35,7 +35,7 @@ func main() {
 	defer out.Flush()
 
 	info := bundle.Describe(id)
-	if data, err := info.IconPNG(); err == nil {
+	if data, err := info.IconPNG(previewIconPx); err == nil {
 		writeIcon(out, data, id, cols, rows)
 	} else if !errors.Is(err, bundle.ErrNoIcon) {
 		// A broken icon is worth a line on stderr for whoever is debugging,
@@ -52,6 +52,10 @@ func main() {
 	}
 	fmt.Fprintf(out, "\x1b[2mPath\x1b[22m     %s\n", id)
 }
+
+// previewIconPx is the icon size for the pane: a 256px icon fills a
+// 24-column box on a high-density display without going soft.
+const previewIconPx = 256
 
 // iconRows is how much of the pane the icon may take. The details below it
 // need four lines; the rest is the picture, up to a size where a 256px

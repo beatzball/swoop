@@ -65,17 +65,15 @@ func Describe(path string) Info {
 // apps built with an asset catalog have no .icns file, only Assets.car.
 var ErrNoIcon = errors.New("bundle: no .icns icon")
 
-// maxIconPx is the largest icon size worth sending to a terminal. Icons
-// ship at up to 1024px; a preview pane is a few hundred pixels across, and
-// every extra byte is base64 through a pipe on every cursor move.
-const maxIconPx = 256
-
-// IconPNG returns the bundle's icon as PNG bytes, converting the .icns once
-// and keeping the result in the user's cache directory. The cache key is
-// the icns path plus its size and modification time, so an app update
-// invalidates it on its own. A cache that cannot be written is not an
-// error: the conversion just runs again next time.
-func (info Info) IconPNG() ([]byte, error) {
+// IconPNG returns the bundle's icon as PNG bytes no larger than maxPx on a
+// side, converting the .icns once and keeping the result in the user's
+// cache directory. Icons ship at up to 1024px; a preview pane is a few
+// hundred pixels across and a result row far less, and every extra byte is
+// base64 through a pipe. The cache key is the icns path plus its size and
+// modification time and maxPx, so an app update invalidates it on its own.
+// A cache that cannot be written is not an error: the conversion just runs
+// again next time.
+func (info Info) IconPNG(maxPx int) ([]byte, error) {
 	icnsPath, err := info.icnsPath()
 	if err != nil {
 		return nil, err
@@ -84,7 +82,7 @@ func (info Info) IconPNG() ([]byte, error) {
 	if err != nil {
 		return nil, ErrNoIcon
 	}
-	key := sha1.Sum([]byte(fmt.Sprintf("%s|%d|%d", icnsPath, st.Size(), st.ModTime().UnixNano())))
+	key := sha1.Sum([]byte(fmt.Sprintf("%s|%d|%d|%d", icnsPath, st.Size(), st.ModTime().UnixNano(), maxPx)))
 	cachePath := ""
 	if dir, err := os.UserCacheDir(); err == nil {
 		cachePath = filepath.Join(dir, "swoop", "icons", hex.EncodeToString(key[:])+".png")
@@ -93,7 +91,7 @@ func (info Info) IconPNG() ([]byte, error) {
 		}
 	}
 
-	data, err := convert(icnsPath)
+	data, err := convert(icnsPath, maxPx)
 	if err != nil {
 		return nil, err
 	}
@@ -128,8 +126,8 @@ func (info Info) icnsPath() (string, error) {
 }
 
 // convert decodes every size in the .icns and keeps the largest one that is
-// not bigger than maxIconPx, falling back to the smallest available.
-func convert(icnsPath string) ([]byte, error) {
+// not bigger than maxPx, falling back to the smallest available.
+func convert(icnsPath string, maxPx int) ([]byte, error) {
 	f, err := os.Open(icnsPath)
 	if err != nil {
 		return nil, err
@@ -148,9 +146,9 @@ func convert(icnsPath string) ([]byte, error) {
 		}
 		bw := best.Bounds().Dx()
 		switch {
-		case w <= maxIconPx && (bw > maxIconPx || w > bw):
+		case w <= maxPx && (bw > maxPx || w > bw):
 			best = img
-		case bw > maxIconPx && w < bw:
+		case bw > maxPx && w < bw:
 			best = img
 		}
 	}

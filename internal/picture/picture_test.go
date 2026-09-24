@@ -120,3 +120,34 @@ func TestWritePNGRejectsBadArgs(t *testing.T) {
 		t.Error("too many columns accepted")
 	}
 }
+
+func TestCells(t *testing.T) {
+	s := Cells(0x123456, 0, 2)
+	if !strings.HasPrefix(s, "\x1b[38;2;18;52;86m") {
+		t.Fatalf("id must be the 24-bit foreground colour: %q", s)
+	}
+	if !strings.HasSuffix(s, "\x1b[39m") {
+		t.Fatalf("must end with a colour reset: %q", s)
+	}
+	if n := strings.Count(s, string(kitty.Placeholder)); n != 2 {
+		t.Fatalf("want 2 placeholder cells, got %d", n)
+	}
+	// Second cell: row 0, column 1.
+	want := string(kitty.Placeholder) + string(kitty.Diacritic(0)) + string(kitty.Diacritic(1))
+	if !strings.Contains(s, want) {
+		t.Fatalf("second cell should address row 0 column 1: %q", s)
+	}
+}
+
+func TestTransmitRejectsBadID(t *testing.T) {
+	var out bytes.Buffer
+	if err := Transmit(&out, testPNG(t, 4), 1, 1, 0); err == nil {
+		t.Error("id 0 accepted")
+	}
+	if err := Transmit(&out, testPNG(t, 4), 1, 1, MaxID+1); err == nil {
+		t.Error("id above 24 bits accepted")
+	}
+	if err := Transmit(&out, testPNG(t, 4), 1, 1, MaxID); err != nil {
+		t.Errorf("largest id rejected: %v", err)
+	}
+}
