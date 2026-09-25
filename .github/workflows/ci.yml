@@ -54,6 +54,11 @@ jobs:
       - name: release-gate tests
         if: runner.os == 'Linux'
         run: scripts/release-gate-test
+      # The macOS frame is a Swift package; only the macOS runner can build
+      # it. Release mode, because that is what ships.
+      - name: build the macOS frame
+        if: runner.os == 'macOS'
+        run: swift build -c release --package-path shell/mac
 
   # A pull request that bumps VERSION must add the matching CHANGELOG section.
   # One that leaves VERSION alone is not this job's business.

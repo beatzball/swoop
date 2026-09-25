@@ -4,10 +4,16 @@
 #   make test    gofmt, vet, and the unit tests
 #   make bench   startup and list time of the hot-path tools (needs hyperfine)
 
-.PHONY: build test bench clean
+.PHONY: build test bench clean shell-mac
 
 build:
 	go build -o bin/ ./cmd/...
+
+# The macOS frame: a floating panel with swoop in it, no Ghostty.app needed.
+# Run it with bin/ on PATH, or SWOOP_LAUNCHER pointing at bin/swoop.
+shell-mac:
+	swift build -c release --package-path shell/mac
+	@echo "built shell/mac/.build/release/swoop-shell-mac"
 
 test:
 	@unformatted="$$(gofmt -l .)"; if [ -n "$$unformatted" ]; then echo "gofmt: $$unformatted"; exit 1; fi

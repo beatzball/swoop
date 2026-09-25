@@ -8,6 +8,9 @@ bin/*
 *.test
 dist/
 
+# SwiftPM build output for the macOS frame.
+shell/mac/.build/
+
 # Claude Code working directory: machine-specific, and none of it belongs in a
 # public repo. It holds local settings (absolute paths, per-machine tool
 # permissions), agent worktrees, and whatever scratch a session leaves behind.
