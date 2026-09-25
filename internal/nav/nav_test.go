@@ -51,7 +51,7 @@ func TestEscClearsThenPopsThenCloses(t *testing.T) {
 		t.Fatalf("text in the bar: got %q", got)
 	}
 	got := Esc(st, "")
-	want := "enable-search+change-prompt(  )+change-preview-window(right,45%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(de)+reload-sync(swoop-nav rows {q})+wait+pos(3)"
+	want := "enable-search+change-prompt(  )+change-preview-window(right,58%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(de)+reload-sync(swoop-nav rows {q})+wait+pos(3)"
 	if got != want {
 		t.Fatalf("pop: got  %q\nwant %q", got, want)
 	}
@@ -84,7 +84,7 @@ func TestEnterOnRefreshActionRunsAndReturnsToTheViewBelow(t *testing.T) {
 		{Kind: "actions", View: "ext/clipboard/17", Title: "hello", Query: "he", Pos: 2},
 	}}
 	got := Enter(st, "delete", "refresh", "Delete", "", 2, run)
-	want := "execute-silent(swoop-run 'ext/clipboard/17' 'delete')+disable-search+change-prompt(Clipboard History > )+change-preview-window(right,45%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(he)+reload-sync(swoop-nav rows {q})+wait+pos(2)"
+	want := "execute-silent(swoop-run 'ext/clipboard/17' 'delete')+disable-search+change-prompt(Clipboard History > )+change-preview-window(right,58%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(he)+reload-sync(swoop-nav rows {q})+wait+pos(2)"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -163,7 +163,7 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 func TestTabOpensTheAIPaneAndKeepsTheText(t *testing.T) {
 	st := &State{}
 	got := Ask(st, "why is the sky blue", 3)
-	want := "disable-search+change-prompt(Ask AI > )+change-preview-window(right,45%,border-left,wrap,follow)+reload-sync(swoop-nav rows)+first"
+	want := "disable-search+change-prompt(Ask AI > )+change-preview-window(right,58%,border-left,wrap,follow)+reload-sync(swoop-nav rows)+first"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -222,7 +222,7 @@ func TestEscFromTheAIPaneRestoresTheBar(t *testing.T) {
 		t.Fatalf("text first: %q", got)
 	}
 	got := Esc(st, "")
-	for _, part := range []string{"enable-search", "change-preview-window(right,45%,border-left,nowrap)", "change-query(why is the sky blue)", "pos(2)"} {
+	for _, part := range []string{"enable-search", "change-preview-window(right,58%,border-left,nowrap)", "change-query(why is the sky blue)", "pos(2)"} {
 		if !strings.Contains(got, part) {
 			t.Fatalf("missing %q in %q", part, got)
 		}
@@ -238,7 +238,7 @@ func TestPoppingActionsInsideTheAIPaneKeepsItsWindow(t *testing.T) {
 		{Kind: "actions", View: "ext/ai/20260925-1", Title: "earlier", Query: "draft", Pos: 2},
 	}}
 	got := Esc(st, "")
-	if !strings.Contains(got, "change-preview-window(right,45%,border-left,wrap,follow)") || !strings.Contains(got, "change-prompt(Ask AI > )") {
+	if !strings.Contains(got, "change-preview-window(right,58%,border-left,wrap,follow)") || !strings.Contains(got, "change-prompt(Ask AI > )") {
 		t.Fatalf("got %q", got)
 	}
 }

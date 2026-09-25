@@ -16,6 +16,16 @@ so here.
   was refused, so the frame came up only on a second run. The installer
   now waits for the old service to go and tries again if refused.
 
+### Changed
+
+- **App rows show only the name.** The folder is in the preview.
+- **The preview is wider**, 58% of the window, and ctrl-u and ctrl-d
+  scroll it half a page.
+- **The AI transcript is rendered.** Answers are markdown, drawn by
+  glamour: headings, lists, code, tables. The default `claude -p` may now
+  search and fetch the web, so a question about the weather gets an
+  answer instead of a refusal.
+
 ### Added
 
 - **Ask AI.** Press Tab from anywhere: a pane with your conversations on

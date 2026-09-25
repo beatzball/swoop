@@ -42,6 +42,15 @@ export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIO
 #   left-click:  a click on a row is Enter on that row. fzf moves the
 #                cursor to the clicked row before it runs the binding, so
 #                {1} is the row under the mouse
+#   ctrl-u, ctrl-d:
+#                scroll the preview half a page, the way preen and the
+#                usual terminal tools do. fzf's own ctrl-u clears the bar,
+#                which Esc does here anyway
+#   --preview-window:
+#                58% for the preview: an app's details and an AI answer
+#                need the room more than the list does. nav has the same
+#                string, for the panes that change the window and put it
+#                back
 #   ctrl-k:      the row's actions as a pane of their own; cmd+K in the
 #                frame is mapped to it. fzf's own ctrl-k is "up", which the
 #                arrow key still does
@@ -98,7 +107,8 @@ fzf < "$rows" \
   --prompt '  ' \
   --pointer '▶' \
   --preview 'swoop-preview {1}' \
-  --preview-window 'right,45%,border-left,nowrap' \
+  --preview-window 'right,58%,border-left,nowrap' \
+  --bind 'ctrl-u:preview-half-page-up,ctrl-d:preview-half-page-down' \
   --bind 'enter:transform:swoop-nav enter {1} {2} {4}' \
   --bind 'left-click:transform:swoop-nav enter {1} {2} {4}' \
   --bind 'ctrl-k:transform:swoop-nav actions {1} {2} {4}' \

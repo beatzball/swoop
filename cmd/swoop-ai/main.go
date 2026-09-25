@@ -26,11 +26,13 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/beatzball/swoop/internal/chat"
 	"github.com/beatzball/swoop/internal/protocol"
+	"github.com/charmbracelet/glamour"
 )
 
 // newID is the row that starts a conversation.
@@ -127,8 +129,10 @@ func ago(t time.Time) string {
 // yet. The worker's tick picks the frame.
 var dots = []string{"·", "··", "···"}
 
-// preview prints the transcript. The preview window wraps and follows,
-// so long lines and a growing answer take care of themselves.
+// preview prints the transcript: each prompt in bold, each answer as
+// markdown rendered by glamour at the pane's width, the dots while an
+// answer has not started. The preview window follows, so a growing
+// answer keeps its end in view.
 func preview(store chat.Store, id string) error {
 	if id == newID || id == "" {
 		fmt.Println("Type a question and press Enter.")
@@ -138,6 +142,7 @@ func preview(store chat.Store, id string) error {
 	if err != nil {
 		return err
 	}
+	render := renderer()
 	for _, t := range c.Turns {
 		if t.Role == "user" {
 			fmt.Printf("\x1b[1m%s\x1b[22m\n\n", strings.TrimSpace(t.Text))
@@ -147,12 +152,35 @@ func preview(store chat.Store, id string) error {
 			fmt.Printf("\x1b[2m%s\x1b[22m\n\n", dots[c.Tick%len(dots)])
 			continue
 		}
-		fmt.Printf("%s\n\n", strings.TrimSpace(t.Text))
+		fmt.Print(render(strings.TrimSpace(t.Text)))
 	}
 	if c.Error != "" {
 		fmt.Printf("\x1b[31m%s\x1b[39m\n", c.Error)
 	}
 	return nil
+}
+
+// renderer turns markdown into styled text for the pane, or, if glamour
+// cannot be set up, leaves it as it is. The width is fzf's, less the two
+// columns glamour indents by. The dark style: the frame is dark, and a
+// one-shot process cannot ask the terminal what it is without a round
+// trip on every redraw.
+func renderer() func(string) string {
+	cols := 60
+	if v, err := strconv.Atoi(os.Getenv("FZF_PREVIEW_COLUMNS")); err == nil && v > 10 {
+		cols = v
+	}
+	r, err := glamour.NewTermRenderer(glamour.WithStandardStyle("dark"), glamour.WithWordWrap(cols-2))
+	if err != nil {
+		return func(s string) string { return s + "\n\n" }
+	}
+	return func(s string) string {
+		out, err := r.Render(s)
+		if err != nil {
+			return s + "\n\n"
+		}
+		return strings.TrimRight(out, "\n") + "\n\n"
+	}
 }
 
 // actions is the ctrl-k menu for a conversation. The New row has none.

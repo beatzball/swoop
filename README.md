@@ -113,8 +113,9 @@ ollama run llama3.2
 ```
 
 Without that file it uses `claude -p` if `claude` is on your PATH (streamed
-through `jq` when that is there too), then `ollama run` with the first model
-`ollama list` shows. Anything that reads a question and prints an answer
+through `jq` when that is there too, and allowed to search and fetch the
+web, which only reads), then `ollama run` with the first model `ollama
+list` shows. Anything that reads a question and prints an answer
 works, streaming or not. Conversations are files in
 `~/.local/state/swoop/ai`, readable by you only.
 
