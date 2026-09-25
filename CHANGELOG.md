@@ -9,6 +9,10 @@ so here.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-09-25
+
+The macOS frame, and swoop as a daily driver.
+
 ### Added
 
 - **A macOS frame of our own.** `shell/mac` is a Swift program: a floating
@@ -84,6 +88,7 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/beatzball/swoop/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/beatzball/swoop/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/beatzball/swoop/releases/tag/v0.1.0

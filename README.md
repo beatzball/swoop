@@ -18,15 +18,18 @@ make build        # compiles the tools into bin/
 bin/swoop         # lists your apps; type to filter; Enter opens; Esc quits
 ```
 
-It runs in any terminal. To make it feel like a launcher, let Ghostty's quick
-terminal run it. Add to your Ghostty config:
+It runs in any terminal. The frame above is the launcher; this is the same
+program without it, which is also how you run it on Linux or Windows, or
+inside Ghostty's own quick terminal if you prefer that to the frame. For the
+quick terminal, add to your Ghostty config:
 
 ```
 keybind = global:alt+space=toggle_quick_terminal
 quick-terminal-position = center
 ```
 
-and to the end of your `~/.zshrc`, with the path to your checkout:
+reload it with `cmd+shift+,`, grant Ghostty Accessibility access when it
+asks, and add to the end of your `~/.zshrc`, with the path to your checkout:
 
 ```sh
 # Ghostty sets this in its quick terminal and nowhere else.
@@ -35,19 +38,7 @@ if [[ -n "$GHOSTTY_QUICK_TERMINAL" ]] && [[ -x /absolute/path/to/swoop/bin/swoop
 fi
 ```
 
-Two more steps, or the hotkey does nothing:
-
-1. Ghostty does not reload its config when the file changes. Press
-   `cmd+shift+,` in any Ghostty window, or quit and reopen it.
-2. A `global:` keybind needs macOS Accessibility access. Ghostty asks for it
-   on that reload. If no dialog appears, open System Settings, then Privacy &
-   Security, then Accessibility, and switch Ghostty on.
-
-Now alt+space shows swoop. Enter opens the app, swoop exits, and the panel
-closes on its own. Next alt+space starts fresh.
-
-If alt+space is already taken on your Mac, pick another key, such as
-`global:ctrl+alt+space=toggle_quick_terminal`.
+Take those lines out again to get a plain quick terminal back.
 
 ![swoop listing apps and filtering as you type](demo/spike.gif)
 
