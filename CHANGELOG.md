@@ -18,6 +18,11 @@ so here.
   kept: a copy carrying the concealed or transient mark, or one made while
   an app on `~/.config/swoop/clipboard.ignore` is in front (password
   managers by default). `swoop-clipd delete` and `clear` remove entries.
+- **File search.** Enter on "Search Files" and type part of a name: files
+  under your home folder from Spotlight, newest change first, or the files
+  you used most recently when nothing is typed. The preview shows a picture
+  as a picture, text as text, a folder as its listing, and the facts for the
+  rest. Enter opens the file.
 
 ## [0.1.0] - 2026-09-24
 
