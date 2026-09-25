@@ -82,12 +82,15 @@ jobs:
   # every push to main and is idempotent: a merge that did not bump VERSION
   # finds the tag already there and stops. It needs the tests green first,
   # because a tag is the one thing here that is awkward to take back.
+  # A tag pushed with the workflow token starts no workflow, so this job
+  # starts release.yml on the new tag itself; that needs actions: write.
   tag:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: [test]
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -105,3 +108,7 @@ jobs:
           git tag -a "$v" -m "$v"
           git push origin "refs/tags/$v"
           echo "tagged $v"
+          gh workflow run release.yml --ref "$v"
+          echo "started the release of $v"
+        env:
+          GH_TOKEN: ${{ github.token }}

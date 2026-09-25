@@ -1,0 +1,172 @@
+#!/usr/bin/env bash
+# get: install swoop from a GitHub release. No Go, no Xcode tools, no fzf,
+# no checkout needed; curl and tar are enough.
+#
+#   curl -fsSL https://raw.githubusercontent.com/beatzball/swoop/main/scripts/get | bash
+#   curl -fsSL ... | bash -s -- --version 0.4.0
+#
+#   --version X.Y.Z   install that release instead of the latest
+#   --from FILE       install this tarball instead of downloading one. For
+#                     trying this script without a release: build a tarball
+#                     with scripts/package, then scripts/get --from it.
+#                     SWOOP_GET_TARBALL=FILE does the same
+#   --no-agents       on macOS, install the files but do not write or start
+#                     the launchd agents; run swoop in a terminal instead
+#
+# It lands in ~/.local/share/swoop/X.Y.Z, and ~/.local/share/swoop/current
+# links to it, so an upgrade is a new directory and a swapped link, and a
+# rollback is the link swapped back. Nothing else is written, except fzf into
+# that directory when fzf is not on PATH, ~/.local/bin/swoop (a link) when
+# ~/.local/bin exists, and on macOS the two launchd agents, through the same
+# scripts/launchd.sh that `make install` uses.
+#
+# Written for the bash macOS ships, 3.2.
+set -euo pipefail
+
+repo="beatzball/swoop"
+# The fzf release fetched when fzf is not on PATH. Pinned, because swoop
+# leans on recent fzf actions (transform, become), and a known one is what
+# was tested. Bump it by hand.
+fzf_version="0.74.4"
+share="$HOME/.local/share/swoop"
+
+die() { echo "get: $*" >&2; exit 1; }
+
+version=""
+from="${SWOOP_GET_TARBALL:-}"
+agents=1
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --version) [ $# -ge 2 ] || die "--version needs X.Y.Z"; version="${2#v}"; shift 2 ;;
+    --from) [ $# -ge 2 ] || die "--from needs a file"; from="$2"; shift 2 ;;
+    --no-agents) agents=0; shift ;;
+    -h|--help) sed -n '2,/^set -e/p' "${BASH_SOURCE[0]}" 2>/dev/null | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
+    *) die "unknown option $1; see --help" ;;
+  esac
+done
+
+case "$(uname -s)" in
+  Darwin) os=darwin ;;
+  Linux) os=linux ;;
+  MINGW*|MSYS*|CYGWIN*) os=windows ;;
+  *) die "no release for $(uname -s)" ;;
+esac
+case "$(uname -m)" in
+  x86_64|amd64) arch=amd64 ;;
+  arm64|aarch64) arch=arm64 ;;
+  *) die "no release for $(uname -m)" ;;
+esac
+# A shell running under Rosetta reports x86_64 on an Apple silicon Mac. The
+# native build is the one to install there.
+if [ "$os" = darwin ] && [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || true)" = 1 ]; then
+  arch=arm64
+fi
+
+command -v curl >/dev/null || die "curl is not on PATH"
+command -v tar >/dev/null || die "tar is not on PATH"
+
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/swoop-get.XXXXXX")"
+trap 'rm -rf "$tmp"' EXIT
+
+# sha256 of a file, with whichever tool this system has: shasum on macOS,
+# sha256sum on Linux and in Git Bash.
+sha256() {
+  if command -v sha256sum >/dev/null; then sha256sum "$1" | cut -d' ' -f1
+  else shasum -a 256 "$1" | cut -d' ' -f1
+  fi
+}
+
+if [ -n "$from" ]; then
+  [ -f "$from" ] || die "no such file: $from"
+  tarball="$from"
+else
+  if [ -z "$version" ]; then
+    # The latest release, by the redirect GitHub answers releases/latest
+    # with, rather than the API, which rate-limits callers with no token.
+    url="$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$repo/releases/latest")" ||
+      die "cannot reach github.com"
+    case "$url" in
+      */tag/v*) version="${url##*/tag/v}" ;;
+      *) die "$repo has no release yet" ;;
+    esac
+  fi
+  name="swoop-$version-$os-$arch.tar.gz"
+  base="https://github.com/$repo/releases/download/v$version"
+  echo "downloading swoop $version for $os-$arch"
+  curl -fsSL -o "$tmp/$name" "$base/$name" || die "no $name in release v$version"
+  # The release lists a checksum for every tarball. A download that does
+  # not match is truncated or not ours; either way, stop.
+  curl -fsSL -o "$tmp/SHA256SUMS" "$base/SHA256SUMS" || die "no SHA256SUMS in release v$version"
+  want="$(awk -v n="$name" '$2 == n || $2 == "*" n { print $1 }' "$tmp/SHA256SUMS")"
+  [ -n "$want" ] || die "SHA256SUMS has no line for $name"
+  [ "$(sha256 "$tmp/$name")" = "$want" ] || die "$name does not match its checksum"
+  tarball="$tmp/$name"
+fi
+
+mkdir -p "$tmp/x"
+tar -xzf "$tarball" -C "$tmp/x"
+# The tarball holds one directory; its VERSION, not the file name, says what
+# is being installed, so --from works on a renamed file too.
+src="$(find "$tmp/x" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
+if [ -z "$src" ] || [ ! -f "$src/VERSION" ] || [ ! -x "$src/bin/swoop" ]; then
+  die "$tarball is not a swoop release"
+fi
+version="$(tr -d '[:space:]' < "$src/VERSION")"
+
+# Replace a same-version install whole, so a reinstall never mixes files.
+dest="$share/$version"
+mkdir -p "$share"
+rm -rf "$dest"
+mv "$src" "$dest"
+echo "installed swoop $version in $dest"
+
+if ! command -v fzf >/dev/null; then
+  echo "fzf is not on PATH; fetching fzf $fzf_version"
+  fzf_base="https://github.com/junegunn/fzf/releases/download/v$fzf_version"
+  if [ "$os" = windows ]; then
+    curl -fsSL -o "$tmp/fzf.zip" "$fzf_base/fzf-$fzf_version-windows_$arch.zip" || die "cannot download fzf"
+    command -v unzip >/dev/null || die "unzip is not on PATH, and fzf for Windows is a zip"
+    unzip -qo "$tmp/fzf.zip" -d "$dest/bin"
+  else
+    curl -fsSL -o "$tmp/fzf.tgz" "$fzf_base/fzf-$fzf_version-${os}_$arch.tar.gz" || die "cannot download fzf"
+    tar -xzf "$tmp/fzf.tgz" -C "$dest/bin" fzf
+  fi
+fi
+
+# ln -n replaces the old link itself, rather than following it into the old
+# version's directory and making a link in there.
+ln -sfn "$version" "$share/current"
+# Git Bash copies where it cannot link, and a copied swoop script would look
+# for its tools beside the copy. So Windows gets no ~/.local/bin entry.
+linked=0
+if [ "$os" != windows ] && [ -d "$HOME/.local/bin" ]; then
+  ln -sfn "$share/current/bin/swoop" "$HOME/.local/bin/swoop"
+  linked=1
+fi
+
+if [ "$os" = darwin ] && [ "$agents" = 1 ]; then
+  # The agents point at current, not at the version, so a later rollback is
+  # the link swapped back and the agents restarted.
+  # shellcheck source=scripts/launchd.sh
+  . "$share/current/scripts/launchd.sh"
+  swoop_launchd "$share/current" "$share/current/bin/swoop-shell-mac"
+  cat <<MSG
+
+swoop is installed. Press ${SWOOP_HOTKEY:-alt+shift+space}.
+It starts again at login. Logs: $HOME/Library/Logs/swoop.
+Remove it with: $share/current/scripts/uninstall
+then: rm -rf $share/current $share/[0-9]*
+MSG
+  exit 0
+fi
+
+if [ "$linked" = 1 ]; then run=swoop; else run="$share/current/bin/swoop"; fi
+cat <<MSG
+
+swoop is installed. Run it in any terminal:
+
+  $run
+
+Bind that to a key in your terminal or window manager to use it as a
+launcher. Remove it with: rm -rf $share/current $share/[0-9]*
+MSG

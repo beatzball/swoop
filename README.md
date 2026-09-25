@@ -6,7 +6,7 @@ An open-source keyboard launcher built the Unix way: fzf does
 the finding, libghostty does the drawing, and every extension is a program
 that prints lines.
 
-Early days. There is nothing to install yet, but there is something to try.
+Early days, but it installs in one line: see [Install](#install).
 
 ## Try it in any terminal
 
@@ -48,15 +48,31 @@ The plan, every design decision, and the work in progress live in the
 ## Install
 
 ```sh
+curl -fsSL https://raw.githubusercontent.com/beatzball/swoop/main/scripts/get | bash
+```
+
+No Go, no Xcode tools, no fzf needed. It downloads the release for your OS
+and arch into `~/.local/share/swoop/<version>`, links
+`~/.local/share/swoop/current` to it, and fetches fzf into the same place if
+fzf is not on your PATH. On a Mac it also writes two launchd agents that run
+at login: the frame, which owns the hotkey and the panel, and the clipboard
+watcher. Press alt+shift+space. On Linux and Windows there is no frame yet;
+it tells you how to run `swoop` in a terminal.
+
+`| bash -s -- --version 0.4.0` installs a given release instead of the
+latest. Run it again to upgrade. Logs are in `~/Library/Logs/swoop`, and
+`~/.local/share/swoop/current/scripts/uninstall` removes the agents and keeps
+your history.
+
+### From a checkout
+
+```sh
 git clone https://github.com/beatzball/swoop.git && cd swoop && make install
 ```
 
-That builds everything and writes two launchd agents that run at login: the
-frame, which owns the hotkey and the panel, and the clipboard watcher. Press
-alt+shift+space. `make install` again after a pull restarts them on the new
-build; `make uninstall` removes them and keeps your history. Logs are in
-`~/Library/Logs/swoop`. You need Go, fzf, and Xcode's tools; a build with no
-tools needed is the next step.
+The same two agents, pointed at the checkout. You need Go, fzf, and Xcode's
+tools. `make install` again after a pull restarts them on the new build;
+`make uninstall` removes them and keeps your history.
 
 ## The macOS frame
 

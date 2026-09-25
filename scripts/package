@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# package: build the release tarball for one OS and arch. The release
+# workflow runs it once per target; run it by hand to get the same tarball,
+# for instance to try scripts/get --from on it.
+#
+#   scripts/package OS ARCH [OUTDIR]     e.g. scripts/package darwin arm64
+#
+# It prints the tarball's path, OUTDIR/swoop-X.Y.Z-OS-ARCH.tar.gz (OUTDIR
+# defaults to dist/). Inside, under one swoop-X.Y.Z-OS-ARCH/ directory:
+#
+#   bin/          the Go tools and the swoop script; on darwin, the frame too
+#   extensions/   the bundled extensions
+#   scripts/      launchd.sh and uninstall, so an install from a release can
+#                 write and remove the launchd agents with no checkout
+#   VERSION  LICENSE
+#
+# In a script rather than inline in the workflow so it runs the same on a
+# laptop as on a runner.
+set -euo pipefail
+
+usage() { echo "usage: package OS ARCH [OUTDIR]" >&2; exit 2; }
+[ $# -ge 2 ] || usage
+os="$1"; arch="$2"
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+out="${3:-$root/dist}"
+v="$("$root/scripts/release-gate" version "$root")"
+name="swoop-$v-$os-$arch"
+
+# The darwin tools use cgo for the clipboard and the dictionary, and the frame
+# is Swift: both need Apple's toolchain, so darwin is built on a Mac. Every
+# other target is plain Go with cgo off, which cross-compiles from anywhere.
+cgo=0
+if [ "$os" = darwin ]; then
+  [ "$(uname -s)" = Darwin ] || { echo "package: darwin builds need a Mac" >&2; exit 1; }
+  cgo=1
+fi
+
+stage="$(mktemp -d "${TMPDIR:-/tmp}/swoop-package.XXXXXX")"
+trap 'rm -rf "$stage"' EXIT
+dir="$stage/$name"
+mkdir -p "$dir/bin" "$dir/scripts" "$out"
+
+# -trimpath keeps the runner's paths out of the binaries.
+(cd "$root" && CGO_ENABLED="$cgo" GOOS="$os" GOARCH="$arch" \
+  go build -trimpath -o "$dir/bin/" ./cmd/...)
+cp "$root/bin/swoop" "$dir/bin/"
+cp -R "$root/extensions" "$dir/extensions"
+cp "$root/scripts/launchd.sh" "$root/scripts/uninstall" "$dir/scripts/"
+cp "$root/VERSION" "$root/LICENSE" "$dir/"
+
+if [ "$os" = darwin ]; then
+  case "$arch" in
+    arm64) swift_arch=arm64 ;;
+    amd64) swift_arch=x86_64 ;;
+    *) echo "package: no frame for darwin/$arch" >&2; exit 1 ;;
+  esac
+  swift build -c release --arch "$swift_arch" --package-path "$root/shell/mac" >&2
+  built="$(swift build -c release --arch "$swift_arch" --package-path "$root/shell/mac" --show-bin-path)"
+  cp "$built/swoop-shell-mac" "$dir/bin/"
+  # SwiftPM looks for a target's resource bundle beside the executable, and
+  # libghostty's holds the terminfo it needs: without it the frame stops at
+  # launch. Every bundle, so a new one is not left behind.
+  for b in "$built"/*.bundle; do
+    cp -R "$b" "$dir/bin/"
+  done
+fi
+
+# COPYFILE_DISABLE keeps macOS tar from adding ._ files for extended
+# attributes, which would unpack as clutter everywhere else.
+COPYFILE_DISABLE=1 tar -C "$stage" -czf "$out/$name.tar.gz" "$name"
+echo "$out/$name.tar.gz"

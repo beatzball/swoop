@@ -16,6 +16,13 @@ so here.
   History offers Copy and Delete, and Delete removes the entry and brings
   the list back without it. Extensions gain an optional `actions <id>`
   verb, and `run` gets the action's name.
+- **Install with no tools.** `curl -fsSL
+  https://raw.githubusercontent.com/beatzball/swoop/main/scripts/get | bash`
+  installs the latest release, or `--version X.Y.Z` a given one, into
+  `~/.local/share/swoop`, with fzf if you have none, and on a Mac starts the
+  frame and the clipboard watcher at login. No Go, fzf, or Xcode tools
+  needed. Every tag now publishes a release with a tarball for macOS (Apple
+  silicon and Intel, frame included), Linux (amd64 and arm64) and Windows.
 
 ### Changed
 
