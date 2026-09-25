@@ -45,12 +45,12 @@ export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIO
 #   ctrl-k:      the row's actions as a pane of their own; cmd+K in the
 #                frame is mapped to it. fzf's own ctrl-k is "up", which the
 #                arrow key still does
-#   tab:         asks AI what is in the bar: a pane of its own, the answer
-#                arriving as rows; see extensions/ai
-#   load:        refresh the preview once a reload has finished. Unbound
-#                at start and bound only while the Ask AI pane is up, where
-#                the preview is the whole answer and the last line matters;
-#                at the root it would cost a preview call on every keystroke
+#   tab:         opens the Ask AI pane with what is in the bar; Enter there
+#                sends it, and the answer arrives on the right. See
+#                cmd/swoop-ai
+#   --listen:    fzf's HTTP API on a socket of this run's own, so the
+#                worker that streams an answer can tell fzf to redraw the
+#                preview as it goes. The key keeps anything else out
 #   enter, esc, change:
 #                all three go through swoop-nav, which prints the actions:
 #                Enter runs a row or opens a view; Esc clears the bar,
@@ -70,6 +70,16 @@ export SWOOP_APPS
 # run command itself when Enter replaces fzf.
 SWOOP_STATE="$(mktemp "${TMPDIR:-/tmp}/swoop-state.XXXXXX")"
 export SWOOP_STATE
+# fzf's API, for the Ask AI worker: a Unix socket beside the state file,
+# which fzf exports to its children as FZF_SOCK, or a localhost port on
+# Windows, exported as FZF_PORT. Requests need the key.
+sock="$SWOOP_STATE.sock"
+listen="$sock"
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*) listen=0 ;;
+esac
+FZF_API_KEY="$(head -c 24 /dev/urandom | base64)"
+export FZF_API_KEY
 # The clipboard watcher outlives the launcher; start it if none runs. It
 # is the one part of swoop that runs while the launcher is closed.
 swoop-clipd start || true
@@ -77,7 +87,7 @@ swoop-list | swoop-icons -out "$icons" > "$SWOOP_APPS"
 swoop-nav rows > "$rows"
 fzf < "$rows" \
   --ansi \
-  --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons' '$rows')+unbind(load)" \
+  --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons' '$rows')" \
   --delimiter $'\t' \
   --with-nth $'{3} {4}  \t{5}' \
   --nth 1 \
@@ -93,10 +103,10 @@ fzf < "$rows" \
   --bind 'left-click:transform:swoop-nav enter {1} {2} {4}' \
   --bind 'ctrl-k:transform:swoop-nav actions {1} {2} {4}' \
   --bind 'tab:transform:swoop-nav ai' \
-  --bind 'load:refresh-preview' \
+  --listen "$listen" \
   --bind 'esc:transform:swoop-nav esc' \
   --bind 'change:transform:swoop-nav change' || status=$?
-rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_APPS"
+rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_APPS" "$sock"
 # Inside a frame of our own, tell it we are leaving, so it can put the
 # panel away before the terminal prints "Process exited".
 [ -n "${SWOOP_SHELL_PID:-}" ] && kill -USR2 "$SWOOP_SHELL_PID" 2>/dev/null

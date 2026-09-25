@@ -51,7 +51,7 @@ func TestEscClearsThenPopsThenCloses(t *testing.T) {
 		t.Fatalf("text in the bar: got %q", got)
 	}
 	got := Esc(st, "")
-	want := "enable-search+change-prompt(  )+change-header()+unbind(load)+change-preview(swoop-preview {1})+change-query(de)+reload-sync(swoop-nav rows {q})+wait+pos(3)"
+	want := "enable-search+change-prompt(  )+change-preview-window(right,45%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(de)+reload-sync(swoop-nav rows {q})+wait+pos(3)"
 	if got != want {
 		t.Fatalf("pop: got  %q\nwant %q", got, want)
 	}
@@ -84,7 +84,7 @@ func TestEnterOnRefreshActionRunsAndReturnsToTheViewBelow(t *testing.T) {
 		{Kind: "actions", View: "ext/clipboard/17", Title: "hello", Query: "he", Pos: 2},
 	}}
 	got := Enter(st, "delete", "refresh", "Delete", "", 2, run)
-	want := "execute-silent(swoop-run 'ext/clipboard/17' 'delete')+disable-search+change-prompt(Clipboard History > )+change-header()+unbind(load)+change-preview(swoop-preview {1})+change-query(he)+reload-sync(swoop-nav rows {q})+wait+pos(2)"
+	want := "execute-silent(swoop-run 'ext/clipboard/17' 'delete')+disable-search+change-prompt(Clipboard History > )+change-preview-window(right,45%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(he)+reload-sync(swoop-nav rows {q})+wait+pos(2)"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -160,44 +160,85 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 	}
 }
 
-func TestTabAsksAIAndFiltersRatherThanReloads(t *testing.T) {
+func TestTabOpensTheAIPaneAndKeepsTheText(t *testing.T) {
 	st := &State{}
-	if got := Ask(st, "  ", 1); got != "ignore" {
-		t.Fatalf("an empty bar has no question: got %q", got)
-	}
 	got := Ask(st, "why is the sky blue", 3)
-	want := "clear-query+enable-search+change-prompt(Ask AI > )+change-header(why is the sky blue)+rebind(load)+reload(swoop-nav rows)+first"
+	want := "disable-search+change-prompt(Ask AI > )+change-preview-window(right,45%,border-left,wrap,follow)+reload-sync(swoop-nav rows)+first"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
 	if len(st.Stack) != 1 || st.Stack[0].Kind != "ai" || st.Stack[0].View != AIView || st.Stack[0].Query != "why is the sky blue" || st.Stack[0].Pos != 3 {
 		t.Fatalf("stack: %+v", st.Stack)
 	}
+	if got := Ask(st, "", 1); got != "ignore" {
+		t.Fatalf("Tab inside the pane does nothing: got %q", got)
+	}
 	if got := Change(st); got != "ignore" {
-		t.Fatalf("typing in the pane must not ask again: got %q", got)
+		t.Fatalf("typing in the pane must not reload: got %q", got)
 	}
 }
 
-func TestTabInsideTheAIPaneAsksAgain(t *testing.T) {
-	st := &State{Stack: []Frame{{Kind: "ai", View: AIView, Title: AITitle, Query: "first", Pos: 1}}}
-	got := Ask(st, "second", 1)
-	if !strings.Contains(got, "change-header(second)") {
+func TestTabOnAnEmptyBarOpensThePaneToo(t *testing.T) {
+	st := &State{}
+	if got := Ask(st, "", 1); got == "ignore" {
+		t.Fatal("an empty bar still opens the pane")
+	}
+	if len(st.Stack) != 1 || st.Stack[0].Query != "" {
+		t.Fatalf("stack: %+v", st.Stack)
+	}
+}
+
+func TestEnterInTheAIPaneSendsThenClears(t *testing.T) {
+	st := &State{Stack: []Frame{{Kind: "ai", View: AIView, Title: AITitle}}}
+	if _, ok := AISendTarget(st, "ext/ai/new", "  "); ok {
+		t.Fatal("nothing to send")
+	}
+	if _, ok := AISendTarget(st, "", "why"); ok {
+		t.Fatal("no row, nothing to send to")
+	}
+	if target, ok := AISendTarget(st, "ext/ai/new", "why"); !ok || target != "new" {
+		t.Fatalf("New row sends to new: %q %v", target, ok)
+	}
+	if target, ok := AISendTarget(st, "ext/ai/20260925-1", "and then"); !ok || target != "20260925-1" {
+		t.Fatalf("a conversation row sends to itself: %q %v", target, ok)
+	}
+	if _, ok := AISendTarget(&State{}, "ext/ai/new", "why"); ok {
+		t.Fatal("only inside the pane")
+	}
+	if got := AfterSend(); got != "clear-query+reload-sync(swoop-nav rows)+wait+pos(2)+refresh-preview" {
 		t.Fatalf("got %q", got)
 	}
-	if len(st.Stack) != 1 || st.Stack[0].Query != "second" {
-		t.Fatalf("the pane is reused, not stacked: %+v", st.Stack)
+	if got := Enter(st, "ext/ai/20260925-1", "conversation", "earlier", "and then", 2, run); got != "ignore" {
+		t.Fatalf("Enter itself neither runs nor pushes in the pane: %q", got)
+	}
+	if len(st.Stack) != 1 {
+		t.Fatalf("Enter must not push: %+v", st.Stack)
 	}
 }
 
-func TestEscFromTheAIPaneRestoresTheQuestion(t *testing.T) {
+func TestEscFromTheAIPaneRestoresTheBar(t *testing.T) {
 	st := &State{Stack: []Frame{{Kind: "ai", View: AIView, Title: AITitle, Query: "why is the sky blue", Pos: 2}}}
+	if got := Esc(st, "draft"); got != "clear-query" {
+		t.Fatalf("text first: %q", got)
+	}
 	got := Esc(st, "")
-	for _, part := range []string{"enable-search", "change-header()", "unbind(load)", "change-query(why is the sky blue)", "pos(2)"} {
+	for _, part := range []string{"enable-search", "change-preview-window(right,45%,border-left,nowrap)", "change-query(why is the sky blue)", "pos(2)"} {
 		if !strings.Contains(got, part) {
 			t.Fatalf("missing %q in %q", part, got)
 		}
 	}
 	if len(st.Stack) != 0 {
 		t.Fatalf("should be at the root: %+v", st.Stack)
+	}
+}
+
+func TestPoppingActionsInsideTheAIPaneKeepsItsWindow(t *testing.T) {
+	st := &State{Stack: []Frame{
+		{Kind: "ai", View: AIView, Title: AITitle, Query: "", Pos: 1},
+		{Kind: "actions", View: "ext/ai/20260925-1", Title: "earlier", Query: "draft", Pos: 2},
+	}}
+	got := Esc(st, "")
+	if !strings.Contains(got, "change-preview-window(right,45%,border-left,wrap,follow)") || !strings.Contains(got, "change-prompt(Ask AI > )") {
+		t.Fatalf("got %q", got)
 	}
 }

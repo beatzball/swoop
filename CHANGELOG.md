@@ -11,13 +11,15 @@ so here.
 
 ### Added
 
-- **Tab asks AI.** Type a question, press Tab: a pane of its own, the
-  question in the header, the answer arriving line by line as the model
-  writes, the whole of it in the preview. Enter copies it. Esc brings the
-  launcher back with the question still in the bar. The model is whatever
-  command you name in `~/.config/swoop/ai`; without that file, `claude -p`
-  or `ollama run`. The launchd agents now carry the installing shell's
-  PATH, so the frame finds the same tools your terminal does.
+- **Ask AI.** Press Tab from anywhere: a pane with your conversations on
+  the left and the transcript on the right. Enter sends what is in the bar;
+  dots show under your prompt until the model starts, then the answer
+  streams in, and each later prompt appends below. ctrl-k on a
+  conversation offers Copy last answer, Copy conversation, and Delete. Esc
+  brings the launcher back with the text you had before Tab. The model is
+  whatever command you name in `~/.config/swoop/ai`; without that file,
+  `claude -p` or `ollama run`. The launchd agents now carry the installing
+  shell's PATH, so the frame finds the same tools your terminal does.
 
 ## [0.4.1] - 2026-09-25
 
