@@ -46,7 +46,7 @@ Now alt+space shows swoop. Enter opens the app, swoop exits, and the panel
 closes on its own. Next alt+space starts fresh.
 
 If alt+space is already taken on your Mac, pick another key, such as
-`global:alt+shift+space=toggle_quick_terminal`.
+`global:ctrl+alt+space=toggle_quick_terminal`.
 
 ![swoop listing apps and filtering as you type](demo/spike.gif)
 
