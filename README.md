@@ -53,6 +53,25 @@ If alt+space is already taken on your Mac, pick another key, such as
 The plan, every design decision, and the work in progress live in the
 [issues](https://github.com/beatzball/swoop/issues). Start there.
 
+## What runs when the launcher is closed
+
+One thing: `swoop-clipd`, the clipboard watcher. The launcher starts it the
+first time and it keeps running, polling the clipboard a few times a second
+and appending new text to `~/.local/share/swoop/clipboard/history.jsonl`,
+readable by you only. Two things it never keeps: a copy that carries the
+"concealed" mark some password managers set, and a copy made while an app on
+the ignore list is in front. The list defaults to the known password managers;
+write your own, one bundle id per line, at `~/.config/swoop/clipboard.ignore`.
+Copy a password from your manager and run `bin/swoop-clipd types` to see what
+it marks, and `osascript -e 'id of app "Its Name"'` to get its bundle id.
+
+If a manager still gets through, start the watcher with `SWOOP_CLIPD_DEBUG=1`
+and read `watcher.log` next to the history: each change is logged with the app
+in front and the marks seen, never the text.
+
+`swoop-clipd status` says whether it is running; `swoop-clipd delete <id>` and
+`swoop-clipd clear` remove entries; kill it if you would rather it did not run.
+
 ## Write an extension
 
 An extension is a folder with one program in it, named the same:

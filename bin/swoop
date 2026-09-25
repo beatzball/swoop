@@ -45,6 +45,9 @@ export SWOOP_APPS
 # run command itself when Enter replaces fzf.
 SWOOP_STATE="$(mktemp "${TMPDIR:-/tmp}/swoop-state.XXXXXX")"
 export SWOOP_STATE
+# The clipboard watcher outlives the launcher; start it if none runs. It
+# is the one part of swoop that runs while the launcher is closed.
+swoop-clipd start || true
 swoop-list | swoop-icons -out "$icons" > "$SWOOP_APPS"
 swoop-nav rows > "$rows"
 fzf < "$rows" \
