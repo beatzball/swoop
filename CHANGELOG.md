@@ -9,6 +9,15 @@ so here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Pictures only where they draw.** A terminal that does not speak the
+  Kitty graphics protocol showed row icons as boxes and the preview as
+  noise. swoop now sends pictures only in a terminal known to draw them
+  (Ghostty and the frame, kitty, WezTerm, Konsole); elsewhere rows keep
+  their glyphs and the preview starts at the name. `SWOOP_PICTURES=1` or
+  `0` overrides the guess.
+
 ## [0.4.0] - 2026-09-25
 
 The action menu, a fast first run, and an install with no tools.
