@@ -46,12 +46,29 @@ Now alt+space shows swoop. Enter opens the app, swoop exits, and the panel
 closes on its own. Next alt+space starts fresh.
 
 If alt+space is already taken on your Mac, pick another key, such as
-`global:cmd+shift+space=toggle_quick_terminal`.
+`global:ctrl+alt+space=toggle_quick_terminal`.
 
 ![swoop listing apps and filtering as you type](demo/spike.gif)
 
 The plan, every design decision, and the work in progress live in the
 [issues](https://github.com/beatzball/swoop/issues). Start there.
+
+## The macOS frame
+
+Ghostty's quick terminal is the day-one window. The frame of our own is a
+small Swift program, `shell/mac`, that does nothing but show a floating panel
+with swoop in it, drawn by libghostty, on a global hotkey:
+
+```sh
+make build shell-mac
+PATH="$PWD/bin:$PATH" shell/mac/.build/release/swoop-shell-mac
+```
+
+Then press alt+shift+space. Esc closes it, Enter opens what you picked, a
+click elsewhere hides it, and the next press is a fresh launcher with an
+empty bar. `SWOOP_HOTKEY=alt+space` picks another key; `SWOOP_LAUNCHER`
+points at a different `swoop`. It needs no Ghostty.app and no permission.
+Starting it at login comes with the installer.
 
 ## What runs when the launcher is closed
 

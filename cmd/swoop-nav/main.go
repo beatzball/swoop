@@ -73,7 +73,15 @@ func main() {
 		if apps := os.Getenv(envApps); apps != "" {
 			run += " " + nav.ShellQuote(apps)
 		}
-		run += "; exec swoop-run " + nav.ShellQuote(id)
+		if shell := os.Getenv("SWOOP_SHELL_PID"); shell != "" {
+			// Inside a frame of our own: run the action, THEN tell the frame
+			// the launcher is leaving. The frame answers the signal by
+			// dropping the surface, which ends everything in it, so a
+			// signal sent first would kill the runner before it ran.
+			run += "; swoop-run " + nav.ShellQuote(id) + "; kill -USR2 " + nav.ShellQuote(shell) + " 2>/dev/null"
+		} else {
+			run += "; exec swoop-run " + nav.ShellQuote(id)
+		}
 		fmt.Println(nav.Enter(st, id, kind, title, query, pos, run))
 	case "esc":
 		fmt.Println(nav.Esc(st, query))
