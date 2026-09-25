@@ -73,6 +73,11 @@ func main() {
 		if apps := os.Getenv(envApps); apps != "" {
 			run += " " + nav.ShellQuote(apps)
 		}
+		// Inside a frame of our own, tell it the launcher is leaving; see
+		// the same line in bin/swoop.
+		if shell := os.Getenv("SWOOP_SHELL_PID"); shell != "" {
+			run += "; kill -USR2 " + nav.ShellQuote(shell) + " 2>/dev/null"
+		}
 		run += "; exec swoop-run " + nav.ShellQuote(id)
 		fmt.Println(nav.Enter(st, id, kind, title, query, pos, run))
 	case "esc":

@@ -11,13 +11,11 @@ final class LauncherPanel: NSPanel {
 
 /// Shows and hides the panel and owns the terminal surface inside it.
 ///
-/// One swoop per show, and the next one is started as soon as the current
-/// one is done, while the panel is hidden. So a press never shows an empty
-/// terminal waiting for fzf: the launcher behind the panel is already drawn.
-/// When swoop exits, or the panel loses the keyboard, the panel hides at
-/// once and the surface is replaced. That is the answer to "a fresh
-/// launcher on every open": the frame knows when it hides, and Ghostty's
-/// quick terminal did not.
+/// Hiding keeps the launcher as it is: the hotkey, or a click elsewhere,
+/// puts the panel away with your text still in the bar, and the next press
+/// brings the same launcher back. Only swoop ending, Esc at the root or
+/// Enter's `become`, replaces it, and the replacement is started at once
+/// while the panel is hidden, so a press never shows an empty terminal.
 final class LauncherController: NSObject, NSWindowDelegate,
     TerminalSurfaceCloseDelegate, TerminalSurfaceCommandFinishedDelegate
 {
@@ -118,8 +116,13 @@ final class LauncherController: NSObject, NSWindowDelegate,
         view.delegate = self
         view.configuration = TerminalSurfaceOptions(
             backend: .exec,
-            // The frame's own name, for a launcher that wants to know.
-            envVars: ["SWOOP_SHELL": "mac"],
+            // The frame's name and pid. swoop sends SIGUSR2 to the pid
+            // just before it exits, on both of its exit paths, because
+            // the library does not report the process ending (its close
+            // callback is never wired up for the exec backend). The frame
+            // then replaces the surface before the terminal can show
+            // "Process exited".
+            envVars: ["SWOOP_SHELL": "mac", "SWOOP_SHELL_PID": String(getpid())],
             command: command,
             waitAfterCommand: false
         )
@@ -129,20 +132,36 @@ final class LauncherController: NSObject, NSWindowDelegate,
     }
 
     func show() {
+        log("show")
         if terminal == nil { prepare() }
         centerOnActiveScreen()
         panel.makeKeyAndOrderFront(nil)
         if let terminal { panel.makeFirstResponder(terminal) }
     }
 
+    /// Put the panel away and keep the launcher as it is.
     func hide() {
+        log("hide")
         panel.orderOut(nil)
-        // Dropping the view closes its surface, which ends the process if
-        // it is still running. Then the next one starts right away, hidden,
-        // so the next show is instant.
+    }
+
+    /// swoop said it is exiting (SIGUSR2). Replace it.
+    func launcherEnded() {
+        replace()
+    }
+
+    /// swoop ended: drop its surface and start the next one, hidden.
+    private func replace() {
+        log("replace")
+        panel.orderOut(nil)
         terminal?.removeFromSuperview()
         terminal = nil
         prepare()
+    }
+
+    private func log(_ message: String) {
+        guard ProcessInfo.processInfo.environment["SWOOP_SHELL_DEBUG"] != nil else { return }
+        FileHandle.standardError.write(Data("swoop-shell-mac: \(message)\n".utf8))
     }
 
     private func centerOnActiveScreen() {
@@ -160,14 +179,17 @@ final class LauncherController: NSObject, NSWindowDelegate,
 
     // MARK: the surface says it is done
 
-    func terminalDidFinishCommand(exitCode _: Int?, durationNanos _: UInt64) {
-        // swoop exited: Esc at the root, or Enter's become finished. Hide
-        // now, before the terminal can show "Process exited".
-        DispatchQueue.main.async { if self.panel.isVisible { self.hide() } }
+    func terminalDidFinishCommand(exitCode: Int?, durationNanos _: UInt64) {
+        // Shell integration's "a command finished", not the process ending;
+        // swoop is not a shell, so this is not expected. Logged, not acted on.
+        log("command finished, exit \(exitCode.map(String.init) ?? "nil")")
     }
 
-    func terminalDidClose(processAlive _: Bool) {
-        DispatchQueue.main.async { if self.panel.isVisible { self.hide() } }
+    func terminalDidClose(processAlive: Bool) {
+        // swoop exited: Esc at the root, or Enter's become finished. The
+        // core asks for the surface to close; replace it.
+        log("close, processAlive \(processAlive)")
+        DispatchQueue.main.async { self.replace() }
     }
 
     // MARK: the panel lost the keyboard

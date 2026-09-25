@@ -72,6 +72,9 @@ fzf < "$rows" \
   --bind 'esc:transform:swoop-nav esc' \
   --bind 'change:transform:swoop-nav change' || status=$?
 rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_APPS"
+# Inside a frame of our own, tell it we are leaving, so it can put the
+# panel away before the terminal prints "Process exited".
+[ -n "${SWOOP_SHELL_PID:-}" ] && kill -USR2 "$SWOOP_SHELL_PID" 2>/dev/null
 # Esc and ctrl-c make fzf exit 130. Closing the launcher is not a failure,
 # and Ghostty treats a fast non-zero exit as one: it keeps the pane open
 # with "Process exited" until a key is pressed. Anything else is real.

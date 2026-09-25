@@ -1,11 +1,20 @@
 import AppKit
+import GhosttyTerminal
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var launcher: LauncherController?
     private var hotKey: HotKey?
     private var toggleSignal: DispatchSourceSignal?
+    private var endedSignal: DispatchSourceSignal?
 
     func applicationDidFinishLaunching(_: Notification) {
+        // SWOOP_SHELL_DEBUG=1 logs every libghostty callback and every
+        // show/hide to stderr: the way to see why a panel did or did not
+        // close.
+        if ProcessInfo.processInfo.environment["SWOOP_SHELL_DEBUG"] != nil {
+            TerminalDebugLog.enable(.standard)
+            TerminalDebugLog.sink = { FileHandle.standardError.write(Data(($0 + "\n").utf8)) }
+        }
         guard let command = findLauncher() else {
             FileHandle.standardError.write(Data("swoop-shell-mac: cannot find swoop. Set SWOOP_LAUNCHER or put bin/ on PATH.\n".utf8))
             NSApp.terminate(nil)
@@ -27,10 +36,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // A test can drive the frame without a keyboard, and a script can
         // open the launcher without knowing the hotkey.
         signal(SIGUSR1, SIG_IGN)
-        let source = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
-        source.setEventHandler { [weak launcher] in launcher?.toggle() }
-        source.resume()
-        toggleSignal = source
+        let toggle = DispatchSource.makeSignalSource(signal: SIGUSR1, queue: .main)
+        toggle.setEventHandler { [weak launcher] in launcher?.toggle() }
+        toggle.resume()
+        toggleSignal = toggle
+
+        // SIGUSR2 is swoop saying "I am about to exit": hide the panel and
+        // start the next one. See LauncherController.replace.
+        signal(SIGUSR2, SIG_IGN)
+        let ended = DispatchSource.makeSignalSource(signal: SIGUSR2, queue: .main)
+        ended.setEventHandler { [weak launcher] in launcher?.launcherEnded() }
+        ended.resume()
+        endedSignal = ended
 
         FileHandle.standardError.write(Data("swoop-shell-mac: ready; hotkey \(spec); running \(command)\n".utf8))
     }
