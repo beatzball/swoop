@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# files: search your files by name. One root row, "Search Files", that
+# opens a view. The view asks Spotlight (mdfind) for names containing what
+# you typed, under your home folder, newest change first; with nothing
+# typed, the files you used most recently. The preview shows a picture as
+# a picture (through swoop-img), text as text, a folder as its listing, and
+# anything else as its facts. Enter opens the file in its default app.
+#
+# Written for the bash macOS ships, 3.2: no ${var,,}, no mapfile. Case is
+# handled with nocasematch, and the row loop uses builtins only, because it
+# runs a hundred times per keystroke.
+set -euo pipefail
+shopt -s nocasematch
+
+home="$HOME"
+limit=100
+
+row() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5"; }
+
+# Nerd Font glyphs: folder, picture, plain file.
+icon_for() {
+  if [ -d "$1" ]; then printf ''; return; fi
+  case "$1" in
+    *.png|*.jpg|*.jpeg|*.gif|*.webp|*.heic|*.tiff|*.bmp) printf '' ;;
+    *) printf '' ;;
+  esac
+}
+
+# Spotlight prints "path   kMDItemContentModificationDate = date" per line
+# when asked for the attribute. Sort on the date, newest first, then print
+# rows. mdfind chatters on stderr about locales; that is dropped. The
+# subtitle is the folder with the home path shown as ~, so no home path
+# ever reaches the screen.
+rows_from_mdfind() {
+  mdfind -onlyin "$home" -attr kMDItemContentModificationDate "$@" 2>/dev/null \
+    | awk -F'   ' '{ split($2, a, " = "); print a[2] "\t" $1 }' \
+    | sort -r | head -n "$limit" | cut -f2- \
+    | while IFS= read -r path; do
+        [ -e "$path" ] || continue
+        kind='file'; [ -d "$path" ] && kind='folder'
+        dir="${path%/*}"
+        row "$path" "$kind" "$(icon_for "$path")" "${path##*/}" "${dir/#$home/~}"
+      done
+}
+
+case "${1:-}" in
+  list)
+    row files view '' 'Search Files' 'Find a file by name, from Spotlight'
+    ;;
+  view)
+    query="${3:-}"
+    if [ -z "$query" ]; then
+      # shellcheck disable=SC2016  # $time.now is Spotlight's syntax, not the shell's
+      rows_from_mdfind 'kMDItemLastUsedDate > $time.now(-30d)'
+    else
+      rows_from_mdfind -name "$query"
+    fi
+    ;;
+  preview)
+    path="${2:-}"
+    [ -e "$path" ] || { echo "gone: ${path/#$home/~}"; exit 0; }
+    if [ -d "$path" ]; then
+      printf '\e[1m%s\e[22m\n\n' "${path##*/}/"
+      # shellcheck disable=SC2012  # a listing to look at, never parsed
+      ls -1Ap "$path" | head -40
+      exit 0
+    fi
+    case "$path" in
+      *.png|*.jpg|*.jpeg|*.gif|*.webp)
+        swoop-img "$path" 2>/dev/null || true
+        echo
+        ;;
+      *)
+        mime="$(file -b --mime-type "$path")"
+        case "$mime" in
+          text/*|application/json|application/x-empty|inode/x-empty)
+            head -c 4000 "$path"
+            echo
+            echo
+            ;;
+        esac
+        ;;
+    esac
+    printf '\e[1m%s\e[22m\n' "${path##*/}"
+    printf '\e[2m%-9s\e[22m %s\n' Path "${path/#$home/~}"
+    printf '\e[2m%-9s\e[22m %s\n' Size "$(du -h "$path" | cut -f1 | tr -d ' ')"
+    printf '\e[2m%-9s\e[22m %s\n' Modified "$(stat -f '%Sm' -t '%Y-%m-%d %H:%M' "$path")"
+    printf '\e[2m%-9s\e[22m %s\n' Type "$(file -b "$path" | cut -c1-60)"
+    ;;
+  run)
+    open "${2:-}"
+    ;;
+  *)
+    echo "usage: files list | view files [query] | preview <path> | run <path>" >&2
+    exit 2
+    ;;
+esac
