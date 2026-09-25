@@ -26,9 +26,7 @@ func list() ([]protocol.Item, error) {
 	home, _ := os.UserHomeDir()
 	var items []protocol.Item
 	for _, shown := range dirs {
-		// shown keeps the "~" for the subtitle: it is shorter, and it keeps
-		// the user's home path out of anything that lands on a screen or in
-		// a recording. dir is the real path, for reading and for the id.
+		// dir is the real path, for reading and for the id.
 		dir := shown
 		if strings.HasPrefix(dir, "~") {
 			dir = home + dir[1:]
@@ -48,11 +46,12 @@ func list() ([]protocol.Item, error) {
 			items = append(items, protocol.Item{
 				// The bundle path is the id: stable, unique, and exactly
 				// what `open` needs. swoop-run gets it back untouched.
-				ID:       filepath.Join(dir, name),
-				Kind:     Kind,
-				Icon:     Icon,
-				Title:    strings.TrimSuffix(name, ".app"),
-				Subtitle: shown,
+				ID:    filepath.Join(dir, name),
+				Kind:  Kind,
+				Icon:  Icon,
+				Title: strings.TrimSuffix(name, ".app"),
+				// No subtitle: the folder is in the preview, where it is
+				// read once, not on every row, where it was noise.
 			})
 		}
 	}

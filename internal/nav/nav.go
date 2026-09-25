@@ -159,8 +159,8 @@ const (
 // because a transcript is prose, and following, so a growing answer
 // keeps its end in view.
 const (
-	PreviewWindow   = "right,45%,border-left,nowrap"
-	AIPreviewWindow = "right,45%,border-left,wrap,follow"
+	PreviewWindow   = "right,58%,border-left,nowrap"
+	AIPreviewWindow = "right,58%,border-left,wrap,follow"
 )
 
 // Ask decides what Tab does: push the Ask AI pane, keeping whatever is in
