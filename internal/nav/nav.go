@@ -111,13 +111,17 @@ func Enter(st *State, id, kind, title, query string, pos int, runCmd func(target
 // "refresh" runs it silently and returns to the pane below, reloaded, so a
 // delete shows the list without the entry; anything else ends the launcher
 // like Enter on a plain row.
+//
+// The refresh path runs the bare runner, not runCmd: runCmd is the exit
+// command, and it removes the run's files and tells a frame the launcher
+// is leaving. Doing that for a delete lost the stack and closed the frame.
 func enterAction(st *State, top *Frame, action, kind string, runCmd func(target, action string) string) string {
 	target := top.View
 	if kind != "refresh" {
 		return "become:" + runCmd(target, action)
 	}
 	pop := popActions(st)
-	return "execute-silent(" + runCmd(target, action) + ")+" + pop
+	return "execute-silent(swoop-run " + ShellQuote(target) + " " + ShellQuote(action) + ")+" + pop
 }
 
 // Actions decides what ctrl-k does: push an actions pane for the current
@@ -136,13 +140,16 @@ func Actions(st *State, id, kind, title, query string, pos int) string {
 // push is what entering any pane does: clear the bar first, so the reload
 // that follows sees it empty and the pane answers with its "nothing typed
 // yet" rows; then fzf's own matching goes off, because inside a pane the
-// launcher shows exactly what comes back.
+// launcher shows exactly what comes back; then the cursor goes to the top,
+// because fzf keeps its row index across a reload, and a menu opened from
+// row 2 would otherwise start on its own row 2.
 func push(prompt string) string {
 	return strings.Join([]string{
 		"clear-query",
 		"disable-search",
 		wrap("change-prompt", prompt),
 		"reload-sync(swoop-nav rows {q})",
+		"first",
 	}, "+")
 }
 
@@ -159,9 +166,12 @@ func Esc(st *State, query string) string {
 }
 
 // popActions removes the top pane and returns the actions that bring the
-// pane below it back: its own matching mode and prompt, its rows, the text
-// the user had typed there, and the cursor row they were on. Same rows
-// plus same text give the same order, so the row is the one they left.
+// pane below it back: its own matching mode and prompt, the text the user
+// had typed there, its rows for that text, and the cursor row they were
+// on. The text goes back BEFORE the reload: the reload reads the bar, and
+// with the pane's old text still in it a view would filter on the wrong
+// thing and show nothing. Same rows plus same text give the same order, so
+// the row is the one they left.
 func popActions(st *State) string {
 	frame := st.Stack[len(st.Stack)-1]
 	st.Stack = st.Stack[:len(st.Stack)-1]
@@ -178,8 +188,8 @@ func popActions(st *State) string {
 		search,
 		wrap("change-prompt", prompt),
 		wrap("change-preview", "swoop-preview {1}"),
-		"reload-sync(swoop-nav rows {q})",
 		wrap("change-query", frame.Query),
+		"reload-sync(swoop-nav rows {q})",
 		"wait",
 		fmt.Sprintf("pos(%d)", frame.Pos),
 	}, "+")

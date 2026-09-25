@@ -8,16 +8,18 @@ import (
 
 // run is the test's stand-in for the shell command that performs a row.
 func run(target, action string) string {
+	// The exit command: it does more than run, which is why a refresh
+	// action must not use it. The tests check the extra never leaks in.
 	if action == "" {
-		return "swoop-run " + ShellQuote(target)
+		return "cleanup; swoop-run " + ShellQuote(target)
 	}
-	return "swoop-run " + ShellQuote(target) + " " + ShellQuote(action)
+	return "cleanup; swoop-run " + ShellQuote(target) + " " + ShellQuote(action)
 }
 
 func TestEnterOnActionRowBecomesRun(t *testing.T) {
 	st := &State{}
 	got := Enter(st, "/Applications/Safari.app", "app", "Safari", "saf", 1, run)
-	if got != "become:swoop-run '/Applications/Safari.app'" {
+	if got != "become:cleanup; swoop-run '/Applications/Safari.app'" {
 		t.Fatalf("got %q", got)
 	}
 	if len(st.Stack) != 0 {
@@ -34,7 +36,7 @@ func TestEnterOnNothingIsIgnored(t *testing.T) {
 func TestEnterOnViewRowPushesAndLoads(t *testing.T) {
 	st := &State{}
 	got := Enter(st, "ext/define/define", "view", "Define Word", "de", 3, run)
-	want := "clear-query+disable-search+change-prompt(Define Word > )+reload-sync(swoop-nav rows {q})"
+	want := "clear-query+disable-search+change-prompt(Define Word > )+reload-sync(swoop-nav rows {q})+first"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -49,7 +51,7 @@ func TestEscClearsThenPopsThenCloses(t *testing.T) {
 		t.Fatalf("text in the bar: got %q", got)
 	}
 	got := Esc(st, "")
-	want := "enable-search+change-prompt(  )+change-preview(swoop-preview {1})+reload-sync(swoop-nav rows {q})+change-query(de)+wait+pos(3)"
+	want := "enable-search+change-prompt(  )+change-preview(swoop-preview {1})+change-query(de)+reload-sync(swoop-nav rows {q})+wait+pos(3)"
 	if got != want {
 		t.Fatalf("pop: got  %q\nwant %q", got, want)
 	}
@@ -64,7 +66,7 @@ func TestEscClearsThenPopsThenCloses(t *testing.T) {
 func TestActionsPushesAPaneAndKeepsThePreviewOnTheTarget(t *testing.T) {
 	st := &State{Stack: []Frame{{Kind: "view", View: "ext/clipboard/clipboard", Title: "Clipboard History", Query: "", Pos: 1}}}
 	got := Actions(st, "ext/clipboard/17", "text", "hello", "he", 2)
-	want := "clear-query+disable-search+change-prompt(hello actions > )+reload-sync(swoop-nav rows {q})+change-preview(swoop-preview 'ext/clipboard/17')"
+	want := "clear-query+disable-search+change-prompt(hello actions > )+reload-sync(swoop-nav rows {q})+first+change-preview(swoop-preview 'ext/clipboard/17')"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -82,7 +84,7 @@ func TestEnterOnRefreshActionRunsAndReturnsToTheViewBelow(t *testing.T) {
 		{Kind: "actions", View: "ext/clipboard/17", Title: "hello", Query: "he", Pos: 2},
 	}}
 	got := Enter(st, "delete", "refresh", "Delete", "", 2, run)
-	want := "execute-silent(swoop-run 'ext/clipboard/17' 'delete')+disable-search+change-prompt(Clipboard History > )+change-preview(swoop-preview {1})+reload-sync(swoop-nav rows {q})+change-query(he)+wait+pos(2)"
+	want := "execute-silent(swoop-run 'ext/clipboard/17' 'delete')+disable-search+change-prompt(Clipboard History > )+change-preview(swoop-preview {1})+change-query(he)+reload-sync(swoop-nav rows {q})+wait+pos(2)"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -94,7 +96,7 @@ func TestEnterOnRefreshActionRunsAndReturnsToTheViewBelow(t *testing.T) {
 func TestEnterOnExitingActionBecomesRunWithTheAction(t *testing.T) {
 	st := &State{Stack: []Frame{{Kind: "actions", View: "/Applications/Safari.app", Title: "Safari", Query: "saf", Pos: 1}}}
 	got := Enter(st, "reveal", "action", "Reveal in Finder", "", 2, run)
-	if got != "become:swoop-run '/Applications/Safari.app' 'reveal'" {
+	if got != "become:cleanup; swoop-run '/Applications/Safari.app' 'reveal'" {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -105,7 +107,7 @@ func TestEscFromActionsReturnsToTheViewBelow(t *testing.T) {
 		{Kind: "actions", View: "ext/clipboard/17", Title: "hello", Query: "he", Pos: 2},
 	}}
 	got := Esc(st, "")
-	if !strings.HasPrefix(got, "disable-search+change-prompt(Clipboard History > )") || !strings.HasSuffix(got, "change-query(he)+wait+pos(2)") {
+	if !strings.HasPrefix(got, "disable-search+change-prompt(Clipboard History > )") || !strings.HasSuffix(got, "change-query(he)+reload-sync(swoop-nav rows {q})+wait+pos(2)") {
 		t.Fatalf("got %q", got)
 	}
 }
