@@ -72,8 +72,26 @@ var ErrNoIcon = errors.New("bundle: no .icns icon")
 // base64 through a pipe. The cache key is the icns path plus its size and
 // modification time and maxPx, so an app update invalidates it on its own.
 // A cache that cannot be written is not an error: the conversion just runs
-// again next time.
+// again next time. A conversion that fails is remembered in the cache too,
+// as an empty .bad file, and reported as ErrNoIcon after that.
 func (info Info) IconPNG(maxPx int) ([]byte, error) {
+	return info.iconPNG(maxPx, true)
+}
+
+// ErrNotCached says the icon exists but has not been converted yet, and
+// could be: CachedIconPNG refuses to spend the conversion on this run.
+var ErrNotCached = errors.New("bundle: icon not cached yet")
+
+// CachedIconPNG is IconPNG without the conversion. It costs a stat and a
+// file read, so a list of a hundred apps can ask for every icon on each
+// run. When the PNG is not in the cache yet it reports ErrNotCached, and
+// IconPNG, run by someone who can wait, fills it. With no cache directory
+// at all there is nowhere to fill, so it converts, as IconPNG does.
+func (info Info) CachedIconPNG(maxPx int) ([]byte, error) {
+	return info.iconPNG(maxPx, false)
+}
+
+func (info Info) iconPNG(maxPx int, convertMissing bool) ([]byte, error) {
 	icnsPath, err := info.icnsPath()
 	if err != nil {
 		return nil, err
@@ -84,15 +102,28 @@ func (info Info) IconPNG(maxPx int) ([]byte, error) {
 	}
 	key := sha1.Sum([]byte(fmt.Sprintf("%s|%d|%d|%d", icnsPath, st.Size(), st.ModTime().UnixNano(), maxPx)))
 	cachePath := ""
-	if dir, err := os.UserCacheDir(); err == nil {
-		cachePath = filepath.Join(dir, "swoop", "icons", hex.EncodeToString(key[:])+".png")
+	if dir := IconCacheDir(); dir != "" {
+		cachePath = filepath.Join(dir, hex.EncodeToString(key[:])+".png")
 		if data, err := os.ReadFile(cachePath); err == nil {
 			return data, nil
+		}
+		// An icon that failed to convert once fails again, and a cache
+		// that never fills would have swoop-icons warm it on every run.
+		// The key holds the modification time, so an app update tries
+		// again.
+		if _, err := os.Stat(cachePath + ".bad"); err == nil {
+			return nil, ErrNoIcon
+		}
+		if !convertMissing {
+			return nil, ErrNotCached
 		}
 	}
 
 	data, err := convert(icnsPath, maxPx)
 	if err != nil {
+		if cachePath != "" && os.MkdirAll(filepath.Dir(cachePath), 0o755) == nil {
+			_ = os.WriteFile(cachePath+".bad", nil, 0o644)
+		}
 		return nil, err
 	}
 	if cachePath != "" {
@@ -106,6 +137,16 @@ func (info Info) IconPNG(maxPx int) ([]byte, error) {
 		}
 	}
 	return data, nil
+}
+
+// IconCacheDir is where IconPNG keeps its conversions, or "" when the user
+// has no cache directory.
+func IconCacheDir() string {
+	dir, err := os.UserCacheDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(dir, "swoop", "icons")
 }
 
 func (info Info) icnsPath() (string, error) {

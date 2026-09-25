@@ -17,6 +17,13 @@ so here.
   the list back without it. Extensions gain an optional `actions <id>`
   verb, and `run` gets the action's name.
 
+### Changed
+
+- **The first swoop on a machine opens at once.** It used to spend about
+  half a second turning every app icon into a picture before the list
+  showed. Now icons not converted yet keep their glyph on that run, and a
+  background job converts them, so they are there from the next run.
+
 ## [0.3.0] - 2026-09-25
 
 The macOS frame, and swoop as a daily driver.
