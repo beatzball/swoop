@@ -21,6 +21,7 @@ import (
 	_ "image/jpeg"
 	"image/png"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/beatzball/swoop/internal/picture"
@@ -47,6 +48,12 @@ func main() {
 func run(path string, cols, rows int) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
+		return err
+	}
+	if !picture.Enabled() {
+		// One line in place of the picture, so the pane says what it
+		// would have shown rather than showing noise.
+		_, err := fmt.Printf("(picture: %s)\n", filepath.Base(path))
 		return err
 	}
 	img, format, err := image.DecodeConfig(bytes.NewReader(data))

@@ -18,8 +18,11 @@ make build        # compiles the tools into bin/
 bin/swoop         # lists your apps; type to filter; Enter opens; Esc quits
 ```
 
-It runs in any terminal. The frame above is the launcher; this is the same
-program without it, which is also how you run it on Linux or Windows, or
+It runs in any terminal. Icons and previews are pictures in a terminal that
+draws them (Ghostty, kitty, WezTerm, Konsole) and glyphs and text anywhere
+else; `SWOOP_PICTURES=1` or `0` overrides the guess. The frame above is the
+launcher; this is the same program without it, which is also how you run it
+on Linux or Windows, or
 inside Ghostty's own quick terminal if you prefer that to the frame. For the
 quick terminal, add to your Ghostty config:
 

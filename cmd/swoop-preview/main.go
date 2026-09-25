@@ -48,7 +48,10 @@ func main() {
 	}
 
 	info := bundle.Describe(id)
-	if data, err := info.IconPNG(previewIconPx); err == nil {
+	if !picture.Enabled() {
+		// The pane starts at the name; a terminal without pictures gets
+		// the same details, just no icon above them.
+	} else if data, err := info.IconPNG(previewIconPx); err == nil {
 		writeIcon(out, data, id, cols, rows)
 	} else if !errors.Is(err, bundle.ErrNoIcon) {
 		// A broken icon is worth a line on stderr for whoever is debugging,

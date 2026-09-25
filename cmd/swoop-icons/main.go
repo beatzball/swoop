@@ -53,8 +53,12 @@ func main() {
 		return
 	}
 
+	// With pics nil every row keeps its glyph and no warmer starts: a
+	// terminal that cannot draw the pictures has no use for the cache.
 	var pics io.Writer
-	if f, err := os.OpenFile(*out, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600); err == nil {
+	if !picture.Enabled() {
+		// Nothing to send.
+	} else if f, err := os.OpenFile(*out, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600); err == nil {
 		defer f.Close()
 		bw := bufio.NewWriterSize(f, 64<<10)
 		defer bw.Flush()
