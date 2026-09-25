@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# uninstall: stop and remove the two launchd agents that `scripts/install`
+# wrote. The history file, the settings, and the checkout stay.
+set -euo pipefail
+
+agents="$HOME/Library/LaunchAgents"
+domain="gui/$(id -u)"
+
+for label in dev.swoop.shell dev.swoop.clipd; do
+  launchctl bootout "$domain/$label" >/dev/null 2>&1 && echo "stopped $label" || echo "$label was not running"
+  rm -f "$agents/$label.plist"
+done
+echo "swoop is uninstalled. Your history and settings are still in place."

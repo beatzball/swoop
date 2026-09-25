@@ -27,9 +27,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             hotKey = try HotKey(spec) { [weak launcher] in launcher?.toggle() }
         } catch {
-            FileHandle.standardError.write(Data("swoop-shell-mac: \(error)\n".utf8))
-            NSApp.terminate(nil)
-            return
+            // Keep running without the key rather than quit: under launchd a
+            // quit is a restart loop, and SIGUSR1 still works. The log says
+            // what to fix.
+            FileHandle.standardError.write(Data("swoop-shell-mac: \(error); running without a hotkey\n".utf8))
         }
 
         // SIGUSR1 toggles the panel: `kill -USR1 $(pgrep swoop-shell-mac)`.
