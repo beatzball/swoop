@@ -11,9 +11,9 @@ func run(target, action string) string {
 	// The exit command: it does more than run, which is why a refresh
 	// action must not use it. The tests check the extra never leaks in.
 	if action == "" {
-		return "cleanup; swoop-run " + ShellQuote(target)
+		return "become:cleanup; swoop-run " + ShellQuote(target)
 	}
-	return "cleanup; swoop-run " + ShellQuote(target) + " " + ShellQuote(action)
+	return "become:cleanup; swoop-run " + ShellQuote(target) + " " + ShellQuote(action)
 }
 
 func TestEnterOnActionRowBecomesRun(t *testing.T) {
@@ -128,12 +128,12 @@ func TestWrapPicksASafeDelimiter(t *testing.T) {
 		"a (b) [c] {d}": "change-prompt<a (b) [c] {d}>",
 	}
 	for arg, want := range cases {
-		if got := wrap("change-prompt", arg); got != want {
+		if got := Wrap("change-prompt", arg); got != want {
 			t.Errorf("wrap(%q) = %q, want %q", arg, got, want)
 		}
 	}
 	all := "() [] {} <> ~~"
-	if got := wrap("change-prompt", all); strings.Count(got, ")") != 1 {
+	if got := Wrap("change-prompt", all); strings.Count(got, ")") != 1 {
 		t.Errorf("when every pair is used, the closing paren must be stripped: %q", got)
 	}
 }

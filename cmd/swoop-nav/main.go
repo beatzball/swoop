@@ -102,10 +102,13 @@ func main() {
 	}
 }
 
-// runCommand builds the shell command that performs a row: remove the
-// run's files, tell a frame of our own that the launcher is leaving, and
-// run the action. become replaces fzf with it, so nothing after it in
-// bin/swoop ever runs; that is why the files go here.
+// runCommand builds the fzf action that performs a row and ends the
+// launcher: remove the run's files, run the action, and in a frame of our
+// own tell the frame the launcher is leaving. In a plain terminal it is
+// become, which replaces fzf with the command, so nothing after fzf in
+// bin/swoop ever runs; that is why the files go here. The colon form
+// takes the rest of the string, which keeps any character in the command
+// safe.
 func runCommand(statePath string) func(target, action string) string {
 	return func(target, action string) string {
 		run := "rm -f " + nav.ShellQuote(statePath)
@@ -121,9 +124,16 @@ func runCommand(statePath string) func(target, action string) string {
 			// the launcher is leaving. The frame answers the signal by
 			// dropping the surface, which ends everything in it, so a
 			// signal sent first would kill the runner before it ran.
-			return run + "; " + swoopRun + "; kill -USR2 " + nav.ShellQuote(shell) + " 2>/dev/null"
+			//
+			// execute-silent rather than become: become restores the
+			// terminal's primary screen first, and the runner takes 40 ms
+			// or more, so the panel showed the shell's "Last login" line
+			// until the signal landed. execute-silent keeps fzf on its own
+			// screen while the command runs; the frame drops the surface
+			// before abort is ever reached, and nothing else is seen.
+			return nav.Wrap("execute-silent", run+"; "+swoopRun+"; kill -USR2 "+nav.ShellQuote(shell)+" 2>/dev/null") + "+abort"
 		}
-		return run + "; exec " + swoopRun
+		return "become:" + run + "; exec " + swoopRun
 	}
 }
 

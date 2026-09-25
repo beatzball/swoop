@@ -88,8 +88,10 @@ const RootPrompt = "  "
 // are the row's fields; query and pos are the bar's text and the cursor
 // row at that moment. A view row pushes a pane; an action row runs its
 // action; any other row becomes the run command; no row at all is
-// ignored. runCmd turns a target id and an action into the shell command
-// that performs it, already quoted, "" action meaning the default.
+// ignored. runCmd turns a target id and an action into the fzf action
+// that performs it and ends the launcher, prefix and all: become in a
+// plain terminal, execute-silent and abort inside a frame (see
+// cmd/swoop-nav). "" action means the default.
 func Enter(st *State, id, kind, title, query string, pos int, runCmd func(target, action string) string) string {
 	if id == "" {
 		return "ignore"
@@ -98,10 +100,7 @@ func Enter(st *State, id, kind, title, query string, pos int, runCmd func(target
 		return enterAction(st, top, id, kind, runCmd)
 	}
 	if kind != "view" {
-		// become replaces fzf with the runner, so nothing is left behind.
-		// The colon form takes the rest of the string, which keeps any
-		// character in the command safe.
-		return "become:" + runCmd(id, "")
+		return runCmd(id, "")
 	}
 	st.Stack = append(st.Stack, Frame{Kind: "view", View: id, Title: title, Query: query, Pos: pos})
 	return push(title + " > ")
@@ -118,10 +117,10 @@ func Enter(st *State, id, kind, title, query string, pos int, runCmd func(target
 func enterAction(st *State, top *Frame, action, kind string, runCmd func(target, action string) string) string {
 	target := top.View
 	if kind != "refresh" {
-		return "become:" + runCmd(target, action)
+		return runCmd(target, action)
 	}
 	pop := popActions(st)
-	return "execute-silent(swoop-run " + ShellQuote(target) + " " + ShellQuote(action) + ")+" + pop
+	return Wrap("execute-silent", "swoop-run "+ShellQuote(target)+" "+ShellQuote(action)) + "+" + pop
 }
 
 // Actions decides what ctrl-k does: push an actions pane for the current
@@ -134,7 +133,7 @@ func Actions(st *State, id, kind, title, query string, pos int) string {
 	st.Stack = append(st.Stack, Frame{Kind: "actions", View: id, Title: title, Query: query, Pos: pos})
 	// The preview stays on the target while its actions are shown: an
 	// action row has nothing of its own to preview.
-	return push(title+" actions > ") + "+" + wrap("change-preview", "swoop-preview "+ShellQuote(id))
+	return push(title+" actions > ") + "+" + Wrap("change-preview", "swoop-preview "+ShellQuote(id))
 }
 
 // push is what entering any pane does: clear the bar first, so the reload
@@ -147,7 +146,7 @@ func push(prompt string) string {
 	return strings.Join([]string{
 		"clear-query",
 		"disable-search",
-		wrap("change-prompt", prompt),
+		Wrap("change-prompt", prompt),
 		"reload-sync(swoop-nav rows {q})",
 		"first",
 	}, "+")
@@ -186,9 +185,9 @@ func popActions(st *State) string {
 	}
 	return strings.Join([]string{
 		search,
-		wrap("change-prompt", prompt),
-		wrap("change-preview", "swoop-preview {1}"),
-		wrap("change-query", frame.Query),
+		Wrap("change-prompt", prompt),
+		Wrap("change-preview", "swoop-preview {1}"),
+		Wrap("change-query", frame.Query),
 		"reload-sync(swoop-nav rows {q})",
 		"wait",
 		fmt.Sprintf("pos(%d)", frame.Pos),
@@ -204,11 +203,11 @@ func Change(*State) string {
 	return "reload-sync(swoop-nav rows {q})"
 }
 
-// wrap returns "action<open>arg<close>" with the first delimiter pair that
+// Wrap returns "action<open>arg<close>" with the first delimiter pair that
 // does not appear in arg. fzf accepts (), [], {}, <> and ~~ for exactly
-// this reason, so a title with a parenthesis in it cannot break the
-// action string.
-func wrap(action, arg string) string {
+// this reason, so a title or a path with a parenthesis in it cannot
+// break the action string.
+func Wrap(action, arg string) string {
 	for _, d := range []string{"()", "[]", "{}", "<>", "~~"} {
 		if !strings.ContainsAny(arg, d) {
 			return action + d[:1] + arg + d[1:]

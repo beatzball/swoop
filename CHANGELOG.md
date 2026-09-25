@@ -11,6 +11,10 @@ so here.
 
 ### Fixed
 
+- **No terminal flash on Enter in the frame.** Enter on an app showed the
+  terminal's own screen for a moment before the panel went away. The
+  runner now works while fzf still holds the screen, and the frame hides
+  before anything else is drawn.
 - **Pictures only where they draw.** A terminal that does not speak the
   Kitty graphics protocol showed row icons as boxes and the preview as
   noise. swoop now sends pictures only in a terminal known to draw them
