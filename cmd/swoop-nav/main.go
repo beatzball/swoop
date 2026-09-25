@@ -78,6 +78,19 @@ func main() {
 			fmt.Println(nav.Actions(st, id, kind, title, query, pos))
 			break
 		}
+		if target, ok := nav.AISendTarget(st, id, query); ok {
+			// The Ask AI pane: send first, and only then clear the bar.
+			// A send that fails, because the last answer is still being
+			// written, leaves the text where it is.
+			send := exec.Command("swoop-ai", "send", target, query)
+			send.Stderr = os.Stderr
+			if err := send.Run(); err != nil {
+				fmt.Println("ignore")
+				break
+			}
+			fmt.Println(nav.AfterSend())
+			break
+		}
 		fmt.Println(nav.Enter(st, id, kind, title, query, pos, runCommand(path)))
 	case "ai":
 		fmt.Println(nav.Ask(st, query, pos))
@@ -113,7 +126,8 @@ func main() {
 // safe.
 func runCommand(statePath string) func(target, action string) string {
 	return func(target, action string) string {
-		run := "rm -f " + nav.ShellQuote(statePath)
+		// The state file, fzf's socket beside it, and the apps cache.
+		run := "rm -f " + nav.ShellQuote(statePath) + " " + nav.ShellQuote(statePath+".sock")
 		if apps := os.Getenv(envApps); apps != "" {
 			run += " " + nav.ShellQuote(apps)
 		}
@@ -191,9 +205,8 @@ func rows(st *nav.State, query string) error {
 		return fmt.Errorf("extension %q is not installed", name)
 	}
 	if top.Kind == "ai" {
-		// The question is the pane's own text, not the bar's: the bar
-		// filters the answer. Each row goes out as the model writes it.
-		return e.StreamView(viewID, top.Query, os.Stdout)
+		// The bar there is the prompt being written, not a filter.
+		query = ""
 	}
 	items, err := e.View(viewID, query)
 	if err != nil {
