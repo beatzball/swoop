@@ -9,6 +9,13 @@ so here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`make install` starts the frame the first time.** launchd's bootout
+  returns before the old service is gone, and a bootstrap in that window
+  was refused, so the frame came up only on a second run. The installer
+  now waits for the old service to go and tries again if refused.
+
 ### Added
 
 - **Ask AI.** Press Tab from anywhere: a pane with your conversations on
