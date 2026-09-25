@@ -11,9 +11,9 @@ func run(target, action string) string {
 	// The exit command: it does more than run, which is why a refresh
 	// action must not use it. The tests check the extra never leaks in.
 	if action == "" {
-		return "cleanup; swoop-run " + ShellQuote(target)
+		return "become:cleanup; swoop-run " + ShellQuote(target)
 	}
-	return "cleanup; swoop-run " + ShellQuote(target) + " " + ShellQuote(action)
+	return "become:cleanup; swoop-run " + ShellQuote(target) + " " + ShellQuote(action)
 }
 
 func TestEnterOnActionRowBecomesRun(t *testing.T) {
