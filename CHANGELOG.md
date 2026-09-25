@@ -19,6 +19,9 @@ so here.
   hidden. cmd+plus, cmd+minus and cmd+0 change the font size and the size
   is kept. No Ghostty.app and no permissions needed.
 - **A click on a row is Enter on that row**, in every terminal.
+- **`make install`.** Builds everything and runs the frame and the clipboard
+  watcher at login through launchd, from this checkout. `make uninstall`
+  removes them and keeps your history.
 
 ## [0.2.0] - 2026-09-25
 

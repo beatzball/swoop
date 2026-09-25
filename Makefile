@@ -4,7 +4,7 @@
 #   make test    gofmt, vet, and the unit tests
 #   make bench   startup and list time of the hot-path tools (needs hyperfine)
 
-.PHONY: build test bench clean shell-mac
+.PHONY: build test bench clean shell-mac install uninstall
 
 build:
 	go build -o bin/ ./cmd/...
@@ -14,6 +14,13 @@ build:
 shell-mac:
 	swift build -c release --package-path shell/mac
 	@echo "built shell/mac/.build/release/swoop-shell-mac"
+
+# Daily driver: the frame and the clipboard watcher at login, through launchd.
+install:
+	scripts/install
+
+uninstall:
+	scripts/uninstall
 
 test:
 	@unformatted="$$(gofmt -l .)"; if [ -n "$$unformatted" ]; then echo "gofmt: $$unformatted"; exit 1; fi

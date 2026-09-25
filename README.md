@@ -8,9 +8,10 @@ that prints lines.
 
 Early days. There is nothing to install yet, but there is something to try.
 
-## Try it
+## Try it in any terminal
 
-You need Go and fzf. Then:
+Without the frame, swoop is still a terminal program. You need Go and fzf.
+Then:
 
 ```sh
 make build        # compiles the tools into bin/
@@ -53,11 +54,24 @@ If alt+space is already taken on your Mac, pick another key, such as
 The plan, every design decision, and the work in progress live in the
 [issues](https://github.com/beatzball/swoop/issues). Start there.
 
+## Install
+
+```sh
+git clone https://github.com/beatzball/swoop.git && cd swoop && make install
+```
+
+That builds everything and writes two launchd agents that run at login: the
+frame, which owns the hotkey and the panel, and the clipboard watcher. Press
+alt+shift+space. `make install` again after a pull restarts them on the new
+build; `make uninstall` removes them and keeps your history. Logs are in
+`~/Library/Logs/swoop`. You need Go, fzf, and Xcode's tools; a build with no
+tools needed is the next step.
+
 ## The macOS frame
 
-Ghostty's quick terminal is the day-one window. The frame of our own is a
-small Swift program, `shell/mac`, that does nothing but show a floating panel
-with swoop in it, drawn by libghostty, on a global hotkey:
+The frame is a small Swift program, `shell/mac`, that does nothing but show
+a floating panel with swoop in it, drawn by libghostty, on a global hotkey.
+`make install` runs it for you; to run it by hand instead:
 
 ```sh
 make build shell-mac
@@ -68,7 +82,6 @@ Then press alt+shift+space. Esc closes it, Enter opens what you picked, a
 click elsewhere hides it, and the next press is a fresh launcher with an
 empty bar. `SWOOP_HOTKEY=alt+space` picks another key; `SWOOP_LAUNCHER`
 points at a different `swoop`. It needs no Ghostty.app and no permission.
-Starting it at login comes with the installer.
 
 ## What runs when the launcher is closed
 
