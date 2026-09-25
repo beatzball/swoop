@@ -4,7 +4,7 @@
 // swoop. SIGUSR1 toggles the panel too, for scripts and for tests.
 //
 //   SWOOP_LAUNCHER   path to bin/swoop; otherwise `swoop` is found on PATH
-//   SWOOP_HOTKEY     "cmd+shift+space" (default), "alt+space", "ctrl+space", ...
+//   SWOOP_HOTKEY     "alt+shift+space" (default), "alt+space", "ctrl+space", ...
 import AppKit
 
 MainActor.assumeIsolated {

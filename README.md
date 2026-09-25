@@ -46,7 +46,7 @@ Now alt+space shows swoop. Enter opens the app, swoop exits, and the panel
 closes on its own. Next alt+space starts fresh.
 
 If alt+space is already taken on your Mac, pick another key, such as
-`global:cmd+shift+space=toggle_quick_terminal`.
+`global:alt+shift+space=toggle_quick_terminal`.
 
 ![swoop listing apps and filtering as you type](demo/spike.gif)
 
@@ -64,7 +64,7 @@ make build shell-mac
 PATH="$PWD/bin:$PATH" shell/mac/.build/release/swoop-shell-mac
 ```
 
-Then press cmd+shift+space. Esc closes it, Enter opens what you picked, a
+Then press alt+shift+space. Esc closes it, Enter opens what you picked, a
 click elsewhere hides it, and the next press is a fresh launcher with an
 empty bar. `SWOOP_HOTKEY=alt+space` picks another key; `SWOOP_LAUNCHER`
 points at a different `swoop`. It needs no Ghostty.app and no permission.

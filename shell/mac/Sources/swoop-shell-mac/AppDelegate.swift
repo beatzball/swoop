@@ -14,7 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let launcher = LauncherController(command: command)
         self.launcher = launcher
 
-        let spec = ProcessInfo.processInfo.environment["SWOOP_HOTKEY"] ?? "cmd+shift+space"
+        let spec = ProcessInfo.processInfo.environment["SWOOP_HOTKEY"] ?? "alt+shift+space"
         do {
             hotKey = try HotKey(spec) { [weak launcher] in launcher?.toggle() }
         } catch {

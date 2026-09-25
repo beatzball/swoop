@@ -14,7 +14,7 @@ final class HotKey {
     private var handler: EventHandlerRef?
     private let action: () -> Void
 
-    /// spec is "mod+mod+key", such as "cmd+shift+space" or "alt+space".
+    /// spec is "mod+mod+key", such as "alt+shift+space" or "alt+space".
     init(_ spec: String, action: @escaping () -> Void) throws {
         self.action = action
         let (keyCode, modifiers) = try Self.parse(spec)
