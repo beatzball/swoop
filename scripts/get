@@ -108,7 +108,9 @@ tar -xzf "$tarball" -C "$tmp/x"
 # The tarball holds one directory; its VERSION, not the file name, says what
 # is being installed, so --from works on a renamed file too.
 src="$(find "$tmp/x" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
-[ -n "$src" ] && [ -f "$src/VERSION" ] && [ -x "$src/bin/swoop" ] || die "$tarball is not a swoop release"
+if [ -z "$src" ] || [ ! -f "$src/VERSION" ] || [ ! -x "$src/bin/swoop" ]; then
+  die "$tarball is not a swoop release"
+fi
 version="$(tr -d '[:space:]' < "$src/VERSION")"
 
 # Replace a same-version install whole, so a reinstall never mixes files.
