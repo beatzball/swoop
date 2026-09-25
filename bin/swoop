@@ -26,6 +26,9 @@ export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIO
 #                the next 8-column stop, so subtitles line up after the title
 #   --tiebreak   prefer matches at the start, then shorter titles, so typing
 #                "saf" puts Safari above "Safari Technology Preview"
+#   left-click:  a click on a row is Enter on that row. fzf moves the
+#                cursor to the clicked row before it runs the binding, so
+#                {1} is the row under the mouse
 #   enter, esc, change:
 #                all three go through swoop-nav, which prints the actions:
 #                Enter runs a row or opens a view; Esc clears the bar,
@@ -65,6 +68,7 @@ fzf < "$rows" \
   --preview 'swoop-preview {1}' \
   --preview-window 'right,45%,border-left,nowrap' \
   --bind 'enter:transform:swoop-nav enter {1} {2} {4}' \
+  --bind 'left-click:transform:swoop-nav enter {1} {2} {4}' \
   --bind 'esc:transform:swoop-nav esc' \
   --bind 'change:transform:swoop-nav change' || status=$?
 rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_APPS"

@@ -14,8 +14,11 @@ so here.
 - **A macOS frame of our own.** `shell/mac` is a Swift program: a floating
   panel with swoop in it, drawn by libghostty, shown by a global hotkey
   (alt+shift+space by default). Esc closes it, a click elsewhere hides it,
-  and the next press starts a fresh swoop with an empty bar. No Ghostty.app
-  and no permissions needed.
+  and the next press is a fresh swoop with an empty bar, already drawn: the
+  next launcher starts while the panel is hidden. cmd+plus, cmd+minus and
+  cmd+0 change the font size and the size is kept. No Ghostty.app and no
+  permissions needed.
+- **A click on a row is Enter on that row**, in every terminal.
 
 ## [0.2.0] - 2026-09-25
 
