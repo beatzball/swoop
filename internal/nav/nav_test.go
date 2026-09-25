@@ -128,12 +128,12 @@ func TestWrapPicksASafeDelimiter(t *testing.T) {
 		"a (b) [c] {d}": "change-prompt<a (b) [c] {d}>",
 	}
 	for arg, want := range cases {
-		if got := wrap("change-prompt", arg); got != want {
+		if got := Wrap("change-prompt", arg); got != want {
 			t.Errorf("wrap(%q) = %q, want %q", arg, got, want)
 		}
 	}
 	all := "() [] {} <> ~~"
-	if got := wrap("change-prompt", all); strings.Count(got, ")") != 1 {
+	if got := Wrap("change-prompt", all); strings.Count(got, ")") != 1 {
 		t.Errorf("when every pair is used, the closing paren must be stripped: %q", got)
 	}
 }
