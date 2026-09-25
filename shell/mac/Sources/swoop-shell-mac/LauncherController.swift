@@ -89,6 +89,10 @@ final class LauncherController: NSObject, NSWindowDelegate,
             for key in ["super+equal", "super+plus", "super+minus", "super+zero"] {
                 builder.withCustom("keybind", "\(key)=unbind")
             }
+            // cmd+K is the action menu, as in Raycast. The terminal never
+            // sees cmd keys, so the frame turns it into ctrl-k, which
+            // bin/swoop binds.
+            builder.withCustom("keybind", "super+k=text:\\x0b")
         }
     }
 

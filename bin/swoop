@@ -29,6 +29,9 @@ export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIO
 #   left-click:  a click on a row is Enter on that row. fzf moves the
 #                cursor to the clicked row before it runs the binding, so
 #                {1} is the row under the mouse
+#   ctrl-k:      the row's actions as a pane of their own; cmd+K in the
+#                frame is mapped to it. fzf's own ctrl-k is "up", which the
+#                arrow key still does
 #   enter, esc, change:
 #                all three go through swoop-nav, which prints the actions:
 #                Enter runs a row or opens a view; Esc clears the bar,
@@ -69,6 +72,7 @@ fzf < "$rows" \
   --preview-window 'right,45%,border-left,nowrap' \
   --bind 'enter:transform:swoop-nav enter {1} {2} {4}' \
   --bind 'left-click:transform:swoop-nav enter {1} {2} {4}' \
+  --bind 'ctrl-k:transform:swoop-nav actions {1} {2} {4}' \
   --bind 'esc:transform:swoop-nav esc' \
   --bind 'change:transform:swoop-nav change' || status=$?
 rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_APPS"

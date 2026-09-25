@@ -4,8 +4,9 @@
 // what fzf hands over and runs the extension for a pane's rows.
 //
 //	swoop-nav enter [id kind title]   fzf: transform on Enter
+//	swoop-nav actions [id kind title] fzf: transform on ctrl-k
 //	swoop-nav esc                     fzf: transform on Esc
-//	swoop-nav change                  fzf: transform on typing, in a view
+//	swoop-nav change                  fzf: transform on typing
 //	swoop-nav rows [query]            fzf: reload, prints the current pane
 //
 // fzf exports FZF_QUERY and FZF_POS to the transform commands, which is
@@ -22,6 +23,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/beatzball/swoop/internal/apps"
 	"github.com/beatzball/swoop/internal/ext"
 	"github.com/beatzball/swoop/internal/nav"
 	"github.com/beatzball/swoop/internal/protocol"
@@ -56,7 +58,7 @@ func main() {
 	pos, _ := strconv.Atoi(os.Getenv("FZF_POS"))
 
 	switch os.Args[1] {
-	case "enter":
+	case "enter", "actions":
 		var id, kind, title string
 		if len(os.Args) > 2 {
 			id = os.Args[2]
@@ -67,22 +69,16 @@ func main() {
 		if len(os.Args) > 4 {
 			title = os.Args[4]
 		}
-		// The run command removes the run's files itself: become replaces
-		// fzf, so nothing after it in bin/swoop ever runs.
-		run := "rm -f " + nav.ShellQuote(path)
-		if apps := os.Getenv(envApps); apps != "" {
-			run += " " + nav.ShellQuote(apps)
+		if os.Args[1] == "actions" {
+			// A row with nothing to offer: ctrl-k does nothing.
+			if id == "" || len(actionsFor(id)) == 0 {
+				fmt.Println("ignore")
+				return
+			}
+			fmt.Println(nav.Actions(st, id, kind, title, query, pos))
+			break
 		}
-		if shell := os.Getenv("SWOOP_SHELL_PID"); shell != "" {
-			// Inside a frame of our own: run the action, THEN tell the frame
-			// the launcher is leaving. The frame answers the signal by
-			// dropping the surface, which ends everything in it, so a
-			// signal sent first would kill the runner before it ran.
-			run += "; swoop-run " + nav.ShellQuote(id) + "; kill -USR2 " + nav.ShellQuote(shell) + " 2>/dev/null"
-		} else {
-			run += "; exec swoop-run " + nav.ShellQuote(id)
-		}
-		fmt.Println(nav.Enter(st, id, kind, title, query, pos, run))
+		fmt.Println(nav.Enter(st, id, kind, title, query, pos, runCommand(path)))
 	case "esc":
 		fmt.Println(nav.Esc(st, query))
 	case "change":
@@ -106,10 +102,51 @@ func main() {
 	}
 }
 
+// runCommand builds the shell command that performs a row: remove the
+// run's files, tell a frame of our own that the launcher is leaving, and
+// run the action. become replaces fzf with it, so nothing after it in
+// bin/swoop ever runs; that is why the files go here.
+func runCommand(statePath string) func(target, action string) string {
+	return func(target, action string) string {
+		run := "rm -f " + nav.ShellQuote(statePath)
+		if apps := os.Getenv(envApps); apps != "" {
+			run += " " + nav.ShellQuote(apps)
+		}
+		swoopRun := "swoop-run " + nav.ShellQuote(target)
+		if action != "" {
+			swoopRun += " " + nav.ShellQuote(action)
+		}
+		if shell := os.Getenv("SWOOP_SHELL_PID"); shell != "" {
+			// Inside a frame of our own: run the action, THEN tell the frame
+			// the launcher is leaving. The frame answers the signal by
+			// dropping the surface, which ends everything in it, so a
+			// signal sent first would kill the runner before it ran.
+			return run + "; " + swoopRun + "; kill -USR2 " + nav.ShellQuote(shell) + " 2>/dev/null"
+		}
+		return run + "; exec " + swoopRun
+	}
+}
+
+// actionsFor is the menu for a row: the launcher's own three for an app,
+// the extension's answer for one of its rows, nothing for the rest.
+func actionsFor(id string) []protocol.Item {
+	if name, raw, ok := ext.Route(id); ok {
+		if e, found := ext.Find(name); found {
+			return e.Actions(raw)
+		}
+		return nil
+	}
+	if strings.HasSuffix(id, ".app") {
+		return apps.Actions()
+	}
+	return nil
+}
+
 // rows prints the current pane. At the root that is the cached built-in
 // rows plus whatever the extensions answer for the text, in one order by
 // title, so a calculator's row for "2+2" sits in the same list as the apps.
-// Inside a view it is whatever the view's extension answers.
+// Inside a view it is whatever the view's extension answers. In an actions
+// pane it is the target's actions, filtered by the text.
 func rows(st *nav.State, query string) error {
 	query = strings.TrimSpace(query)
 	top := st.Top()
@@ -122,6 +159,15 @@ func rows(st *nav.State, query string) error {
 		sort.SliceStable(items, func(i, j int) bool {
 			return strings.ToLower(items[i].Title) < strings.ToLower(items[j].Title)
 		})
+		return protocol.Write(os.Stdout, items)
+	}
+	if top.Kind == "actions" {
+		var items []protocol.Item
+		for _, it := range actionsFor(top.View) {
+			if query == "" || strings.Contains(strings.ToLower(it.Title), strings.ToLower(query)) {
+				items = append(items, it)
+			}
+		}
 		return protocol.Write(os.Stdout, items)
 	}
 	name, viewID, ok := ext.Route(top.View)

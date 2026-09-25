@@ -9,6 +9,14 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **The action menu.** ctrl-k on a row, cmd+K in the frame, shows what else
+  it can do. Apps offer Open, Reveal in Finder, and Copy path. Clipboard
+  History offers Copy and Delete, and Delete removes the entry and brings
+  the list back without it. Extensions gain an optional `actions <id>`
+  verb, and `run` gets the action's name.
+
 ## [0.3.0] - 2026-09-25
 
 The macOS frame, and swoop as a daily driver.

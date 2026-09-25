@@ -15,14 +15,23 @@ case "${1:-}" in
   preview)
     swoop-clipd get "${2:-}"
     ;;
+  actions)
+    # What ctrl-k offers on an entry. "refresh" means: do it and come back
+    # to the list, reloaded; "action" means: do it and close the launcher.
+    printf '%s\t%s\t%s\t%s\t%s\n' copy   action  '' 'Copy'   'Back onto the clipboard'
+    printf '%s\t%s\t%s\t%s\t%s\n' delete refresh '' 'Delete' 'Remove from history'
+    ;;
   run)
-    # Back onto the clipboard. Pasting into the app behind the launcher
-    # needs a keystroke sent to it, which needs the macOS frame; for now
-    # you paste yourself.
-    swoop-clipd get "${2:-}" | pbcopy
+    case "${3:-copy}" in
+      delete) swoop-clipd delete "${2:-}" ;;
+      # Back onto the clipboard. Pasting into the app behind the launcher
+      # needs a keystroke sent to it, which needs the macOS frame; for now
+      # you paste yourself.
+      *) swoop-clipd get "${2:-}" | pbcopy ;;
+    esac
     ;;
   *)
-    echo "usage: clipboard list | view clipboard [query] | preview <id> | run <id>" >&2
+    echo "usage: clipboard list | view clipboard [query] | preview <id> | actions <id> | run <id> [copy|delete]" >&2
     exit 2
     ;;
 esac

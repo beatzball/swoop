@@ -226,12 +226,33 @@ func ListAll(exts []Extension, query string) []protocol.Item {
 	return all
 }
 
-// Run runs `<exe> run <id>` with the terminal's own streams, so an action
-// that wants to say something can.
-func (e Extension) Run(rawID string) error {
-	cmd := e.command(context.Background(), "run", rawID)
+// Run runs `<exe> run <id> [action]` with the terminal's own streams, so
+// an action that wants to say something can. An empty action is the
+// default one, Enter's.
+func (e Extension) Run(rawID, action string) error {
+	args := []string{"run", rawID}
+	if action != "" {
+		args = append(args, action)
+	}
+	cmd := e.command(context.Background(), args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	return cmd.Run()
+}
+
+// Actions runs `<exe> actions <id>`: the rows of the menu ctrl-k opens on
+// one of the extension's rows. The ids are action names, not prefixed:
+// they route through the pane's target, not on their own. An extension
+// without the verb answers with an error or nothing, and either means "no
+// actions" to the caller.
+func (e Extension) Actions(rawID string) []protocol.Item {
+	items, err := e.rows("actions", rawID)
+	if err != nil {
+		return nil
+	}
+	for i := range items {
+		items[i].ID = strings.TrimPrefix(items[i].ID, Prefix+e.Name+"/")
+	}
+	return items
 }
 
 // Preview runs `<exe> preview <id>` and copies its output to w.
