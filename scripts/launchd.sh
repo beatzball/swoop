@@ -32,10 +32,12 @@ swoop_launchd() {
 
   # launchd gives an agent almost no environment. PATH must hold bin/ for the
   # tools swoop runs and fzf's directory, which is not the same on every Mac.
-  # When fzf is ours, its directory is DIR/bin, already first.
+  # When fzf is ours, its directory is DIR/bin, already first. After those,
+  # the PATH of the shell running this install: an extension that runs a
+  # tool of yours, like the AI command, finds it where your shell does.
   path="$dir/bin"
   [ "$(dirname "$fzf")" = "$dir/bin" ] || path="$path:$(dirname "$fzf")"
-  path="$path:/usr/local/bin:/usr/bin:/bin"
+  path="$path:$PATH:/usr/local/bin:/usr/bin:/bin"
   mkdir -p "$agents" "$logs"
 
   # A frame or a watcher started by hand would keep the hotkey or the lock,

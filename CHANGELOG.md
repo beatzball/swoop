@@ -9,6 +9,16 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **Tab asks AI.** Type a question, press Tab: a pane of its own, the
+  question in the header, the answer arriving line by line as the model
+  writes, the whole of it in the preview. Enter copies it. Esc brings the
+  launcher back with the question still in the bar. The model is whatever
+  command you name in `~/.config/swoop/ai`; without that file, `claude -p`
+  or `ollama run`. The launchd agents now carry the installing shell's
+  PATH, so the frame finds the same tools your terminal does.
+
 ## [0.4.1] - 2026-09-25
 
 Two fixes for the frame and for plain terminals, and a new demo.

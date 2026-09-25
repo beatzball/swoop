@@ -13,6 +13,10 @@
 //     kind "action" runs it and ends the launcher; kind "refresh" runs it
 //     and returns to the pane it came from, reloaded.
 //   - Popping restores the text and the cursor row the user left.
+//   - Tab with text in the bar asks AI: it pushes an "ai" pane whose rows
+//     are the answer as it arrives. Typing there filters the answer, it
+//     does not ask again. Tab in that pane asks what was typed there
+//     instead.
 //
 // The functions here return fzf action strings. They do no I/O of their
 // own except through Load and Save, so they can be tested without fzf.
@@ -29,13 +33,13 @@ import (
 // Frame is one pushed pane.
 type Frame struct {
 	// Kind is "view" for an extension's pane, "actions" for a row's
-	// actions.
+	// actions, "ai" for the pane Tab opens.
 	Kind string `json:"kind"`
 	// View is the id of the row that opened it: the view row for a view,
 	// the target row for an actions pane.
 	View  string `json:"view"`
 	Title string `json:"title"` // its title, used as the prompt
-	Query string `json:"query"` // the bar's text at the moment of Enter
+	Query string `json:"query"` // the bar's text at the moment of Enter; the question, for "ai"
 	Pos   int    `json:"pos"`   // the cursor row at the moment of Enter, 1-based
 }
 
@@ -136,6 +140,45 @@ func Actions(st *State, id, kind, title, query string, pos int) string {
 	return push(title+" actions > ") + "+" + Wrap("change-preview", "swoop-preview "+ShellQuote(id))
 }
 
+// AIView is the id of the extension view that answers questions, and
+// AITitle its prompt.
+const (
+	AIView  = "ext/ai/ask"
+	AITitle = "Ask AI"
+)
+
+// Ask decides what Tab does: push an "ai" pane for the text in the bar,
+// or, inside one already, ask again with the text typed there. An empty
+// bar has no question, so Tab does nothing.
+//
+// The pane differs from a view in three ways. fzf's own matching stays
+// on, because typing there narrows the answer rather than asking again.
+// The header carries the question, since the bar is cleared for the
+// filter. And the rows load with reload, not reload-sync: the answer
+// comes a line at a time, and the pane shows each as it arrives. The
+// load event is rebound so that the preview, which shows the whole
+// answer, refreshes once the last line is in.
+func Ask(st *State, query string, pos int) string {
+	question := strings.TrimSpace(query)
+	if question == "" {
+		return "ignore"
+	}
+	if top := st.Top(); top != nil && top.Kind == "ai" {
+		top.Query = question
+	} else {
+		st.Stack = append(st.Stack, Frame{Kind: "ai", View: AIView, Title: AITitle, Query: query, Pos: pos})
+	}
+	return strings.Join([]string{
+		"clear-query",
+		"enable-search",
+		Wrap("change-prompt", AITitle+" > "),
+		Wrap("change-header", question),
+		"rebind(load)",
+		"reload(swoop-nav rows)",
+		"first",
+	}, "+")
+}
+
 // push is what entering any pane does: clear the bar first, so the reload
 // that follows sees it empty and the pane answers with its "nothing typed
 // yet" rows; then fzf's own matching goes off, because inside a pane the
@@ -179,13 +222,20 @@ func popActions(st *State) string {
 	if below != nil {
 		search = "disable-search"
 		prompt = below.Title + " > "
-		if below.Kind == "actions" {
+		switch below.Kind {
+		case "actions":
 			prompt = below.Title + " actions > "
+		case "ai":
+			search = "enable-search"
 		}
 	}
+	// The header and the load binding belong to an "ai" pane. Clearing
+	// them on every pop costs nothing and leaves nothing behind.
 	return strings.Join([]string{
 		search,
 		Wrap("change-prompt", prompt),
+		"change-header()",
+		"unbind(load)",
 		Wrap("change-preview", "swoop-preview {1}"),
 		Wrap("change-query", frame.Query),
 		"reload-sync(swoop-nav rows {q})",
@@ -198,8 +248,12 @@ func popActions(st *State) string {
 // pane the extension filters, or the launcher does for an actions pane. At
 // the root the apps come from the cache and the extensions are asked with
 // the text, which is how a calculator row appears for "2+2" while fzf
-// keeps matching the apps itself.
-func Change(*State) string {
+// keeps matching the apps itself. In an "ai" pane typing filters the
+// answer, which fzf does on its own, so there is nothing to reload.
+func Change(st *State) string {
+	if top := st.Top(); top != nil && top.Kind == "ai" {
+		return "ignore"
+	}
 	return "reload-sync(swoop-nav rows {q})"
 }
 

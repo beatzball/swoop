@@ -39,7 +39,7 @@ const envApps = "SWOOP_APPS"
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|esc|change|rows ...")
+		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|ai|esc|change|rows ...")
 		os.Exit(2)
 	}
 	path := os.Getenv(envState)
@@ -79,6 +79,8 @@ func main() {
 			break
 		}
 		fmt.Println(nav.Enter(st, id, kind, title, query, pos, runCommand(path)))
+	case "ai":
+		fmt.Println(nav.Ask(st, query, pos))
 	case "esc":
 		fmt.Println(nav.Esc(st, query))
 	case "change":
@@ -187,6 +189,11 @@ func rows(st *nav.State, query string) error {
 	e, found := ext.Find(name)
 	if !found {
 		return fmt.Errorf("extension %q is not installed", name)
+	}
+	if top.Kind == "ai" {
+		// The question is the pane's own text, not the bar's: the bar
+		// filters the answer. Each row goes out as the model writes it.
+		return e.StreamView(viewID, top.Query, os.Stdout)
 	}
 	items, err := e.View(viewID, query)
 	if err != nil {

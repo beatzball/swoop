@@ -93,6 +93,27 @@ click elsewhere hides it, and the next press is a fresh launcher with an
 empty bar. `SWOOP_HOTKEY=alt+space` picks another key; `SWOOP_LAUNCHER`
 points at a different `swoop`. It needs no Ghostty.app and no permission.
 
+## Ask AI
+
+Type a question, press Tab. A pane opens with the question at the top and
+the answer arriving as rows while the model writes; the preview holds the
+whole answer. Typing in the pane narrows the answer's lines. Enter copies
+the answer and closes. Esc brings the launcher back with your question still
+in the bar. Tab in the pane asks what you typed there instead.
+
+swoop does not know what a model is. The `ai` extension runs one command,
+writes the question to its stdin, and turns its stdout into rows as it
+comes. Name the command in `~/.config/swoop/ai`, one line:
+
+```
+ollama run llama3.2
+```
+
+Without that file it uses `claude -p` if `claude` is on your PATH (streamed
+through `jq` when that is there too), then `ollama run` with the first model
+`ollama list` shows. Anything that reads a question and prints an answer
+works, streaming or not.
+
 ## What runs when the launcher is closed
 
 One thing: `swoop-clipd`, the clipboard watcher. The launcher starts it the

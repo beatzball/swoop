@@ -45,6 +45,12 @@ export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIO
 #   ctrl-k:      the row's actions as a pane of their own; cmd+K in the
 #                frame is mapped to it. fzf's own ctrl-k is "up", which the
 #                arrow key still does
+#   tab:         asks AI what is in the bar: a pane of its own, the answer
+#                arriving as rows; see extensions/ai
+#   load:        refresh the preview once a reload has finished. Unbound
+#                at start and bound only while the Ask AI pane is up, where
+#                the preview is the whole answer and the last line matters;
+#                at the root it would cost a preview call on every keystroke
 #   enter, esc, change:
 #                all three go through swoop-nav, which prints the actions:
 #                Enter runs a row or opens a view; Esc clears the bar,
@@ -71,7 +77,7 @@ swoop-list | swoop-icons -out "$icons" > "$SWOOP_APPS"
 swoop-nav rows > "$rows"
 fzf < "$rows" \
   --ansi \
-  --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons' '$rows')" \
+  --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons' '$rows')+unbind(load)" \
   --delimiter $'\t' \
   --with-nth $'{3} {4}  \t{5}' \
   --nth 1 \
@@ -86,6 +92,8 @@ fzf < "$rows" \
   --bind 'enter:transform:swoop-nav enter {1} {2} {4}' \
   --bind 'left-click:transform:swoop-nav enter {1} {2} {4}' \
   --bind 'ctrl-k:transform:swoop-nav actions {1} {2} {4}' \
+  --bind 'tab:transform:swoop-nav ai' \
+  --bind 'load:refresh-preview' \
   --bind 'esc:transform:swoop-nav esc' \
   --bind 'change:transform:swoop-nav change' || status=$?
 rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_APPS"

@@ -168,6 +168,46 @@ func (e Extension) View(viewID, query string) ([]protocol.Item, error) {
 	return e.rows(args...)
 }
 
+// StreamView is View for a pane that fills as its extension writes: each
+// row goes to w the moment its line arrives, prefixed like the rest, and
+// the call returns when the extension does. No timeout: a model answering
+// takes as long as it takes, and fzf ends the command itself when a later
+// reload replaces it.
+func (e Extension) StreamView(viewID, query string, w io.Writer) error {
+	args := []string{"view", viewID}
+	if query != "" {
+		args = append(args, query)
+	}
+	cmd := e.command(context.Background(), args...)
+	cmd.Stderr = os.Stderr
+	out, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("%s: view: %w", e.Name, err)
+	}
+	sc := bufio.NewScanner(out)
+	sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
+	for sc.Scan() {
+		it, err := protocol.Parse(sc.Text())
+		if err != nil {
+			continue
+		}
+		it.ID = Prefix + e.Name + "/" + it.ID
+		if _, err := io.WriteString(w, it.Line()+"\n"); err != nil {
+			// fzf has moved on and closed the pipe: nothing to show to.
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			return nil
+		}
+	}
+	if err := cmd.Wait(); err != nil {
+		return fmt.Errorf("%s: view: %w", e.Name, err)
+	}
+	return nil
+}
+
 func (e Extension) rows(args ...string) ([]protocol.Item, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), listTimeout)
 	defer cancel()
