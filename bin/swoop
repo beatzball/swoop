@@ -8,7 +8,20 @@
 set -euo pipefail
 status=0
 
-here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# The tools are found by this script's own directory, not by PATH alone, so
+# a stale swoop-list elsewhere on PATH never answers for ours. Follow
+# symlinks first: scripts/get links ~/.local/bin/swoop to this file, and the
+# tools are beside the file, not beside the link. A loop rather than
+# readlink -f, which the bash and readlink of older macOS do not have.
+src="${BASH_SOURCE[0]}"
+while [ -L "$src" ]; do
+  link="$(readlink "$src")"
+  case "$link" in
+    /*) src="$link" ;;
+    *) src="$(dirname "$src")/$link" ;;
+  esac
+done
+here="$(cd -P "$(dirname "$src")" && pwd)"
 export PATH="$here:$PATH"
 # The extensions bundled in the repository, next to the user's own in
 # ~/.config/swoop/extensions. The user's win when names collide.

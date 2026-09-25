@@ -1,0 +1,104 @@
+name: release
+
+# A tag vX.Y.Z becomes a GitHub release with one tarball per target, which is
+# what scripts/get downloads. The tag job in ci.yml cuts the tag, but a push
+# made with the workflow token starts no workflow, so that job also starts
+# this one by workflow_dispatch on the tag. A tag pushed by hand starts it by
+# the push. Either way github.ref is the tag.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+# Actions are pinned to a commit, with the tag in a comment, because a tag can
+# be moved and a commit cannot. Only checkout and setup-go: the release is
+# made with the gh CLI the runners already carry, so no third-party action
+# ever holds a token that can write.
+permissions:
+  contents: read
+
+# One release per tag at a time: a push and a dispatch for the same tag would
+# otherwise race to create it.
+concurrency:
+  group: release-${{ github.ref }}
+
+jobs:
+  # A draft first, with the changelog section as its body, so the builds
+  # below have somewhere to put their tarballs. A draft is invisible to
+  # releases/latest, so scripts/get never sees a half-filled release.
+  draft:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: The tag must be a tag, and match VERSION
+        run: |
+          [ "$GITHUB_REF_TYPE" = tag ] || { echo "run this on a tag, not $GITHUB_REF"; exit 1; }
+          scripts/release-gate check
+          want="v$(scripts/release-gate version)"
+          [ "$TAG" = "$want" ] || { echo "tag $TAG does not match VERSION ($want)"; exit 1; }
+      # A re-run finds the release already there and leaves it alone.
+      - name: Create the draft release
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG exists"
+            exit 0
+          fi
+          scripts/release-gate notes > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" --draft --verify-tag --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+
+  # Every target is built with GOOS and GOARCH by scripts/package. darwin is
+  # built on the macOS runner, both arches: its tools use cgo, and its tarball
+  # carries the frame, which is Swift. The rest cross-compile on Linux.
+  build:
+    needs: [draft]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: darwin, arch: arm64, runner: macos-latest }
+          - { os: darwin, arch: amd64, runner: macos-latest }
+          - { os: linux, arch: amd64, runner: ubuntu-latest }
+          - { os: linux, arch: arm64, runner: ubuntu-latest }
+          - { os: windows, arch: amd64, runner: ubuntu-latest }
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Package ${{ matrix.os }}-${{ matrix.arch }}
+        run: |
+          tarball="$(scripts/package '${{ matrix.os }}' '${{ matrix.arch }}' "$RUNNER_TEMP/dist")"
+          gh release upload "$TAG" "$tarball" --clobber
+
+  # Checksums once every tarball is in, then the draft goes public.
+  # scripts/get refuses a tarball that does not match its line here.
+  publish:
+    needs: [build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Checksums
+        run: |
+          mkdir "$RUNNER_TEMP/dist" && cd "$RUNNER_TEMP/dist"
+          gh release download "$TAG" --pattern 'swoop-*.tar.gz'
+          sha256sum swoop-*.tar.gz > SHA256SUMS
+          cat SHA256SUMS
+          gh release upload "$TAG" SHA256SUMS --clobber
+      - name: Publish
+        run: gh release edit "$TAG" --draft=false --latest
