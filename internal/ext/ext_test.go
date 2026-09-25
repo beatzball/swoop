@@ -161,12 +161,39 @@ esac`)
 	if strings.TrimSpace(out.String()) != "preview of thing" {
 		t.Fatalf("preview output: %q", out.String())
 	}
-	if err := e.Run("thing"); err != nil {
+	if err := e.Run("thing", ""); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(marker)
 	if err != nil || strings.TrimSpace(string(got)) != "thing" {
 		t.Fatalf("run did not receive the raw id: %q %v", got, err)
+	}
+}
+
+func TestActionsAndRunWithAction(t *testing.T) {
+	skipOnWindows(t)
+	dir := t.TempDir()
+	marker := filepath.Join(dir, "ran")
+	fake(t, dir, "clip", `
+case "$1" in
+  actions) printf 'copy\taction\t\tCopy\tEnter\n'; printf 'delete\trefresh\t\tDelete\t\n' ;;
+  run) echo "$2 $3" > "`+marker+`" ;;
+esac`)
+	e := Discover([]string{dir})[0]
+	acts := e.Actions("17")
+	if len(acts) != 2 || acts[0].ID != "copy" || acts[1].ID != "delete" || acts[1].Kind != "refresh" {
+		t.Fatalf("actions wrong: %+v", acts)
+	}
+	if err := e.Run("17", "delete"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(marker)
+	if strings.TrimSpace(string(got)) != "17 delete" {
+		t.Fatalf("run did not get id and action: %q", got)
+	}
+	fake(t, dir, "plain", `exit 0`)
+	if acts := Discover([]string{dir})[1].Actions("x"); len(acts) != 0 {
+		t.Fatalf("an extension without the verb must have no actions: %+v", acts)
 	}
 }
 

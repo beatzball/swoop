@@ -106,9 +106,14 @@ The program answers four commands. Each is one run, then exit:
 ```
 hello list                 # print one line per result
 hello preview <id>         # print the right-hand pane for one result
-hello run <id>             # do it
+hello run <id> [action]    # do it; the action is one of yours, from below
 hello view <id> [query]    # print the rows of a pane, for a row of kind "view"
+hello actions <id>         # optional: what ctrl-k offers on that row
 ```
+
+An action row's id is the action's name, and its kind says what happens
+after: `action` closes the launcher, `refresh` runs it and comes back to
+the list, reloaded. Clipboard History's Delete is a `refresh`.
 
 A row of kind `view` opens a pane instead of running: the launcher asks
 `view` for its rows, again on every keystroke, and shows exactly what comes

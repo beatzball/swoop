@@ -1,13 +1,17 @@
 // Package nav is the launcher's memory of where the user is: a stack of
-// panes. fzf itself only ever shows one list; every "go into Define Word"
-// and every "Esc back out" is fzf swapping that list on the instructions
-// this package prints. The rules, from the navigation design issue:
+// panes. fzf itself only ever shows one list; every "go into Define Word",
+// every "show this row's actions", and every "Esc back out" is fzf swapping
+// that list on the instructions this package prints. The rules, from the
+// navigation and action-menu design issues:
 //
 //   - Esc with text in the bar clears the text. Esc with an empty bar
 //     closes at the root, or pops one pane inside a view.
 //   - Enter on a row of kind "view" pushes a pane: the view's rows, its
 //     own prompt, an empty bar, and fzf's own matching turned off so the
 //     extension does the filtering. Enter on any other row runs it.
+//   - ctrl-k on a row pushes an actions pane for it. Enter on an action of
+//     kind "action" runs it and ends the launcher; kind "refresh" runs it
+//     and returns to the pane it came from, reloaded.
 //   - Popping restores the text and the cursor row the user left.
 //
 // The functions here return fzf action strings. They do no I/O of their
@@ -24,7 +28,12 @@ import (
 
 // Frame is one pushed pane.
 type Frame struct {
-	View  string `json:"view"`  // the id of the row that opened it, "ext/<name>/<id>"
+	// Kind is "view" for an extension's pane, "actions" for a row's
+	// actions.
+	Kind string `json:"kind"`
+	// View is the id of the row that opened it: the view row for a view,
+	// the target row for an actions pane.
+	View  string `json:"view"`
 	Title string `json:"title"` // its title, used as the prompt
 	Query string `json:"query"` // the bar's text at the moment of Enter
 	Pos   int    `json:"pos"`   // the cursor row at the moment of Enter, 1-based
@@ -77,29 +86,62 @@ const RootPrompt = "  "
 
 // Enter decides what Enter does for the current row. id, kind, and title
 // are the row's fields; query and pos are the bar's text and the cursor
-// row at that moment. A view row pushes a pane and the returned actions
-// load it; any other row becomes the run command; no row at all is
-// ignored. runCmd is the shell command that performs the run, already
-// quoted.
-func Enter(st *State, id, kind, title, query string, pos int, runCmd string) string {
+// row at that moment. A view row pushes a pane; an action row runs its
+// action; any other row becomes the run command; no row at all is
+// ignored. runCmd turns a target id and an action into the shell command
+// that performs it, already quoted, "" action meaning the default.
+func Enter(st *State, id, kind, title, query string, pos int, runCmd func(target, action string) string) string {
 	if id == "" {
 		return "ignore"
+	}
+	if top := st.Top(); top != nil && top.Kind == "actions" {
+		return enterAction(st, top, id, kind, runCmd)
 	}
 	if kind != "view" {
 		// become replaces fzf with the runner, so nothing is left behind.
 		// The colon form takes the rest of the string, which keeps any
 		// character in the command safe.
-		return "become:" + runCmd
+		return "become:" + runCmd(id, "")
 	}
-	st.Stack = append(st.Stack, Frame{View: id, Title: title, Query: query, Pos: pos})
-	// clear-query first, so the reload that follows sees an empty bar and
-	// the view answers with its "nothing typed yet" rows. Then fzf's own
-	// matching goes off: inside a view the extension filters, and the
-	// launcher shows exactly what it returns.
+	st.Stack = append(st.Stack, Frame{Kind: "view", View: id, Title: title, Query: query, Pos: pos})
+	return push(title + " > ")
+}
+
+// enterAction runs the picked action for the actions pane's target. Kind
+// "refresh" runs it silently and returns to the pane below, reloaded, so a
+// delete shows the list without the entry; anything else ends the launcher
+// like Enter on a plain row.
+func enterAction(st *State, top *Frame, action, kind string, runCmd func(target, action string) string) string {
+	target := top.View
+	if kind != "refresh" {
+		return "become:" + runCmd(target, action)
+	}
+	pop := popActions(st)
+	return "execute-silent(" + runCmd(target, action) + ")+" + pop
+}
+
+// Actions decides what ctrl-k does: push an actions pane for the current
+// row. The caller has already checked the row has actions; with no row
+// there is nothing to show.
+func Actions(st *State, id, kind, title, query string, pos int) string {
+	if id == "" {
+		return "ignore"
+	}
+	st.Stack = append(st.Stack, Frame{Kind: "actions", View: id, Title: title, Query: query, Pos: pos})
+	// The preview stays on the target while its actions are shown: an
+	// action row has nothing of its own to preview.
+	return push(title+" actions > ") + "+" + wrap("change-preview", "swoop-preview "+ShellQuote(id))
+}
+
+// push is what entering any pane does: clear the bar first, so the reload
+// that follows sees it empty and the pane answers with its "nothing typed
+// yet" rows; then fzf's own matching goes off, because inside a pane the
+// launcher shows exactly what comes back.
+func push(prompt string) string {
 	return strings.Join([]string{
 		"clear-query",
 		"disable-search",
-		wrap("change-prompt", title+" > "),
+		wrap("change-prompt", prompt),
 		"reload-sync(swoop-nav rows {q})",
 	}, "+")
 }
@@ -110,19 +152,32 @@ func Esc(st *State, query string) string {
 	if query != "" {
 		return "clear-query"
 	}
-	top := st.Top()
-	if top == nil {
+	if st.Top() == nil {
 		return "abort"
 	}
-	frame := *top
+	return popActions(st)
+}
+
+// popActions removes the top pane and returns the actions that bring the
+// pane below it back: its own matching mode and prompt, its rows, the text
+// the user had typed there, and the cursor row they were on. Same rows
+// plus same text give the same order, so the row is the one they left.
+func popActions(st *State) string {
+	frame := st.Stack[len(st.Stack)-1]
 	st.Stack = st.Stack[:len(st.Stack)-1]
-	// Matching is back on before the root rows are reloaded; then the old
-	// text goes back into the bar, fzf is told to finish that search
-	// (wait), and the cursor lands on the saved row. Same rows plus same
-	// text give the same order, so the row is the one the user left.
+	below := st.Top()
+	search, prompt := "enable-search", RootPrompt
+	if below != nil {
+		search = "disable-search"
+		prompt = below.Title + " > "
+		if below.Kind == "actions" {
+			prompt = below.Title + " actions > "
+		}
+	}
 	return strings.Join([]string{
-		"enable-search",
-		wrap("change-prompt", RootPrompt),
+		search,
+		wrap("change-prompt", prompt),
+		wrap("change-preview", "swoop-preview {1}"),
 		"reload-sync(swoop-nav rows {q})",
 		wrap("change-query", frame.Query),
 		"wait",
@@ -131,9 +186,10 @@ func Esc(st *State, query string) string {
 }
 
 // Change decides what typing does: ask for new rows, everywhere. Inside a
-// view the extension filters. At the root the apps come from the cache and
-// the extensions are asked with the text, which is how a calculator row
-// appears for "2+2" while fzf keeps matching the apps itself.
+// pane the extension filters, or the launcher does for an actions pane. At
+// the root the apps come from the cache and the extensions are asked with
+// the text, which is how a calculator row appears for "2+2" while fzf
+// keeps matching the apps itself.
 func Change(*State) string {
 	return "reload-sync(swoop-nav rows {q})"
 }
