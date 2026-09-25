@@ -9,6 +9,10 @@ so here.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-09-25
+
+Two fixes for the frame and for plain terminals, and a new demo.
+
 ### Fixed
 
 - **No terminal flash on Enter in the frame.** Enter on an app showed the
@@ -127,7 +131,8 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/beatzball/swoop/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/beatzball/swoop/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/beatzball/swoop/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/beatzball/swoop/compare/v0.1.0...v0.2.0
