@@ -37,7 +37,7 @@ rows_from_mdfind() {
     | sort -r | head -n "$limit" | cut -f2- \
     | while IFS= read -r path; do
         [ -e "$path" ] || continue
-        kind=file; [ -d "$path" ] && kind=folder
+        kind='file'; [ -d "$path" ] && kind='folder'
         dir="${path%/*}"
         row "$path" "$kind" "$(icon_for "$path")" "${path##*/}" "${dir/#$home/~}"
       done
@@ -50,6 +50,7 @@ case "${1:-}" in
   view)
     query="${3:-}"
     if [ -z "$query" ]; then
+      # shellcheck disable=SC2016  # $time.now is Spotlight's syntax, not the shell's
       rows_from_mdfind 'kMDItemLastUsedDate > $time.now(-30d)'
     else
       rows_from_mdfind -name "$query"
@@ -60,6 +61,7 @@ case "${1:-}" in
     [ -e "$path" ] || { echo "gone: ${path/#$home/~}"; exit 0; }
     if [ -d "$path" ]; then
       printf '\e[1m%s\e[22m\n\n' "${path##*/}/"
+      # shellcheck disable=SC2012  # a listing to look at, never parsed
       ls -1Ap "$path" | head -40
       exit 0
     fi
