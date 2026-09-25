@@ -94,8 +94,24 @@ ${SWOOP_HOTKEY:+    <key>SWOOP_HOTKEY</key><string>$SWOOP_HOTKEY</string>
 </plist>
 EOF
   # Stop the old one, if any, then start the new. bootout returns non-zero
-  # when there is nothing to stop; that is the normal first run.
+  # when there is nothing to stop; that is the normal first run. It also
+  # returns before launchd has finished taking the service down, and a
+  # bootstrap that lands in that window is refused, which is what made
+  # the frame fail to start on the first `make install` and start on the
+  # second. So: wait until the service is gone, then try more than once.
   launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
-  launchctl bootstrap "$domain" "$plist"
-  echo "started $label"
+
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    launchctl print "$domain/$label" >/dev/null 2>&1 || break
+    sleep 0.2
+  done
+  for _ in 1 2 3 4 5; do
+    if launchctl bootstrap "$domain" "$plist" 2>/dev/null; then
+      echo "started $label"
+      return 0
+    fi
+    sleep 0.5
+  done
+  echo "launchd: could not start $label; launchctl bootstrap keeps refusing" >&2
+  return 1
 }
