@@ -27,3 +27,13 @@ var ErrNoIcon = errors.New("bundle: icons not implemented on this OS yet")
 
 // IconPNG always reports ErrNoIcon here.
 func (Info) IconPNG(int) ([]byte, error) { return nil, ErrNoIcon }
+
+// ErrNotCached says an icon has not been converted yet. Nothing is ever
+// converted here, so it is never returned.
+var ErrNotCached = errors.New("bundle: icon not cached yet")
+
+// CachedIconPNG always reports ErrNoIcon here.
+func (Info) CachedIconPNG(int) ([]byte, error) { return nil, ErrNoIcon }
+
+// IconCacheDir is "": there is nothing to cache.
+func IconCacheDir() string { return "" }
