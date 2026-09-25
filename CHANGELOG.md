@@ -9,6 +9,10 @@ so here.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-25
+
+The action menu, a fast first run, and an install with no tools.
+
 ### Added
 
 - **The action menu.** ctrl-k on a row, cmd+K in the frame, shows what else
@@ -110,7 +114,8 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/beatzball/swoop/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/beatzball/swoop/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/beatzball/swoop/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/beatzball/swoop/releases/tag/v0.1.0
