@@ -10,8 +10,8 @@ import (
 // IgnorePath is the list of apps whose copies are never kept: one bundle
 // id per line, blank lines and # comments allowed. Password managers go
 // here. The pasteboard does not say which app wrote to it, so the watcher
-// matches the app that was in front at that moment, which is the same
-// guess Raycast makes.
+// matches the app that owned the front window at that moment, which is the
+// same guess Raycast makes.
 func IgnorePath() string {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {

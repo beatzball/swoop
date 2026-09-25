@@ -3,6 +3,7 @@
 // pool: the watcher is a long-running loop with no run loop of its own,
 // so nothing else would ever drain one.
 #import <AppKit/AppKit.h>
+#import <CoreGraphics/CoreGraphics.h>
 #include <string.h>
 #include "pasteboard_darwin.h"
 
@@ -45,14 +46,32 @@ char *swoop_pb_types(void) {
 	}
 }
 
-// The bundle id of the app in front, or "" if none. The pasteboard does
-// not say who wrote to it; the app in front at that moment is the best
-// guess there is, and it is what an ignore list is matched against.
+// The bundle id of the app in front, or "" if none, asked of the window
+// server: the owner of the first ordinary window on screen. Not AppKit's
+// frontmostApplication, which is what the first version used: in a process
+// with no run loop of its own, such as this watcher, that answer is never
+// refreshed and kept naming the app that was in front when the watcher
+// started. Seen on screen: a password copied in Dashlane's main window was
+// attributed to the terminal. The window list is read fresh on every call.
 char *swoop_frontmost_app(void) {
 	@autoreleasepool {
-		NSRunningApplication *app = [[NSWorkspace sharedWorkspace] frontmostApplication];
-		NSString *bid = app ? [app bundleIdentifier] : nil;
-		const char *utf8 = bid ? [bid UTF8String] : NULL;
-		return strdup(utf8 ? utf8 : "");
+		CFArrayRef list = CGWindowListCopyWindowInfo(kCGWindowListOptionOnScreenOnly | kCGWindowListExcludeDesktopElements, kCGNullWindowID);
+		if (list == NULL) return strdup("");
+		char *out = strdup("");
+		for (NSDictionary *w in (__bridge NSArray *)list) {
+			// Layer 0 is an ordinary window; menu bar items, the dock and
+			// overlays sit on other layers and are skipped.
+			if ([w[(id)kCGWindowLayer] intValue] != 0) continue;
+			pid_t pid = [w[(id)kCGWindowOwnerPID] intValue];
+			NSRunningApplication *app = [NSRunningApplication runningApplicationWithProcessIdentifier:pid];
+			NSString *bid = app ? [app bundleIdentifier] : nil;
+			if (bid != nil) {
+				free(out);
+				out = strdup([bid UTF8String]);
+			}
+			break;
+		}
+		CFRelease(list);
+		return out;
 	}
 }

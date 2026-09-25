@@ -4,7 +4,7 @@ package main
 
 /*
 #cgo CFLAGS: -x objective-c
-#cgo LDFLAGS: -framework AppKit
+#cgo LDFLAGS: -framework AppKit -framework CoreGraphics
 #include <stdlib.h>
 #include "pasteboard_darwin.h"
 */
