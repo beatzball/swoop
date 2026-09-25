@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# ai: the pane Tab opens. The launcher hands it the question; this script
+# hands the question to one command, and turns whatever that command prints
+# into rows, a line at a time, as it prints them. swoop does not know what
+# a model is: the command is the one line in ~/.config/swoop/ai, and it
+# reads the question on stdin and writes the answer on stdout. If it
+# writes as it goes, the rows appear as it goes.
+#
+# Without that file, the first of these that is on PATH:
+#   claude + jq   claude -p, streamed: its stream-json output through jq
+#                 for the text as it arrives
+#   claude        claude -p, which answers in one piece
+#   ollama        ollama run <the first model ollama lists>, streamed
+# and otherwise one row that says how to set it.
+#
+#   ai view ask <question>   the answer as rows; also written to a file
+#   ai preview <id>          the whole answer, folded to the pane
+#   ai run <id>              copy the answer
+#   ai list                  nothing: Tab is the way in
+#
+# Written for the bash macOS ships, 3.2.
+set -euo pipefail
+
+config="${XDG_CONFIG_HOME:-$HOME/.config}/swoop/ai"
+state="${XDG_STATE_HOME:-$HOME/.local/state}/swoop/ai"
+answer="$state/answer"
+question="$state/question"
+# The token of the run that owns the answer file. A reload that starts
+# later, from Esc or a new Tab, makes fzf end the old command, but a model
+# process that outlives that gets one more line in before it notices; the
+# token keeps it out of the file.
+current="$state/current"
+
+row() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5"; }
+
+# The command that answers, as one shell line.
+command_line() {
+  if [ -f "$config" ]; then
+    head -n 1 "$config"
+    return
+  fi
+  if command -v claude >/dev/null; then
+    if command -v jq >/dev/null; then
+      # -j: no newline after each delta; the deltas are pieces of text,
+      # not lines, and the loop below waits for the newlines the model
+      # itself writes. --unbuffered: each piece out as it comes in.
+      printf '%s\n' "claude -p --output-format stream-json --verbose --include-partial-messages | jq --unbuffered -rj 'select(.type == \"stream_event\") | .event.delta.text // empty'"
+    else
+      printf '%s\n' "claude -p"
+    fi
+    return
+  fi
+  if command -v ollama >/dev/null; then
+    local model
+    model="$(ollama list 2>/dev/null | awk 'NR == 2 { print $1 }')"
+    if [ -n "$model" ]; then
+      printf 'ollama run %s\n' "$model"
+      return
+    fi
+  fi
+  return 1
+}
+
+copy() {
+  if command -v pbcopy >/dev/null; then pbcopy
+  elif command -v wl-copy >/dev/null; then wl-copy
+  elif command -v xclip >/dev/null; then xclip -selection clipboard
+  elif command -v clip.exe >/dev/null; then clip.exe
+  else cat > /dev/null
+  fi
+}
+
+case "${1:-}" in
+  list)
+    ;;
+  view)
+    # $2 is the view id (only "ask" exists), $3 the question.
+    q="${3:-}"
+    [ -n "$q" ] || exit 0
+    mkdir -p "$state"
+    if ! cmd="$(command_line)"; then
+      row setup text '' 'No AI command found.' "Put one line in $config, for example: claude -p"
+      exit 0
+    fi
+    token="$$"
+    printf '%s\n' "$token" > "$current"
+    printf '%s\n' "$q" > "$question"
+    : > "$answer"
+    # The list is about 55% of the terminal; the rest is the preview. A
+    # long line becomes several rows so nothing is cut off at the edge.
+    width=$(( ${FZF_COLUMNS:-100} * 55 / 100 - 8 ))
+    [ "$width" -ge 30 ] || width=30
+    errors="$(mktemp "${TMPDIR:-/tmp}/swoop-ai.XXXXXX")"
+    trap 'rm -f "$errors"' EXIT
+    i=0
+    # read -r takes one line as soon as its newline arrives, which is what
+    # makes the rows stream; the `|| [ -n "$line" ]` keeps a last line the
+    # model ended without one.
+    printf '%s\n' "$q" | sh -c "$cmd" 2> "$errors" | while IFS= read -r line || [ -n "$line" ]; do
+      [ "$(cat "$current" 2>/dev/null)" = "$token" ] || exit 0
+      printf '%s\n' "$line" >> "$answer"
+      i=$((i + 1))
+      k=0
+      printf '%s\n' "$line" | fold -s -w "$width" | while IFS= read -r part; do
+        k=$((k + 1))
+        # A blank line stays a row, so paragraphs keep their gaps; fzf
+        # needs one character in the title to show it.
+        row "$i.$k" text '' "${part:- }" ''
+      done
+    done || true
+    if [ ! -s "$answer" ] && [ -s "$errors" ]; then
+      row error text '' "$(head -n 1 "$errors")" 'the AI command failed; see its output'
+    fi
+    ;;
+  preview)
+    [ -f "$answer" ] || exit 0
+    if [ -s "$question" ]; then
+      printf '\033[1m%s\033[22m\n\n' "$(cat "$question")"
+    fi
+    fold -s -w "${FZF_PREVIEW_COLUMNS:-60}" "$answer"
+    ;;
+  run)
+    [ -f "$answer" ] && copy < "$answer"
+    ;;
+  *)
+    echo "usage: ai list | view ask <question> | preview <id> | run <id>" >&2
+    exit 2
+    ;;
+esac
