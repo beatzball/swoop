@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var hotKey: HotKey?
     private var toggleSignal: DispatchSourceSignal?
     private var endedSignal: DispatchSourceSignal?
+    private var statusItem: StatusItem?
 
     func applicationDidFinishLaunching(_: Notification) {
         // SWOOP_SHELL_DEBUG=1 logs every libghostty callback and every
@@ -31,6 +32,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             // quit is a restart loop, and SIGUSR1 still works. The log says
             // what to fix.
             FileHandle.standardError.write(Data("swoop-shell-mac: \(error); running without a hotkey\n".utf8))
+        }
+
+        // The bird in the menu bar. SWOOP_NO_MENU_BAR=1 leaves it out.
+        if ProcessInfo.processInfo.environment["SWOOP_NO_MENU_BAR"] == nil {
+            statusItem = StatusItem(hotkey: spec) { [weak launcher] in launcher?.show() }
         }
 
         // SIGUSR1 toggles the panel: `kill -USR1 $(pgrep swoop-shell-mac)`.
