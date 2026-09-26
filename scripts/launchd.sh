@@ -44,7 +44,15 @@ swoop_launchd() {
   # and launchd would restart its own copy in a loop. Stop them first.
   pkill -x swoop-shell-mac 2>/dev/null || true
   pkill -f 'swoop-clipd run' 2>/dev/null || true
-  sleep 0.3
+  # And wait until they are gone. A watcher that is still letting go of
+  # its lock when launchd's new one starts makes that one exit, and in
+  # the ten seconds before launchd tries again the frame's own swoop
+  # starts a watcher outside launchd, which then wins forever.
+  local _
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
+    pgrep -x swoop-shell-mac >/dev/null 2>&1 || pgrep -f 'swoop-clipd run' >/dev/null 2>&1 || break
+    sleep 0.2
+  done
 
   _swoop_agent dev.swoop.clipd "$dir/bin/swoop-clipd" run
   _swoop_agent dev.swoop.shell "$frame"
