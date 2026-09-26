@@ -35,6 +35,11 @@ const (
 	PreviewMax     = 80
 )
 
+// Render is the key for the command that renders an AI answer, markdown
+// on its stdin, styled text on its stdout: `render = glow -s dark`, or
+// `render = swoop-md`. Unset, the built-in renderer runs in-process.
+const Render = "render"
+
 // Get returns the value of key in the file, or fallback when the file or
 // the key is not there. A file that cannot be read is the same as none.
 func Get(key, fallback string) string {
