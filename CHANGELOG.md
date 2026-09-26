@@ -9,6 +9,14 @@ so here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`make install` unloads before it kills.** A frame killed while its
+  launchd service was still loaded came back within a second, ran swoop,
+  and started a clipboard watcher outside launchd, which launchd's own
+  then gave way to. The installer now unloads both services, waits for
+  launchd to forget them, then stops what is left, then starts.
+
 ### Added
 
 - **The divider moves.** cmd+[ and cmd+] in the frame, alt+left and
