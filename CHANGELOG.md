@@ -9,6 +9,10 @@ so here.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-09-25
+
+Ask AI: a conversation pane on Tab, fed by whatever command you name.
+
 ### Fixed
 
 - **`make install` leaves one clipboard watcher, launchd's.** A watcher
@@ -175,7 +179,8 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/beatzball/swoop/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/beatzball/swoop/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/beatzball/swoop/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/beatzball/swoop/compare/v0.2.0...v0.3.0
