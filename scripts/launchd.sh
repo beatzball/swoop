@@ -40,15 +40,25 @@ swoop_launchd() {
   path="$path:$PATH:/usr/local/bin:/usr/bin:/bin"
   mkdir -p "$agents" "$logs"
 
-  # A frame or a watcher started by hand would keep the hotkey or the lock,
-  # and launchd would restart its own copy in a loop. Stop them first.
+  # Stop, in this order. First unload both services, and wait until
+  # launchd has forgotten them: a service that is still loaded has
+  # KeepAlive, and a frame killed while its service is loaded is back
+  # within a second, pre-warming a swoop that starts a watcher outside
+  # launchd, which launchd's own watcher then finds and gives way to,
+  # forever. Only once nothing can restart them, kill whatever is left of
+  # the frame and the watcher, started by hand or left over, and wait
+  # until they are gone too. Then the lock is free and the hotkey is
+  # free, and the new agents start into a clean slate.
+  local label _
+  for label in dev.swoop.shell dev.swoop.clipd; do
+    launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
+  done
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
+    launchctl print "$domain/dev.swoop.shell" >/dev/null 2>&1 || launchctl print "$domain/dev.swoop.clipd" >/dev/null 2>&1 || break
+    sleep 0.2
+  done
   pkill -x swoop-shell-mac 2>/dev/null || true
   pkill -f 'swoop-clipd run' 2>/dev/null || true
-  # And wait until they are gone. A watcher that is still letting go of
-  # its lock when launchd's new one starts makes that one exit, and in
-  # the ten seconds before launchd tries again the frame's own swoop
-  # starts a watcher outside launchd, which then wins forever.
-  local _
   for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
     pgrep -x swoop-shell-mac >/dev/null 2>&1 || pgrep -f 'swoop-clipd run' >/dev/null 2>&1 || break
     sleep 0.2
@@ -101,18 +111,9 @@ ${SWOOP_HOTKEY:+    <key>SWOOP_HOTKEY</key><string>$SWOOP_HOTKEY</string>
 </dict>
 </plist>
 EOF
-  # Stop the old one, if any, then start the new. bootout returns non-zero
-  # when there is nothing to stop; that is the normal first run. It also
-  # returns before launchd has finished taking the service down, and a
-  # bootstrap that lands in that window is refused, which is what made
-  # the frame fail to start on the first `make install` and start on the
-  # second. So: wait until the service is gone, then try more than once.
-  launchctl bootout "$domain/$label" >/dev/null 2>&1 || true
-
-  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
-    launchctl print "$domain/$label" >/dev/null 2>&1 || break
-    sleep 0.2
-  done
+  # The service was unloaded by swoop_launchd before this. bootstrap can
+  # still be refused for a moment after an unload, so it is tried more
+  # than once.
   for _ in 1 2 3 4 5; do
     if launchctl bootstrap "$domain" "$plist" 2>/dev/null; then
       echo "started $label"
