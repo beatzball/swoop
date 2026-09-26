@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRoute(t *testing.T) {
@@ -215,5 +216,18 @@ esac`)
 	items, err = e.View("define", "")
 	if err != nil || items[0].Title != "got define with nothing" {
 		t.Fatalf("empty query should be omitted: %+v %v", items, err)
+	}
+}
+
+func TestListTimeoutIsAnError(t *testing.T) {
+	skipOnWindows(t)
+	old := listTimeout
+	listTimeout = 200 * time.Millisecond
+	defer func() { listTimeout = old }()
+	dir := t.TempDir()
+	fake(t, dir, "slow", `sleep 5; printf 'x\tcommand\t\tSlow\t\n'`)
+	e := Discover([]string{dir})[0]
+	if _, err := e.List(""); err == nil || !strings.Contains(err.Error(), "took longer than") {
+		t.Fatalf("want a timeout error, got %v", err)
 	}
 }

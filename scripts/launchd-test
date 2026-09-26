@@ -1,0 +1,113 @@
+#!/usr/bin/env bash
+# launchd-test: scripts/launchd.sh against a pretend launchd. A fake
+# launchctl, pkill and pgrep on PATH keep a state the real ones would
+# (which services are loaded, which processes run) and log every call.
+# swoop_launchd runs against them, and the log must show the order that
+# the two stray-watcher bugs taught: both services unloaded before any
+# process is killed, every process gone before any service is started.
+#
+# It runs everywhere, in seconds, as part of `make test`.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/swoop-launchd-test.XXXXXX")"
+trap 'rm -rf "$tmp"' EXIT
+export HOME="$tmp/home"
+mkdir -p "$HOME" "$tmp/bin" "$tmp/dir/bin"
+state="$tmp/state"     # one line per loaded service: "<label> <state>"
+procs="$tmp/procs"     # one line per running process name
+log="$tmp/log"
+: > "$state"; : > "$procs"; : > "$log"
+export SWOOP_TEST_STATE="$state" SWOOP_TEST_PROCS="$procs" SWOOP_TEST_LOG="$log"
+
+# The fakes. launchctl print succeeds while the label is loaded; bootout
+# unloads; bootstrap loads it as running and starts its process.
+cat > "$tmp/bin/launchctl" <<'EOF'
+#!/usr/bin/env bash
+echo "launchctl $*" >> "$SWOOP_TEST_LOG"
+case "$1" in
+  print)
+    label="${2##*/}"
+    grep -q "^$label " "$SWOOP_TEST_STATE" || exit 113
+    echo "	state = $(grep "^$label " "$SWOOP_TEST_STATE" | cut -d' ' -f2)" ;;
+  bootout)
+    label="${2##*/}"
+    grep -q "^$label " "$SWOOP_TEST_STATE" || exit 3
+    grep -v "^$label " "$SWOOP_TEST_STATE" > "$SWOOP_TEST_STATE.new" || true
+    mv "$SWOOP_TEST_STATE.new" "$SWOOP_TEST_STATE" ;;
+  bootstrap)
+    label="$(basename "$3" .plist)"
+    echo "$label running" >> "$SWOOP_TEST_STATE"
+    case "$label" in
+      dev.swoop.shell) echo swoop-shell-mac >> "$SWOOP_TEST_PROCS" ;;
+      dev.swoop.clipd) echo "swoop-clipd run" >> "$SWOOP_TEST_PROCS" ;;
+    esac ;;
+  *) exit 2 ;;
+esac
+EOF
+cat > "$tmp/bin/pkill" <<'EOF'
+#!/usr/bin/env bash
+echo "pkill $*" >> "$SWOOP_TEST_LOG"
+pattern="${2:-$1}"
+grep -q "$pattern" "$SWOOP_TEST_PROCS" || exit 1
+grep -v "$pattern" "$SWOOP_TEST_PROCS" > "$SWOOP_TEST_PROCS.new" || true
+mv "$SWOOP_TEST_PROCS.new" "$SWOOP_TEST_PROCS"
+EOF
+cat > "$tmp/bin/pgrep" <<'EOF'
+#!/usr/bin/env bash
+pattern="${2:-$1}"
+grep -q "$pattern" "$SWOOP_TEST_PROCS"
+EOF
+cat > "$tmp/bin/id" <<'EOF'
+#!/usr/bin/env bash
+echo 501
+EOF
+chmod +x "$tmp/bin/"*
+# sleep is real but the loops end at once when the fakes say "gone".
+export PATH="$tmp/bin:$PATH"
+
+# The starting state: both services loaded and running from a previous
+# install, plus a watcher started by hand, the case that used to win.
+printf 'dev.swoop.shell running\ndev.swoop.clipd running\n' > "$state"
+printf 'swoop-shell-mac\nswoop-clipd run\nswoop-clipd run\n' > "$procs"
+touch "$tmp/dir/bin/fzf" "$tmp/dir/bin/swoop" "$tmp/dir/bin/swoop-clipd" "$tmp/frame"
+chmod +x "$tmp/dir/bin/"* "$tmp/frame"
+
+fail() { echo "launchd-test: $*" >&2; echo "--- log:" >&2; cat "$log" >&2; exit 1; }
+
+# shellcheck source=scripts/launchd.sh
+. "$root/scripts/launchd.sh"
+out="$(swoop_launchd "$tmp/dir" "$tmp/frame" 2>&1)" || fail "swoop_launchd failed: $out"
+
+# The order. Line numbers in the log: the last bootout must come before
+# the first pkill, and the last pkill before the first bootstrap.
+last_bootout="$(grep -n '^launchctl bootout' "$log" | tail -1 | cut -d: -f1)"
+first_pkill="$(grep -n '^pkill' "$log" | head -1 | cut -d: -f1)"
+last_pkill="$(grep -n '^pkill' "$log" | tail -1 | cut -d: -f1)"
+first_bootstrap="$(grep -n '^launchctl bootstrap' "$log" | head -1 | cut -d: -f1)"
+[ -n "$last_bootout" ] && [ -n "$first_pkill" ] && [ -n "$first_bootstrap" ] || fail "missing a step"
+[ "$last_bootout" -lt "$first_pkill" ] || fail "a process was killed before both services were unloaded"
+[ "$last_pkill" -lt "$first_bootstrap" ] || fail "a service was started before every process was killed"
+grep -q '^launchctl bootout gui/501/dev.swoop.shell' "$log" || fail "the frame's service was not unloaded"
+grep -q '^launchctl bootout gui/501/dev.swoop.clipd' "$log" || fail "the watcher's service was not unloaded"
+
+# The end state: both running, exactly one of each process, no stray.
+[ "$(grep -c running "$state")" = 2 ] || fail "not both services running: $(cat "$state")"
+[ "$(grep -c 'swoop-clipd run' "$procs")" = 1 ] || fail "watchers: $(grep -c 'swoop-clipd run' "$procs")"
+[ "$(grep -c 'swoop-shell-mac' "$procs")" = 1 ] || fail "frames: $(grep -c swoop-shell-mac "$procs")"
+
+# The plists: the program, the PATH with the install's bin first, the launcher.
+plist="$HOME/Library/LaunchAgents/dev.swoop.shell.plist"
+[ -f "$plist" ] || fail "no frame plist"
+grep -q "<string>$tmp/frame</string>" "$plist" || fail "frame plist does not run the frame"
+grep -q "<key>PATH</key><string>$tmp/dir/bin:" "$plist" || fail "PATH does not start with the install's bin"
+grep -q "<key>SWOOP_LAUNCHER</key><string>$tmp/dir/bin/swoop</string>" "$plist" || fail "no SWOOP_LAUNCHER"
+grep -q "<string>$tmp/dir/bin/swoop-clipd</string>" "$HOME/Library/LaunchAgents/dev.swoop.clipd.plist" || fail "watcher plist does not run the watcher"
+
+# The second run, the "make install again" case: same result.
+: > "$log"
+out="$(swoop_launchd "$tmp/dir" "$tmp/frame" 2>&1)" || fail "second swoop_launchd failed: $out"
+[ "$(grep -c 'swoop-clipd run' "$procs")" = 1 ] || fail "second run: watchers $(grep -c 'swoop-clipd run' "$procs")"
+[ "$(grep -c running "$state")" = 2 ] || fail "second run: services $(cat "$state")"
+
+echo "launchd-test: ok"

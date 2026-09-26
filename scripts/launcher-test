@@ -1,0 +1,350 @@
+#!/usr/bin/env python3
+"""launcher-test: bin/swoop driven through a pseudo-terminal, end to end.
+
+The unit tests cover the rules; this covers the wiring: the fzf flags and
+bindings in bin/swoop, swoop-nav's answers to them, the extension calls,
+swoop-ai's worker talking back to fzf through its socket. Every bug of one
+evening lived in that wiring, and each was caught by a harness like this
+one and then thrown away. This one stays.
+
+A temp HOME, a fake extension and a fake AI command make it the same on
+every machine; SWOOP_PICTURES=0 and SWOOP_NO_CLIPD=1 keep pictures and the
+clipboard watcher out of it. Standard library only. Needs fzf and bin/
+built (make build). Run it with `make e2e`.
+
+Terminal output is read as a stream: escape sequences stripped, text
+searched. That is enough to say "this word appeared after that key",
+which is what every check here is.
+"""
+
+import glob
+import json
+import os
+import pty
+import re
+import select
+import shutil
+import signal
+import stat
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ESC = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b[()][A-Z0-9]|\x1b[=>]|\x1b\][^\x07]*\x07|\x1b\\|\x1bP[^\x1b]*\x1b\\")
+
+
+def fail(msg, tail=""):
+    print("launcher-test: FAIL:", msg, file=sys.stderr)
+    if tail:
+        print("--- last screen output:", file=sys.stderr)
+        print(tail[-2500:], file=sys.stderr)
+    sys.exit(1)
+
+
+def write_exe(path, body):
+    with open(path, "w") as f:
+        f.write(body)
+    os.chmod(path, os.stat(path).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
+
+
+class Launcher:
+    """One swoop in a pseudo-terminal."""
+
+    def __init__(self, env, cols=120, rows=30):
+        self.pid, self.fd = pty.fork()
+        if self.pid == 0:
+            os.execvpe(os.path.join(ROOT, "bin", "swoop"), ["swoop"], env)
+        import fcntl
+        import struct
+        import termios
+        fcntl.ioctl(self.fd, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
+        self.raw = ""
+        self._buf = ""
+        self._stripped_upto = 0
+        self.eof = False
+
+    def read(self, seconds):
+        """Read for up to `seconds`, appending to the buffer."""
+        end = time.time() + seconds
+        while time.time() < end:
+            r, _, _ = select.select([self.fd], [], [], 0.05)
+            if not r:
+                continue
+            try:
+                data = os.read(self.fd, 65536)
+            except OSError:
+                self.eof = True
+                return
+            if not data:
+                self.eof = True
+                return
+            self.raw += data.decode("utf-8", "replace")
+
+    @property
+    def buf(self):
+        """The output so far with escape sequences stripped. Stripping runs
+        over the whole raw text each time, because a sequence can arrive
+        split across two reads and a per-chunk strip would leave half of
+        it behind."""
+        if self._stripped_upto != len(self.raw):
+            self._buf = ESC.sub("", self.raw)
+            self._stripped_upto = len(self.raw)
+        return self._buf
+
+    def send(self, text):
+        os.write(self.fd, text.encode() if isinstance(text, str) else text)
+
+    def expect(self, pattern, timeout=5.0, what=None):
+        """Wait until `pattern` (a regex) shows up in output received since
+        the last mark. Returns the match."""
+        end = time.time() + timeout
+        while True:
+            m = re.search(pattern, self.buf[self.mark:])
+            if m:
+                return m
+            if time.time() > end or self.eof:
+                fail(f"did not see {what or pattern!r} within {timeout}s", self.buf)
+            self.read(0.1)
+
+    sock = None
+    key = None
+
+    def state(self):
+        """fzf's own account of itself, through its socket: the query, the
+        match count, the row under the cursor. Exact where the screen
+        stream is not: a redraw in flight can show the old list under the
+        new prompt, but fzf knows what it holds."""
+        if self.sock is None:
+            socks = glob.glob(os.path.join(os.environ["SWOOP_TEST_TMP"], "swoop-state.*.sock"))
+            if not socks:
+                return None
+            self.sock = socks[0]
+        try:
+            c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            c.settimeout(2)
+            c.connect(self.sock)
+            c.sendall(f"GET / HTTP/1.0\r\nx-api-key: {self.key}\r\n\r\n".encode())
+            data = b""
+            while True:
+                chunk = c.recv(65536)
+                if not chunk:
+                    break
+                data += chunk
+            c.close()
+        except OSError:
+            return None
+        body = data.split(b"\r\n\r\n", 1)[-1]
+        try:
+            return json.loads(body)
+        except ValueError:
+            return None
+
+    def wait_state(self, pred, timeout=5.0, what=""):
+        """Wait until fzf's state satisfies pred; returns it."""
+        end = time.time() + timeout
+        while time.time() < end:
+            st = self.state()
+            if st and pred(st):
+                return st
+            self.read(0.1)
+        fail(f"fzf never reached: {what}; last state {self.state()}", self.buf)
+
+    def clear(self):
+        """Mark: later expects see only what comes after this point."""
+        self.mark = len(self.buf)
+
+    mark = 0
+
+    def wait_exit(self, timeout=5.0):
+        end = time.time() + timeout
+        while time.time() < end:
+            pid, status = os.waitpid(self.pid, os.WNOHANG)
+            if pid:
+                return os.WEXITSTATUS(status) if os.WIFEXITED(status) else -1
+            self.read(0.1)
+        fail("swoop did not exit", self.buf)
+
+    def kill(self):
+        try:
+            os.kill(self.pid, signal.SIGTERM)
+            os.waitpid(self.pid, 0)
+        except OSError:
+            pass
+
+
+def main():
+    if not shutil.which("fzf"):
+        fail("fzf is not on PATH")
+    for tool in ("swoop-nav", "swoop-ai", "swoop-list", "swoop-icons"):
+        if not os.path.exists(os.path.join(ROOT, "bin", tool)):
+            fail(f"bin/{tool} is not built; run make build")
+
+    tmp = tempfile.mkdtemp(prefix="swoop-launcher-test.")
+    home = os.path.join(tmp, "home")
+    os.makedirs(os.path.join(home, ".config", "swoop"))
+    ext_dir = os.path.join(tmp, "ext", "fake")
+    os.makedirs(ext_dir)
+    marker = os.path.join(tmp, "ran")
+
+    # The fake extension: one view row, one plain row, a view that filters
+    # three words, an action menu, and a run that leaves a marker.
+    write_exe(os.path.join(ext_dir, "fake"), f"""#!/usr/bin/env bash
+row() {{ printf '%s\\t%s\\t%s\\t%s\\t%s\\n' "$1" "$2" "$3" "$4" "$5"; }}
+case "$1" in
+  list)
+    row things view '' 'Fake Things' 'a view of fake things'
+    row plain command '' 'Fake Plain Row' 'runs and leaves a marker' ;;
+  view)
+    q="${{3:-}}"
+    for w in apple banana cherry; do
+      case "$w" in *"$q"*) row "$w" fruit '' "$w" 'fruit' ;; esac
+    done ;;
+  preview) echo "preview of $2" ;;
+  actions) row copy action '' 'Copy Fake' 'Enter'; row delete refresh '' 'Delete Fake' '' ;;
+  run) echo "$2 ${{3:-}}" > '{marker}' ;;
+esac
+""")
+    # The fake AI command: a status line on stderr, a pause, an answer.
+    with open(os.path.join(home, ".config", "swoop", "ai"), "w") as f:
+        f.write("sh -c 'echo \"using Fake\" >&2; sleep 1.2; echo \"The answer is 42\"'\n")
+
+    key = "launcher-test-key"
+    os.environ["SWOOP_TEST_TMP"] = tmp
+    env = dict(os.environ)
+    env.update({
+        "FZF_API_KEY": key,
+        "HOME": home,
+        "XDG_CONFIG_HOME": os.path.join(home, ".config"),
+        "XDG_STATE_HOME": os.path.join(home, ".state"),
+        "XDG_DATA_HOME": os.path.join(home, ".data"),
+        "TMPDIR": tmp,
+        "TERM": "xterm-256color",
+        "SWOOP_PICTURES": "0",
+        "SWOOP_NO_CLIPD": "1",
+        "SWOOP_EXTENSIONS": os.path.join(tmp, "ext"),
+        "PATH": os.path.join(ROOT, "bin") + os.pathsep + env.get("PATH", ""),
+    })
+    config = os.path.join(home, ".config", "swoop", "config")
+
+    def check(name, fn):
+        print(f"  {name} ...", end="", flush=True)
+        fn()
+        print(" ok")
+
+    L = Launcher(env)
+    L.key = key
+    try:
+        # 1. the root list, and typing filters it
+        def root():
+            # On a Mac the root list holds every app, sorted by title, so
+            # the fake rows are off screen until typing narrows it.
+            L.send("fake")
+            L.expect(r"Fake Things", what="the fake view row after typing 'fake'")
+            L.expect(r"Fake Plain Row", what="the fake plain row")
+            L.clear()
+            L.send(" plain")
+            st = L.wait_state(lambda s: s["query"] == "fake plain" and s["matchCount"] == 1, what="one match for 'fake plain'")
+            if "Fake Plain Row" not in st["current"]["text"]:
+                fail(f"the match should be the plain row: {st['current']}", L.buf)
+        check("root list and filter", root)
+
+        # 2. a view: push, ask, Esc clears, Esc pops with the text back
+        def view():
+            L.send("\x1b")  # Esc: clear the bar
+            L.read(0.3)
+            L.clear()
+            L.send("fake th")
+            L.expect(r"Fake Things")
+            L.clear()
+            L.send("\r")
+            L.expect(r"Fake Things > ", what="the view's prompt")
+            L.expect(r"banana", what="the view's rows")
+            L.clear()
+            L.send("err")
+            st = L.wait_state(lambda s: s["query"] == "err" and s["matchCount"] == 1, what="the extension leaving one row for 'err'")
+            if "cherry" not in st["current"]["text"]:
+                fail(f"the one row should be cherry: {st['current']}", L.buf)
+            L.clear()
+            L.send("\x1b")  # clears 'err'
+            L.wait_state(lambda s: s["query"] == "" and s["matchCount"] == 3, what="all three rows back after Esc cleared the bar")
+            L.clear()
+            L.send("\x1b")  # pops
+            L.wait_state(lambda s: s["query"] == "fake th", what="the earlier text back in the bar after popping")
+            L.expect(r"Fake Things", what="the root list again")
+        check("view push, filter, Esc, Esc", view)
+
+        # 3. the action menu
+        def actions():
+            L.clear()
+            L.send("\x0b")  # ctrl-k on the highlighted view row
+            L.expect(r"actions > ", what="the actions prompt")
+            L.expect(r"Copy Fake")
+            L.expect(r"Delete Fake")
+            L.clear()
+            L.send("\x1b")
+            L.wait_state(lambda s: s["query"] == "fake th", what="back at the root with the text")
+        check("action menu", actions)
+
+        # 4. Ask AI: Tab, Enter, thinking, status, answer, Esc Esc
+        def ask():
+            L.send("\x1b")  # clear the bar
+            L.read(0.3)
+            L.clear()
+            L.send("\t")
+            L.expect(r"Ask AI > ", what="the Ask AI prompt")
+            L.expect(r"New conversation")
+            L.clear()
+            L.send("what is the answer")
+            L.read(0.3)
+            L.send("\r")
+            L.expect(r"thinking", timeout=5, what="the conversation row saying thinking")
+            L.expect(r"using Fake", timeout=5, what="the command's stderr under the dots")
+            L.expect(r"The answer is 42", timeout=8, what="the answer in the preview")
+            L.expect(r"1 turn", timeout=5, what="the subtitle after the answer")
+            L.clear()
+            L.send("\x1b")
+            # Back at the root: the whole list, an empty bar (it was empty
+            # before Tab).
+            L.wait_state(lambda s: s["query"] == "" and s["totalCount"] > 3, what="the root list after Esc from Ask AI")
+        check("Ask AI", ask)
+
+        # 5. the divider keys write the width
+        def divider():
+            L.send("\x1b[1;3D")  # alt-left
+            L.read(0.6)
+            with open(config) as f:
+                if "preview = 63" not in f.read():
+                    fail("alt-left did not save preview = 63", L.buf)
+            L.send("\x1b[1;3C")  # alt-right
+            L.read(0.6)
+            with open(config) as f:
+                if "preview = 58" not in f.read():
+                    fail("alt-right did not save preview = 58", L.buf)
+        check("divider keys", divider)
+
+        # 6. Enter on a plain row runs it and the launcher exits
+        def run():
+            L.clear()
+            L.send("plain")
+            L.expect(r"Fake Plain Row")
+            L.send("\r")
+            code = L.wait_exit()
+            if not os.path.exists(marker):
+                fail(f"the fake extension's run did not happen (exit {code})", L.buf)
+            with open(marker) as f:
+                if f.read().strip() != "plain":
+                    fail("run got the wrong id", L.buf)
+        check("Enter runs and exits", run)
+    finally:
+        L.kill()
+        # The worker may still be around on a fast failure.
+        subprocess.run(["pkill", "-f", f"swoop-ai work"], stderr=subprocess.DEVNULL)
+        shutil.rmtree(tmp, ignore_errors=True)
+    print("launcher-test: ok")
+
+
+if __name__ == "__main__":
+    main()

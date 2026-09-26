@@ -9,6 +9,15 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **Two end-to-end tests.** `scripts/launcher-test` drives the launcher
+  through a pseudo-terminal: filter, a view and back, the action menu,
+  Ask AI with a fake model, the divider keys, Enter on a row.
+  `scripts/launchd-test` runs the installer's launchd steps against a
+  fake launchctl and checks the order that keeps a stray watcher from
+  winning. `make e2e` and `make test`; CI runs both.
+
 ### Fixed
 
 - **`make install` unloads before it kills.** A frame killed while its
