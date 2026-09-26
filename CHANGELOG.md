@@ -9,6 +9,15 @@ so here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The launcher never starts a watcher launchd owns.** On a Mac with
+  the agent installed, `swoop-clipd start` now does nothing: launchd
+  brings its watcher back itself, and one started by the launcher in the
+  second before it did held the lock from then on. The installer also
+  waits for launchd's watcher to hold the lock before it starts the
+  frame.
+
 ### Added
 
 - **`swoop-md`.** The transcript's markdown renderer as a command:
