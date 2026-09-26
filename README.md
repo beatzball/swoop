@@ -93,6 +93,10 @@ click elsewhere hides it, and the next press is a fresh launcher with an
 empty bar. `SWOOP_HOTKEY=alt+space` picks another key; `SWOOP_LAUNCHER`
 points at a different `swoop`. It needs no Ghostty.app and no permission.
 
+cmd+[ and cmd+] move the divider between the list and the preview, 5% a
+step, and the width is remembered in `~/.config/swoop/config` (`preview =
+58`). In a plain terminal the keys are alt+left and alt+right.
+
 ## Ask AI
 
 Press Tab from anywhere. The pane opens with whatever you had typed still

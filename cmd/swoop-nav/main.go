@@ -27,6 +27,7 @@ import (
 	"github.com/beatzball/swoop/internal/ext"
 	"github.com/beatzball/swoop/internal/nav"
 	"github.com/beatzball/swoop/internal/protocol"
+	"github.com/beatzball/swoop/internal/settings"
 )
 
 const envState = "SWOOP_STATE"
@@ -39,8 +40,14 @@ const envApps = "SWOOP_APPS"
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|ai|esc|change|rows ...")
+		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|ai|esc|change|rows|window|divider ...")
 		os.Exit(2)
+	}
+	nav.PreviewPercent = settings.PreviewPercent()
+	if os.Args[1] == "window" {
+		// bin/swoop's --preview-window at start. No state needed.
+		fmt.Println(nav.Window(false))
+		return
 	}
 	path := os.Getenv(envState)
 	if path == "" {
@@ -94,6 +101,19 @@ func main() {
 		fmt.Println(nav.Enter(st, id, kind, title, query, pos, runCommand(path)))
 	case "ai":
 		fmt.Println(nav.Ask(st, query, pos))
+	case "divider":
+		// +5 gives the preview more, -5 gives the list more. The new
+		// width is saved first, so the next run opens the same way.
+		delta := 0
+		if len(os.Args) > 2 {
+			delta, _ = strconv.Atoi(os.Args[2])
+		}
+		nav.PreviewPercent = settings.ClampPreview(nav.PreviewPercent + delta)
+		if err := settings.Set(settings.Preview, strconv.Itoa(nav.PreviewPercent)); err != nil {
+			fmt.Fprintln(os.Stderr, "swoop-nav:", err)
+		}
+		fmt.Println(nav.Divider(st))
+		return
 	case "esc":
 		fmt.Println(nav.Esc(st, query))
 	case "change":

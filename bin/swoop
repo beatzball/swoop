@@ -47,10 +47,13 @@ export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIO
 #                usual terminal tools do. fzf's own ctrl-u clears the bar,
 #                which Esc does here anyway
 #   --preview-window:
-#                58% for the preview: an app's details and an AI answer
-#                need the room more than the list does. nav has the same
-#                string, for the panes that change the window and put it
-#                back
+#                from swoop-nav, which reads the width the user last chose
+#                from ~/.config/swoop/config; 58% to start with. nav builds
+#                the same string for the panes that change the window
+#   alt-left, alt-right:
+#                move the divider: alt-left gives the preview 5% more,
+#                alt-right gives the list 5% more, and the width is
+#                remembered. cmd+[ and cmd+] in the frame are these keys
 #   ctrl-k:      the row's actions as a pane of their own; cmd+K in the
 #                frame is mapped to it. fzf's own ctrl-k is "up", which the
 #                arrow key still does
@@ -107,7 +110,9 @@ fzf < "$rows" \
   --prompt '  ' \
   --pointer '▶' \
   --preview 'swoop-preview {1}' \
-  --preview-window 'right,58%,border-left,nowrap' \
+  --preview-window "$(swoop-nav window)" \
+  --bind 'alt-left:transform:swoop-nav divider +5' \
+  --bind 'alt-right:transform:swoop-nav divider -5' \
   --bind 'ctrl-u:preview-half-page-up,ctrl-d:preview-half-page-down' \
   --bind 'enter:transform:swoop-nav enter {1} {2} {4}' \
   --bind 'left-click:transform:swoop-nav enter {1} {2} {4}' \

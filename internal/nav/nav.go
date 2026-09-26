@@ -154,14 +154,31 @@ const (
 	AITitle  = "Ask AI"
 )
 
-// PreviewWindow is fzf's preview window as bin/swoop sets it, and
-// AIPreviewWindow the same window while the Ask AI pane is up: wrapped,
-// because a transcript is prose, and following, so a growing answer
-// keeps its end in view.
-const (
-	PreviewWindow   = "right,58%,border-left,nowrap"
-	AIPreviewWindow = "right,58%,border-left,wrap,follow"
-)
+// PreviewPercent is the preview window's width, in percent of the
+// whole. cmd/swoop-nav sets it from the settings file at start; the
+// default is what a fresh install shows.
+var PreviewPercent = 58
+
+// Window is fzf's preview window for a pane: on the right, the width
+// from PreviewPercent, a border on its left. The Ask AI pane's is
+// wrapped, because a transcript is prose, and following, so a growing
+// answer keeps its end in view. bin/swoop asks swoop-nav for the plain
+// one at start, and every pane change sets the one it needs.
+func Window(ai bool) string {
+	flags := "nowrap"
+	if ai {
+		flags = "wrap,follow"
+	}
+	return fmt.Sprintf("right,%d%%,border-left,%s", PreviewPercent, flags)
+}
+
+// Divider decides what moving the divider does: the same window the
+// pane has now, at the new width. The caller has already moved
+// PreviewPercent and saved it.
+func Divider(st *State) string {
+	top := st.Top()
+	return Wrap("change-preview-window", Window(top != nil && top.Kind == "ai"))
+}
 
 // Ask decides what Tab does: push the Ask AI pane, keeping whatever is in
 // the bar, since it is the prompt about to be sent. Inside the pane Tab
@@ -175,7 +192,7 @@ func Ask(st *State, query string, pos int) string {
 	return strings.Join([]string{
 		"disable-search",
 		Wrap("change-prompt", AITitle+" > "),
-		Wrap("change-preview-window", AIPreviewWindow),
+		Wrap("change-preview-window", Window(true)),
 		"reload-sync(swoop-nav rows)",
 		"first",
 	}, "+")
@@ -247,7 +264,7 @@ func popActions(st *State) string {
 	frame := st.Stack[len(st.Stack)-1]
 	st.Stack = st.Stack[:len(st.Stack)-1]
 	below := st.Top()
-	search, prompt, window := "enable-search", RootPrompt, PreviewWindow
+	search, prompt, window := "enable-search", RootPrompt, Window(false)
 	if below != nil {
 		search = "disable-search"
 		prompt = below.Title + " > "
@@ -255,7 +272,7 @@ func popActions(st *State) string {
 		case "actions":
 			prompt = below.Title + " actions > "
 		case "ai":
-			window = AIPreviewWindow
+			window = Window(true)
 		}
 	}
 	return strings.Join([]string{
