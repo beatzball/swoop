@@ -22,21 +22,27 @@ final class LauncherController: NSObject, NSWindowDelegate,
     private let command: String
     private let panel: LauncherPanel
     private var terminal: TerminalView?
-    private var settings = Settings.load()
+    private var settings: Settings
     private lazy var controller = TerminalController(configuration: configuration())
     private var keyMonitor: Any?
 
-    private static let size = NSSize(width: 880, height: 520)
+    /// The smallest panel that still shows a list and a preview.
+    private static let minSize = NSSize(width: 480, height: 280)
 
     init(command: String) {
         self.command = command
+        let loaded = Settings.load()
+        settings = loaded
         panel = LauncherPanel(
-            contentRect: NSRect(origin: .zero, size: Self.size),
-            styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView],
+            contentRect: NSRect(origin: .zero, size: loaded.size),
+            // resizable: drag any edge. The size is kept in the settings
+            // file when the drag ends; see windowDidEndLiveResize.
+            styleMask: [.borderless, .nonactivatingPanel, .fullSizeContentView, .resizable],
             backing: .buffered,
             defer: false
         )
         super.init()
+        panel.minSize = Self.minSize
         panel.level = .floating
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
@@ -48,7 +54,7 @@ final class LauncherController: NSObject, NSWindowDelegate,
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .transient]
         panel.delegate = self
 
-        let content = NSView(frame: NSRect(origin: .zero, size: Self.size))
+        let content = NSView(frame: NSRect(origin: .zero, size: loaded.size))
         content.wantsLayer = true
         content.layer?.cornerRadius = 14
         content.layer?.masksToBounds = true
@@ -178,12 +184,13 @@ final class LauncherController: NSObject, NSWindowDelegate,
         let mouse = NSEvent.mouseLocation
         let screen = NSScreen.screens.first { $0.frame.contains(mouse) } ?? NSScreen.main
         guard let frame = screen?.visibleFrame else { return }
+        let size = panel.frame.size
         let origin = NSPoint(
-            x: frame.midX - Self.size.width / 2,
+            x: frame.midX - size.width / 2,
             // A little above centre, like Spotlight.
-            y: frame.midY - Self.size.height / 2 + frame.height * 0.08
+            y: frame.midY - size.height / 2 + frame.height * 0.08
         )
-        panel.setFrame(NSRect(origin: origin, size: Self.size), display: true)
+        panel.setFrame(NSRect(origin: origin, size: size), display: true)
     }
 
     // MARK: the surface says it is done
@@ -201,6 +208,17 @@ final class LauncherController: NSObject, NSWindowDelegate,
         DispatchQueue.main.async { self.replace() }
     }
 
+    // MARK: the panel was resized
+
+    func windowDidEndLiveResize(_: Notification) {
+        // The terminal view follows the panel on its own (autoresizing);
+        // what is left is to remember the size for next time.
+        settings.width = Double(panel.frame.width)
+        settings.height = Double(panel.frame.height)
+        settings.save()
+        log("resized to \(Int(settings.width)) by \(Int(settings.height))")
+    }
+
     // MARK: the panel lost the keyboard
 
     func windowDidResignKey(_: Notification) {
@@ -209,11 +227,31 @@ final class LauncherController: NSObject, NSWindowDelegate,
     }
 }
 
-/// What the frame remembers between runs: the font size. A small JSON file
-/// under the config directory, next to the extensions.
+/// What the frame remembers between runs: the font size and the panel's
+/// size. A small JSON file under the config directory, next to the
+/// extensions. Every field has a default, so a file from before a field
+/// existed still loads, and a hand-edited one can leave fields out.
 struct Settings: Codable {
     static let defaultFontSize: Float = 16
+    static let defaultWidth: Double = 880
+    static let defaultHeight: Double = 520
     var fontSize: Float = Settings.defaultFontSize
+    var width: Double = Settings.defaultWidth
+    var height: Double = Settings.defaultHeight
+
+    init() {}
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        fontSize = try c.decodeIfPresent(Float.self, forKey: .fontSize) ?? Settings.defaultFontSize
+        width = try c.decodeIfPresent(Double.self, forKey: .width) ?? Settings.defaultWidth
+        height = try c.decodeIfPresent(Double.self, forKey: .height) ?? Settings.defaultHeight
+    }
+
+    /// The panel's size from the file, never smaller than the frame's minimum.
+    var size: NSSize {
+        NSSize(width: max(width, 480), height: max(height, 280))
+    }
 
     static var path: String {
         let env = ProcessInfo.processInfo.environment
