@@ -93,6 +93,11 @@ final class LauncherController: NSObject, NSWindowDelegate,
             // sees cmd keys, so the frame turns it into ctrl-k, which
             // bin/swoop binds.
             builder.withCustom("keybind", "super+k=text:\\x0b")
+            // cmd+[ and cmd+] move the divider between list and preview:
+            // alt+left and alt+right to fzf, sent as the escape sequences
+            // a terminal sends for them.
+            builder.withCustom("keybind", "super+bracket_left=text:\\x1b[1;3D")
+            builder.withCustom("keybind", "super+bracket_right=text:\\x1b[1;3C")
         }
     }
 

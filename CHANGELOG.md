@@ -9,6 +9,13 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **The divider moves.** cmd+[ and cmd+] in the frame, alt+left and
+  alt+right in a terminal, give the preview or the list 5% more, and the
+  width is remembered in `~/.config/swoop/config`, the launcher's own
+  settings file: one `key = value` per line.
+
 ## [0.5.0] - 2026-09-25
 
 Ask AI: a conversation pane on Tab, fed by whatever command you name.

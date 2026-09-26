@@ -242,3 +242,19 @@ func TestPoppingActionsInsideTheAIPaneKeepsItsWindow(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestDividerKeepsThePanesShape(t *testing.T) {
+	old := PreviewPercent
+	defer func() { PreviewPercent = old }()
+	PreviewPercent = 63
+	if got := Divider(&State{}); got != "change-preview-window(right,63%,border-left,nowrap)" {
+		t.Fatalf("root: %q", got)
+	}
+	st := &State{Stack: []Frame{{Kind: "ai", View: AIView, Title: AITitle}}}
+	if got := Divider(st); got != "change-preview-window(right,63%,border-left,wrap,follow)" {
+		t.Fatalf("ai pane: %q", got)
+	}
+	if got := Window(false); got != "right,63%,border-left,nowrap" {
+		t.Fatalf("Window: %q", got)
+	}
+}
