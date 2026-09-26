@@ -40,9 +40,11 @@ trap 'rm -rf "$stage"' EXIT
 dir="$stage/$name"
 mkdir -p "$dir/bin" "$dir/scripts" "$out"
 
-# -trimpath keeps the runner's paths out of the binaries.
+# -trimpath keeps the runner's paths out of the binaries; -s -w leaves the
+# symbol table and debug information out, about a third of each binary,
+# which a released tool never needs.
 (cd "$root" && CGO_ENABLED="$cgo" GOOS="$os" GOARCH="$arch" \
-  go build -trimpath -o "$dir/bin/" ./cmd/...)
+  go build -trimpath -ldflags '-s -w' -o "$dir/bin/" ./cmd/...)
 cp "$root/bin/swoop" "$dir/bin/"
 cp -R "$root/extensions" "$dir/extensions"
 cp "$root/scripts/launchd.sh" "$root/scripts/uninstall" "$dir/scripts/"
