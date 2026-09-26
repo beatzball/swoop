@@ -129,6 +129,28 @@ func ago(t time.Time) string {
 // yet. The worker's tick picks the frame.
 var dots = []string{"·", "··", "···"}
 
+// waitingLine is what shows under a prompt with no answer yet: the dots,
+// how long it has been, and the last thing the command said on stderr,
+// which for the default command is the tool it is using.
+func waitingLine(c *chat.Conversation) string {
+	line := dots[c.Tick%len(dots)]
+	if !c.Asked.IsZero() {
+		line += " " + elapsed(time.Since(c.Asked))
+	}
+	if c.Status != "" {
+		line += " · " + c.Status
+	}
+	return line
+}
+
+func elapsed(d time.Duration) string {
+	s := int(d.Seconds())
+	if s < 60 {
+		return fmt.Sprintf("%ds", s)
+	}
+	return fmt.Sprintf("%dm%02ds", s/60, s%60)
+}
+
 // preview prints the transcript: each prompt in bold, each answer as
 // markdown rendered by glamour at the pane's width, the dots while an
 // answer has not started. The preview window follows, so a growing
@@ -149,7 +171,11 @@ func preview(store chat.Store, id string) error {
 			continue
 		}
 		if t.Text == "" && c.Pending {
-			fmt.Printf("\x1b[2m%s\x1b[22m\n\n", dots[c.Tick%len(dots)])
+			if c.Worker != 0 && !alive(c.Worker) {
+				fmt.Print("\x1b[31mThe worker stopped before an answer came. Ask again.\x1b[39m\n\n")
+				continue
+			}
+			fmt.Printf("\x1b[2m%s\x1b[22m\n\n", waitingLine(c))
 			continue
 		}
 		fmt.Print(render(strings.TrimSpace(t.Text)))
