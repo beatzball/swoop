@@ -98,7 +98,9 @@ step, and the width is remembered in `~/.config/swoop/config` (`preview =
 58`). In a plain terminal the keys are alt+left and alt+right. Drag any
 edge of the panel to resize it; the size is remembered in
 `~/.config/swoop/shell-mac.json` beside the font size, and can be typed
-there too (`width`, `height`).
+there too (`width`, `height`). A bird in the menu bar opens the launcher,
+opens the settings folder, and quits; `SWOOP_NO_MENU_BAR=1` leaves it
+out.
 
 ## Ask AI
 
