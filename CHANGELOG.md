@@ -11,6 +11,11 @@ so here.
 
 ### Fixed
 
+- **`make install` leaves one clipboard watcher, launchd's.** A watcher
+  still letting go of its lock made launchd's new one give up, and the
+  frame's own swoop then started one outside launchd that won forever.
+  The installer now waits for the old frame and watcher to be gone before
+  it starts anything.
 - **`make install` starts the frame the first time.** launchd's bootout
   returns before the old service is gone, and a bootstrap in that window
   was refused, so the frame came up only on a second run. The installer
