@@ -36,6 +36,13 @@ type Conversation struct {
 	Pending bool      `json:"pending,omitempty"`
 	Tick    int       `json:"tick,omitempty"`
 	Error   string    `json:"error,omitempty"`
+	// Asked is when the pending prompt was sent, for the clock under the
+	// dots; Status the last line the command wrote to stderr, shown
+	// there too; Worker the pid of the process answering, so a pane can
+	// tell a worker that died from one still thinking.
+	Asked  time.Time `json:"asked,omitempty"`
+	Status string    `json:"status,omitempty"`
+	Worker int       `json:"worker,omitempty"`
 }
 
 // Store is the directory.
@@ -188,6 +195,9 @@ func (c *Conversation) Ask(prompt string) {
 	c.Pending = true
 	c.Tick = 0
 	c.Error = ""
+	c.Asked = time.Now()
+	c.Status = ""
+	c.Worker = 0
 }
 
 // Answer is the text of the last assistant turn, or "".

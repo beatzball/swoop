@@ -16,6 +16,16 @@ so here.
   was refused, so the frame came up only on a second run. The installer
   now waits for the old service to go and tries again if refused.
 
+### Fixed
+
+- **An answer that never comes says so.** A command that ended with
+  nothing on stdout looked like one still thinking. It is now a red line
+  under the prompt with the reason: the command's last words on stderr,
+  or that it printed nothing. While waiting, the dots carry the seconds
+  and the last thing the command said, which for the default `claude -p`
+  is the tool it is using. A worker that dies is reported, not waited
+  for; five minutes is the most an answer may take.
+
 ### Changed
 
 - **App rows show only the name.** The folder is in the preview.

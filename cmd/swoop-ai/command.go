@@ -25,6 +25,14 @@ import (
 //
 // The command reads the conversation on stdin and writes the answer on
 // stdout. That is the whole contract; nothing else is asked of it.
+// jqFilter turns claude's stream-json into what the worker wants: the
+// text on stdout as it arrives, and on stderr, for the line under the
+// dots, each tool claude starts to use and the reason if it fails.
+// jq's stderr builtin prints a string raw, with no newline of its own.
+const jqFilter = `(select(.type == "stream_event") | .event.delta.text // empty),` +
+	`(select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | "using \(.name)\n" | stderr | empty),` +
+	`(select(.type == "result" and .is_error == true) | ((.result // .error // "the model returned an error") | tostring) + "\n" | stderr | empty)`
+
 func commandLine() (string, error) {
 	if line := configured(); line != "" {
 		return line, nil
@@ -34,7 +42,7 @@ func commandLine() (string, error) {
 			// -j: no newline after each delta, they are pieces of text
 			// and the model writes its own newlines. --unbuffered: each
 			// piece out as it comes in.
-			return `claude -p --allowedTools WebSearch WebFetch --output-format stream-json --verbose --include-partial-messages | jq --unbuffered -rj 'select(.type == "stream_event") | .event.delta.text // empty'`, nil
+			return `claude -p --allowedTools WebSearch WebFetch --output-format stream-json --verbose --include-partial-messages | jq --unbuffered -rj '` + jqFilter + `'`, nil
 		}
 		return "claude -p --allowedTools WebSearch WebFetch", nil
 	}

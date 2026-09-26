@@ -1,7 +1,7 @@
 package main
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"fmt"
 	"io"
@@ -34,29 +34,57 @@ func work(store chat.Store, id string) error {
 		return nil
 	}
 	fzf := newRedrawer()
+	c.Worker = os.Getpid()
+	_ = store.Save(c)
 	line, err := commandLine()
 	if err != nil {
-		return finish(store, c, fzf, "", err)
+		return finish(store, c, fzf, "", "", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "sh", "-c", line)
 	cmd.Stdin = strings.NewReader(c.Prompt())
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
 	out, err := cmd.StdoutPipe()
 	if err != nil {
-		return finish(store, c, fzf, "", err)
+		return finish(store, c, fzf, "", "", err)
+	}
+	errPipe, err := cmd.StderrPipe()
+	if err != nil {
+		return finish(store, c, fzf, "", "", err)
 	}
 	if err := cmd.Start(); err != nil {
-		return finish(store, c, fzf, "", err)
+		return finish(store, c, fzf, "", "", err)
 	}
 
 	var mu sync.Mutex
 	var text strings.Builder
+	var status []string // the command's stderr, last lines only
 	dirty := false
 	done := make(chan struct{})
+
+	// The command's stderr, a line at a time, is the status under the
+	// dots: a tool being used, a warning, the reason it failed.
+	var stderrDone sync.WaitGroup
+	stderrDone.Add(1)
+	go func() {
+		defer stderrDone.Done()
+		sc := bufio.NewScanner(errPipe)
+		sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
+		for sc.Scan() {
+			l := strings.TrimSpace(sc.Text())
+			if l == "" {
+				continue
+			}
+			mu.Lock()
+			status = append(status, l)
+			if len(status) > 5 {
+				status = status[1:]
+			}
+			dirty = true
+			mu.Unlock()
+		}
+	}()
 
 	// The clock: dots while nothing has arrived, redraws while it is.
 	go func() {
@@ -79,6 +107,9 @@ func work(store chat.Store, id string) error {
 				}
 				if redraw {
 					c.Turns[len(c.Turns)-1].Text = text.String()
+					if len(status) > 0 {
+						c.Status = status[len(status)-1]
+					}
 					_ = store.Save(c)
 				}
 				mu.Unlock()
@@ -99,32 +130,54 @@ func work(store chat.Store, id string) error {
 			mu.Unlock()
 		}
 		if err != nil {
-			if err != io.EOF {
-				cancel()
-			}
 			break
 		}
 	}
+	stderrDone.Wait()
 	waitErr := cmd.Wait()
 	close(done)
 	mu.Lock()
 	answer := text.String()
+	stderrText := strings.Join(status, "\n")
 	mu.Unlock()
-	if waitErr != nil && strings.TrimSpace(answer) == "" {
-		msg := strings.TrimSpace(stderr.String())
-		if msg == "" {
-			msg = waitErr.Error()
-		}
-		return finish(store, c, fzf, "", fmt.Errorf("%s", lastLine(msg)))
+	if ctx.Err() == context.DeadlineExceeded {
+		waitErr = fmt.Errorf("no answer after %s", timeout)
 	}
-	return finish(store, c, fzf, answer, nil)
+	text2, failure := outcome(answer, stderrText, waitErr)
+	return finish(store, c, fzf, text2, "", failure)
+}
+
+// timeout is how long one answer may take. Long enough for a model that
+// reads a few pages; short enough that a hung command is not "thinking"
+// for the rest of the evening.
+const timeout = 5 * time.Minute
+
+// outcome decides what an ended command means. Text on stdout is the
+// answer, and the exit status does not change that: a model that answered
+// and then failed to exit cleanly still answered. No text is a failure
+// whatever the exit status, because a pipeline's status is its last
+// command's, and `claude | jq` exits 0 when claude fails; the reason is
+// the last line of stderr, or the fact that nothing came.
+func outcome(answer, stderr string, waitErr error) (text string, failure error) {
+	if strings.TrimSpace(answer) != "" {
+		return answer, nil
+	}
+	if msg := lastLine(stderr); msg != "" {
+		return "", fmt.Errorf("%s", msg)
+	}
+	if waitErr != nil {
+		return "", waitErr
+	}
+	return "", fmt.Errorf("the command printed nothing")
 }
 
 // finish writes the answer, or the reason there is none, and tells fzf to
 // draw it and to list the conversations again.
-func finish(store chat.Store, c *chat.Conversation, fzf redrawer, answer string, err error) error {
+func finish(store chat.Store, c *chat.Conversation, fzf redrawer, answer, _ string, err error) error {
 	c.Turns[len(c.Turns)-1].Text = strings.TrimSpace(answer)
 	c.Pending = false
+	c.Status = ""
+	c.Worker = 0
 	if err != nil {
 		c.Error = "The AI command failed: " + err.Error()
 	}
