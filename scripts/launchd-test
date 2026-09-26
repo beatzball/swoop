@@ -40,7 +40,7 @@ case "$1" in
     echo "$label running" >> "$SWOOP_TEST_STATE"
     case "$label" in
       dev.swoop.shell) echo swoop-shell-mac >> "$SWOOP_TEST_PROCS" ;;
-      dev.swoop.clipd) echo "swoop-clipd run" >> "$SWOOP_TEST_PROCS" ;;
+      dev.swoop.clipd) rm -f "$SWOOP_TEST_PROCS.status" ;;
     esac ;;
   *) exit 2 ;;
 esac
@@ -62,7 +62,23 @@ cat > "$tmp/bin/id" <<'EOF'
 #!/usr/bin/env bash
 echo 501
 EOF
-chmod +x "$tmp/bin/"*
+# The fake watcher binary, in the install's bin. `status` says running
+# only from its third call after a bootstrap: launchd takes a moment to
+# spawn, and an installer that starts the frame without waiting for the
+# lock must fail here.
+cat > "$tmp/dir/bin/swoop-clipd" <<'FAKE'
+#!/usr/bin/env bash
+echo "swoop-clipd $*" >> "$SWOOP_TEST_LOG"
+[ "$1" = status ] || exit 0
+n=0; [ -f "$SWOOP_TEST_PROCS.status" ] && n="$(cat "$SWOOP_TEST_PROCS.status")"
+n=$((n + 1)); echo "$n" > "$SWOOP_TEST_PROCS.status"
+if [ "$n" -ge 3 ] && grep -q '^dev.swoop.clipd ' "$SWOOP_TEST_STATE"; then
+  grep -q 'swoop-clipd run' "$SWOOP_TEST_PROCS" || echo "swoop-clipd run" >> "$SWOOP_TEST_PROCS"
+  echo running; exit 0
+fi
+echo "not running"; exit 1
+FAKE
+chmod +x "$tmp/bin/"* "$tmp/dir/bin/swoop-clipd"
 # sleep is real but the loops end at once when the fakes say "gone".
 export PATH="$tmp/bin:$PATH"
 
@@ -70,7 +86,7 @@ export PATH="$tmp/bin:$PATH"
 # install, plus a watcher started by hand, the case that used to win.
 printf 'dev.swoop.shell running\ndev.swoop.clipd running\n' > "$state"
 printf 'swoop-shell-mac\nswoop-clipd run\nswoop-clipd run\n' > "$procs"
-touch "$tmp/dir/bin/fzf" "$tmp/dir/bin/swoop" "$tmp/dir/bin/swoop-clipd" "$tmp/frame"
+touch "$tmp/dir/bin/fzf" "$tmp/dir/bin/swoop" "$tmp/frame"
 chmod +x "$tmp/dir/bin/"* "$tmp/frame"
 
 fail() { echo "launchd-test: $*" >&2; echo "--- log:" >&2; cat "$log" >&2; exit 1; }
@@ -90,6 +106,12 @@ if [ -z "$last_bootout" ] || [ -z "$first_pkill" ] || [ -z "$first_bootstrap" ];
 fi
 [ "$last_bootout" -lt "$first_pkill" ] || fail "a process was killed before both services were unloaded"
 [ "$last_pkill" -lt "$first_bootstrap" ] || fail "a service was started before every process was killed"
+frame_bootstrap="$(grep -n '^launchctl bootstrap .*dev.swoop.shell' "$log" | head -1 | cut -d: -f1)"
+lock_held="$(grep -n '^swoop-clipd status' "$log" | sed -n 3p | cut -d: -f1)"
+if [ -z "$frame_bootstrap" ] || [ -z "$lock_held" ]; then
+  fail "the frame was not started, or the watcher's lock never checked"
+fi
+[ "$lock_held" -lt "$frame_bootstrap" ] || fail "the frame was started before launchd's watcher held the lock"
 grep -q '^launchctl bootout gui/501/dev.swoop.shell' "$log" || fail "the frame's service was not unloaded"
 grep -q '^launchctl bootout gui/501/dev.swoop.clipd' "$log" || fail "the watcher's service was not unloaded"
 

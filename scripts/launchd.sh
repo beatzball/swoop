@@ -65,6 +65,13 @@ swoop_launchd() {
   done
 
   _swoop_agent dev.swoop.clipd "$dir/bin/swoop-clipd" run
+  # Until launchd's watcher holds the lock, the frame stays down: its
+  # first swoop would otherwise start a watcher of its own in the second
+  # launchd takes to spawn, and hold the lock from then on.
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25; do
+    "$dir/bin/swoop-clipd" status >/dev/null 2>&1 && break
+    sleep 0.2
+  done
   _swoop_agent dev.swoop.shell "$frame"
 
   sleep 1

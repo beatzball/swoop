@@ -50,7 +50,16 @@ func running(store clip.Store) bool {
 // it outlives the launcher, and returns at once. If a watcher already
 // holds the lock there is nothing to do. Its output goes to a log next to
 // the history file.
+//
+// When launchd owns the watcher (make install wrote its agent) this does
+// nothing either, whether or not the lock is held: launchd's KeepAlive
+// brings its watcher back, and a watcher started here in the second
+// before it did would hold the lock instead, and keep launchd's out for
+// good. That happened three times.
 func start(store clip.Store) error {
+	if managedByLaunchd() {
+		return nil
+	}
 	if running(store) {
 		return nil
 	}
