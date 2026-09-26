@@ -9,26 +9,10 @@ so here.
 
 ## [Unreleased]
 
-### Added
+## [0.6.0] - 2026-09-26
 
-- **Two end-to-end tests.** `scripts/launcher-test` drives the launcher
-  through a pseudo-terminal: filter, a view and back, the action menu,
-  Ask AI with a fake model, the divider keys, Enter on a row.
-  `scripts/launchd-test` runs the installer's launchd steps against a
-  fake launchctl and checks the order that keeps a stray watcher from
-  winning. `make e2e` and `make test`; CI runs both.
-
-### Fixed
-
-- **The launcher opens on Linux.** The app lister answered "not
-  implemented" as an error there, and `bin/swoop` stopped before fzf
-  started. It now answers with no apps, and the extensions' rows show.
-  Found by the new launcher test on its first Linux run.
-- **`make install` unloads before it kills.** A frame killed while its
-  launchd service was still loaded came back within a second, ran swoop,
-  and started a clipboard watcher outside launchd, which launchd's own
-  then gave way to. The installer now unloads both services, waits for
-  launchd to forget them, then stops what is left, then starts.
+The frame grows up: a movable divider, a resizable panel, a bird in the
+menu bar. And tests for the wiring.
 
 ### Added
 
@@ -43,6 +27,32 @@ so here.
   drag. Nothing shows anywhere else.
 - **A bird in the menu bar.** Open swoop, Settings, Quit. The one visible
   sign the frame is running.
+- **Two end-to-end tests.** `scripts/launcher-test` drives the launcher
+  through a pseudo-terminal: filter, a view and back, the action menu,
+  Ask AI with a fake model, the divider keys, Enter on a row.
+  `scripts/launchd-test` runs the installer's launchd steps against a
+  fake launchctl and checks the order that keeps a stray watcher from
+  winning. `make e2e` and `make test`; CI runs both.
+
+### Changed
+
+- **swoop-ai is half the size.** The AI transcript is rendered by
+  swoop's own markdown renderer on goldmark, in place of glamour, which
+  brought a code highlighter for every language along: 17.6 MB to
+  9.3 MB, and 6.4 MB in the release tarball, which is now built with
+  symbols stripped, as every tool in it is.
+
+### Fixed
+
+- **The launcher opens on Linux.** The app lister answered "not
+  implemented" as an error there, and `bin/swoop` stopped before fzf
+  started. It now answers with no apps, and the extensions' rows show.
+  Found by the new launcher test on its first Linux run.
+- **`make install` unloads before it kills.** A frame killed while its
+  launchd service was still loaded came back within a second, ran swoop,
+  and started a clipboard watcher outside launchd, which launchd's own
+  then gave way to. The installer now unloads both services, waits for
+  launchd to forget them, then stops what is left, then starts.
 
 ## [0.5.0] - 2026-09-25
 
@@ -214,7 +224,8 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/beatzball/swoop/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/beatzball/swoop/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/beatzball/swoop/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/beatzball/swoop/compare/v0.3.0...v0.4.0
