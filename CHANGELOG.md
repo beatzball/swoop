@@ -15,6 +15,8 @@ so here.
   alt+right in a terminal, give the preview or the list 5% more, and the
   width is remembered in `~/.config/swoop/config`, the launcher's own
   settings file: one `key = value` per line.
+- **The panel resizes.** Drag any edge of the frame; the size is kept in
+  `shell-mac.json` beside the font size, and can be typed there too.
 
 ## [0.5.0] - 2026-09-25
 

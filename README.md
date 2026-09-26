@@ -95,7 +95,10 @@ points at a different `swoop`. It needs no Ghostty.app and no permission.
 
 cmd+[ and cmd+] move the divider between the list and the preview, 5% a
 step, and the width is remembered in `~/.config/swoop/config` (`preview =
-58`). In a plain terminal the keys are alt+left and alt+right.
+58`). In a plain terminal the keys are alt+left and alt+right. Drag any
+edge of the panel to resize it; the size is remembered in
+`~/.config/swoop/shell-mac.json` beside the font size, and can be typed
+there too (`width`, `height`).
 
 ## Ask AI
 
