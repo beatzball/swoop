@@ -128,6 +128,20 @@ list` shows. Anything that reads a question and prints an answer
 works, streaming or not. Conversations are files in
 `~/.local/state/swoop/ai`, readable by you only.
 
+Answers are markdown, drawn by swoop's own small renderer. It is also a
+command, `swoop-md`, for anything else that wants markdown in a terminal:
+
+```sh
+printf '# hi\n\n- one\n- two\n' | swoop-md -w 40
+```
+
+And the transcript can be drawn by any command instead. One line in
+`~/.config/swoop/config`, the answer on its stdin, its stdout shown:
+
+```
+render = glow -s dark
+```
+
 ## What runs when the launcher is closed
 
 One thing: `swoop-clipd`, the clipboard watcher. The launcher starts it the

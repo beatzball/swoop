@@ -33,6 +33,7 @@ import (
 	"github.com/beatzball/swoop/internal/chat"
 	"github.com/beatzball/swoop/internal/markdown"
 	"github.com/beatzball/swoop/internal/protocol"
+	"github.com/beatzball/swoop/internal/settings"
 )
 
 // newID is the row that starts a conversation.
@@ -189,11 +190,28 @@ func preview(store chat.Store, id string) error {
 }
 
 // renderer turns markdown into styled text for the pane, at the width
-// fzf gives the preview.
+// fzf gives the preview. With `render = <command>` in the settings file
+// the command does it: the answer on its stdin, its stdout shown, so
+// glow, swoop-md, or anything else can draw the transcript. Without it
+// the built-in renderer runs here, no process, which is what a redraw
+// every hundred milliseconds wants. A command that fails leaves the
+// answer as it is, plain.
 func renderer() func(string) string {
 	cols := 60
 	if v, err := strconv.Atoi(os.Getenv("FZF_PREVIEW_COLUMNS")); err == nil && v > 10 {
 		cols = v
+	}
+	if line := settings.Get(settings.Render, ""); line != "" {
+		return func(s string) string {
+			cmd := exec.Command("sh", "-c", line)
+			cmd.Stdin = strings.NewReader(s)
+			cmd.Env = append(os.Environ(), "FZF_PREVIEW_COLUMNS="+strconv.Itoa(cols), "COLUMNS="+strconv.Itoa(cols))
+			out, err := cmd.Output()
+			if err != nil {
+				return s + "\n\n"
+			}
+			return strings.TrimRight(string(out), "\n") + "\n\n"
+		}
 	}
 	return func(s string) string {
 		return markdown.Render(s, cols) + "\n"

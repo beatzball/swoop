@@ -9,6 +9,15 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **`swoop-md`.** The transcript's markdown renderer as a command:
+  markdown on stdin, styled text on stdout, `-w` for the width. For
+  anything else that wants markdown in a terminal.
+- **`render =` in the settings file.** Any command can draw the AI
+  transcript instead of the built-in renderer: `render = glow -s dark`.
+  The answer goes to its stdin, its stdout is the pane.
+
 ## [0.6.0] - 2026-09-26
 
 The frame grows up: a movable divider, a resizable panel, a bird in the
