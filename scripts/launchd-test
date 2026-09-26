@@ -85,7 +85,9 @@ last_bootout="$(grep -n '^launchctl bootout' "$log" | tail -1 | cut -d: -f1)"
 first_pkill="$(grep -n '^pkill' "$log" | head -1 | cut -d: -f1)"
 last_pkill="$(grep -n '^pkill' "$log" | tail -1 | cut -d: -f1)"
 first_bootstrap="$(grep -n '^launchctl bootstrap' "$log" | head -1 | cut -d: -f1)"
-[ -n "$last_bootout" ] && [ -n "$first_pkill" ] && [ -n "$first_bootstrap" ] || fail "missing a step"
+if [ -z "$last_bootout" ] || [ -z "$first_pkill" ] || [ -z "$first_bootstrap" ]; then
+  fail "missing a step"
+fi
 [ "$last_bootout" -lt "$first_pkill" ] || fail "a process was killed before both services were unloaded"
 [ "$last_pkill" -lt "$first_bootstrap" ] || fail "a service was started before every process was killed"
 grep -q '^launchctl bootout gui/501/dev.swoop.shell' "$log" || fail "the frame's service was not unloaded"
