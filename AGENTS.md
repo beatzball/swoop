@@ -104,7 +104,23 @@ startup time is felt directly.
 - A change that makes the hot path slower needs a number in the pull request
   showing how much, and a reason
 
-## 8. Go
+## 8. Tests
+
+The unit tests cover the rules; two harnesses cover the wiring, which is
+where the bugs have been.
+
+- `make test`: gofmt, vet, the unit tests, and `scripts/launchd-test`, the
+  installer's launchd steps against a fake launchctl. Runs everywhere in
+  seconds. Clean before every pull request
+- `make e2e`: `scripts/launcher-test` drives `bin/swoop` through a
+  pseudo-terminal with a fake extension and a fake AI command, and asks
+  fzf for its state through its socket. Run it for any change to
+  `bin/swoop`, `internal/nav`, `cmd/swoop-nav`, `cmd/swoop-ai`, or an
+  extension. CI runs it on macOS and Linux
+- A bug found on screen gets a check in one of these before the fix is
+  merged, so it stays fixed
+
+## 9. Go
 
 - One module. `gofmt`, `go vet ./...`, and `go test ./...` must be clean
   before a pull request
@@ -112,7 +128,7 @@ startup time is felt directly.
 - Errors are returned, not logged and swallowed. A tool that fails exits
   non-zero with one line on stderr
 
-## 9. Versions and the changelog
+## 10. Versions and the changelog
 
 `VERSION` is the version. `CHANGELOG.md` is written by hand, in prose, as
 changes land: a pull request that changes what a user sees adds a line under
@@ -122,13 +138,13 @@ refuses the bump without the section, and tags `vx.y.z` on `main` once it
 merges. Before 1.0, a change that breaks the extension contract bumps the
 middle number and says so.
 
-## 10. Comments explain why
+## 11. Comments explain why
 
 A comment that explains *why* is worth more than the code it sits above. When
 you move a line, its comment moves with it. When you rename, update names
 inside comments. Never drop a comment to save space.
 
-## 11. Recordings and screenshots
+## 12. Recordings and screenshots
 
 Anything recorded for the README or an issue runs from a temp directory, with
 a throwaway repo, so no username or home path can reach a frame. Check the

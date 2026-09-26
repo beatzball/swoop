@@ -3,8 +3,9 @@
 #   make build   compile every tool into bin/, beside the swoop script
 #   make test    gofmt, vet, and the unit tests
 #   make bench   startup and list time of the hot-path tools (needs hyperfine)
+#   make e2e     the launcher driven through a pseudo-terminal (needs fzf)
 
-.PHONY: build test bench clean shell-mac install uninstall
+.PHONY: build test bench e2e clean shell-mac install uninstall
 
 build:
 	go build -o bin/ ./cmd/...
@@ -26,6 +27,12 @@ test:
 	@unformatted="$$(gofmt -l .)"; if [ -n "$$unformatted" ]; then echo "gofmt: $$unformatted"; exit 1; fi
 	go vet ./...
 	go test ./...
+	scripts/launchd-test
+
+# The launcher end to end: bin/swoop driven through a pseudo-terminal with
+# a fake extension and a fake AI command. Needs fzf and python3.
+e2e: build
+	scripts/launcher-test
 
 bench: build
 	hyperfine --warmup 5 -N 'bin/swoop-list'

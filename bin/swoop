@@ -90,11 +90,15 @@ listen="$sock"
 case "$(uname -s)" in
   MINGW*|MSYS*|CYGWIN*) listen=0 ;;
 esac
-FZF_API_KEY="$(head -c 24 /dev/urandom | base64)"
+# A key already in the environment is kept: that is how a test drives
+# this fzf.
+: "${FZF_API_KEY:=$(head -c 24 /dev/urandom | base64)}"
 export FZF_API_KEY
 # The clipboard watcher outlives the launcher; start it if none runs. It
 # is the one part of swoop that runs while the launcher is closed.
-swoop-clipd start || true
+# SWOOP_NO_CLIPD=1 skips it: a test, or a machine where you would rather
+# not have it.
+[ -n "${SWOOP_NO_CLIPD:-}" ] || swoop-clipd start || true
 swoop-list | swoop-icons -out "$icons" > "$SWOOP_APPS"
 swoop-nav rows > "$rows"
 fzf < "$rows" \

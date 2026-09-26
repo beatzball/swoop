@@ -50,10 +50,31 @@ jobs:
       # every OS.
       - name: shellcheck
         if: runner.os == 'Linux'
-        run: shellcheck bin/swoop extensions/*/* scripts/*
+        # Every shell file: the launcher, the extensions, and the scripts
+        # that say they are bash. scripts/launcher-test is Python.
+        run: shellcheck bin/swoop extensions/*/* $(grep -Il -e '^#!/usr/bin/env bash' -e '^# shellcheck shell=bash' scripts/*)
       - name: release-gate tests
         if: runner.os == 'Linux'
         run: scripts/release-gate-test
+      # The installer's launchd steps against a fake launchctl: pure bash,
+      # so every OS runs it.
+      - name: launchd test
+        run: scripts/launchd-test
+      # The launcher end to end, through a pseudo-terminal. Needs a recent
+      # fzf: the distro's is too old for transform and become, so Linux
+      # takes fzf's own release, the one scripts/get would install.
+      - name: fzf for the launcher test
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL https://github.com/junegunn/fzf/releases/download/v0.74.4/fzf-0.74.4-linux_amd64.tar.gz | tar -xz -C "$HOME/.local/bin" fzf
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: fzf for the launcher test
+        if: runner.os == 'macOS'
+        run: brew install fzf
+      - name: launcher test
+        if: runner.os != 'Windows'
+        run: scripts/launcher-test
       # The macOS frame is a Swift package; only the macOS runner can build
       # it. Release mode, because that is what ships.
       - name: build the macOS frame

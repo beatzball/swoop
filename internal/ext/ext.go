@@ -42,7 +42,7 @@ const EnvExtDir = "SWOOP_EXT_DIR"
 // listTimeout bounds one extension's `list`. The launcher waits for every
 // source before fzf starts, so one stuck extension would otherwise stall
 // the whole list. Two seconds is generous; a source near it should cache.
-const listTimeout = 2 * time.Second
+var listTimeout = 2 * time.Second
 
 // Extension is one discovered extension.
 type Extension struct {
