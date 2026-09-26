@@ -17,6 +17,9 @@ so here.
   settings file: one `key = value` per line.
 - **The panel resizes.** Drag any edge of the frame; the size is kept in
   `shell-mac.json` beside the font size, and can be typed there too.
+- **A handle on the edge.** Bring the mouse near an edge of the panel
+  and a short bar appears there, a small mark near a corner: the edges
+  drag. Nothing shows anywhere else.
 - **A bird in the menu bar.** Open swoop, Settings, Quit. The one visible
   sign the frame is running.
 

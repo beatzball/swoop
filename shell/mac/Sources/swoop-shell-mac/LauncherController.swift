@@ -23,6 +23,7 @@ final class LauncherController: NSObject, NSWindowDelegate,
     private let panel: LauncherPanel
     private var terminal: TerminalView?
     private var settings: Settings
+    private var edgeHint: EdgeHintView?
     private lazy var controller = TerminalController(configuration: configuration())
     private var keyMonitor: Any?
 
@@ -60,6 +61,13 @@ final class LauncherController: NSObject, NSWindowDelegate,
         content.layer?.masksToBounds = true
         content.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.96).cgColor
         panel.contentView = content
+        // The edge hint sits above everything else in the panel and takes
+        // no clicks; see EdgeHintView. Mouse movement must reach it.
+        let hintView = EdgeHintView(frame: content.bounds)
+        hintView.autoresizingMask = [.width, .height]
+        content.addSubview(hintView, positioned: .above, relativeTo: nil)
+        edgeHint = hintView
+        panel.acceptsMouseMovedEvents = true
 
         // cmd+plus, cmd+minus, cmd+0 change the font size and the change is
         // kept for next time. The frame takes these keys rather than
@@ -142,7 +150,8 @@ final class LauncherController: NSObject, NSWindowDelegate,
             waitAfterCommand: false
         )
         view.controller = controller
-        content.addSubview(view)
+        // Below the edge hint, so the hint stays on top of the terminal.
+        content.addSubview(view, positioned: .below, relativeTo: edgeHint)
         terminal = view
     }
 
