@@ -133,7 +133,9 @@ var dots = []string{"·", "··", "···"}
 // how long it has been, and the last thing the command said on stderr,
 // which for the default command is the tool it is using.
 func waitingLine(c *chat.Conversation) string {
-	line := dots[c.Tick%len(dots)]
+	// Padded to three cells, so the time after the dots does not move as
+	// they grow and shrink.
+	line := fmt.Sprintf("%-3s", dots[c.Tick%len(dots)])
 	if !c.Asked.IsZero() {
 		line += " " + elapsed(time.Since(c.Asked))
 	}
