@@ -112,6 +112,8 @@ final class LauncherController: NSObject, NSWindowDelegate,
             // a terminal sends for them.
             builder.withCustom("keybind", "super+bracket_left=text:\\x1b[1;3D")
             builder.withCustom("keybind", "super+bracket_right=text:\\x1b[1;3C")
+            // cmd+, opens Settings, the Mac convention: alt+, to fzf.
+            builder.withCustom("keybind", "super+comma=text:\\x1b,")
         }
     }
 

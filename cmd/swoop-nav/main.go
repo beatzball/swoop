@@ -40,7 +40,7 @@ const envApps = "SWOOP_APPS"
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|ai|esc|change|rows|window|divider ...")
+		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|ai|settings|esc|change|rows|window|divider ...")
 		os.Exit(2)
 	}
 	nav.PreviewPercent = settings.PreviewPercent()
@@ -101,6 +101,8 @@ func main() {
 		fmt.Println(nav.Enter(st, id, kind, title, query, pos, runCommand(path)))
 	case "ai":
 		fmt.Println(nav.Ask(st, query, pos))
+	case "settings":
+		fmt.Println(nav.Settings(st, query, pos))
 	case "divider":
 		// +5 gives the preview more, -5 gives the list more. The new
 		// width is saved first, so the next run opens the same way.
