@@ -43,7 +43,7 @@ fi
 
 Take those lines out again to get a plain quick terminal back.
 
-![swoop: filtering apps, the action menu, the calculator, and the Define Word view](demo/swoop.gif)
+![swoop: filtering apps, the action menu, the calculator, and Ask AI answering a question](demo/swoop.gif)
 
 The plan, every design decision, and the work in progress live in the
 [issues](https://github.com/beatzball/swoop/issues). Start there.
