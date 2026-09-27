@@ -32,6 +32,9 @@ func TestStripANSI(t *testing.T) {
 	if got := stripANSI("plain words"); got != "plain words" {
 		t.Fatalf("plain text untouched: %q", got)
 	}
+	if got := stripANSI("87°F. \ue200cite\ue202turn2search8\ue201 done"); got != "87°F.  done" {
+		t.Fatalf("codex citation marks go: %q", got)
+	}
 }
 
 func TestOllamaLineKeepsTheAnswerClean(t *testing.T) {

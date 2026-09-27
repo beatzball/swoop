@@ -14,13 +14,17 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
@@ -73,12 +77,52 @@ var all = []setting{
 		explain: "Whether the model may search and fetch the web. claude adds its\nWebSearch and WebFetch tools when this is on. Off, a question about your\nown text stays on your Mac.",
 		value: func() string {
 			if settings.Get(settings.Web, settings.WebDefault) == "on" {
-				return "on · claude searches; an ollama model cannot"
+				return "on · claude, codex and openai search; local models cannot"
 			}
 			return "off"
 		},
 		choices: func(string) []choice {
-			return []choice{{value: "on", title: "On", note: "claude may search and fetch; ollama has no way to"}, {value: "off", title: "Off", note: "nothing leaves for the web"}}
+			return []choice{{value: "on", title: "On", note: "claude, codex and openai may search; local models cannot"}, {value: "off", title: "Off", note: "nothing leaves for the web"}}
+		},
+	},
+	{
+		key: settings.AIURL, title: "API URL", icon: "󰖟",
+		explain: "Where openai:<model> and lmstudio:<model> send their requests: the base\nURL ending in /v1. OpenAI's own, LM Studio's, or any server with that\nAPI: OpenRouter, Groq, vLLM. Type one to use it.",
+		value: func() string {
+			if v := settings.Get(settings.AIURL, ""); v != "" {
+				return v
+			}
+			return "default: OpenAI's for openai, localhost:1234 for lmstudio"
+		},
+		choices: func(query string) []choice {
+			cs := []choice{
+				{value: "", title: "Default", note: "OpenAI's for openai:, LM Studio's for lmstudio:"},
+				{value: "https://api.openai.com/v1", title: "OpenAI", note: "web search works here"},
+				{value: "http://localhost:1234/v1", title: "LM Studio", note: "local"},
+				{value: "https://openrouter.ai/api/v1", title: "OpenRouter", note: "many models, one key"},
+				{value: "https://api.groq.com/openai/v1", title: "Groq", note: "fast hosted models"},
+			}
+			if q := strings.TrimSpace(query); strings.HasPrefix(q, "http") {
+				cs = append([]choice{{value: q, title: q, note: "what you typed"}}, cs...)
+			}
+			return cs
+		},
+	},
+	{
+		key: settings.AIKey, title: "API key", icon: "󰌆",
+		explain: "The key for the API URL. Type it in the bar and press Enter on the row\nthat repeats it. It is kept in the settings file, mode 600, yours\nalone; OPENAI_API_KEY in the environment is used when this is empty.",
+		value: func() string {
+			if v := settings.Get(settings.AIKey, ""); v != "" {
+				return "set (" + strconv.Itoa(len(v)) + " characters)"
+			}
+			return "not set"
+		},
+		choices: func(query string) []choice {
+			cs := []choice{{value: "", title: "None", note: "use OPENAI_API_KEY from the environment, if any"}}
+			if q := strings.TrimSpace(query); len(q) >= 8 {
+				cs = append([]choice{{value: q, title: "Use what you typed", note: strconv.Itoa(len(q)) + " characters"}}, cs...)
+			}
+			return cs
 		},
 	},
 	{
@@ -284,26 +328,80 @@ func aiValue() string {
 	if v := settings.Get(settings.AI, ""); v != "" {
 		return v
 	}
-	return "default: claude, or ollama, or the line in ~/.config/swoop/ai"
+	return "default: the line in ~/.config/swoop/ai, else claude, else ollama"
 }
 
-func aiChoices(string) []choice {
-	cs := []choice{
-		{value: "claude", title: "claude", note: "claude -p, streamed"},
+// aiChoices lists what is actually here: claude and codex when on PATH
+// (and says so when not), each ollama model, each model LM Studio's
+// server offers, openai with the model name typed after "openai:", and
+// the line of your own.
+func aiChoices(query string) []choice {
+	var cs []choice
+	if q := strings.TrimSpace(query); strings.HasPrefix(q, "openai:") && len(q) > len("openai:") {
+		cs = append(cs, choice{value: q, title: q, note: "what you typed"})
+	}
+	for _, tool := range []struct{ name, note, missing string }{
+		{"claude", "claude -p, streamed; searches the web when that is on", "not installed"},
+		{"codex", "codex exec, answers whole; searches the web when that is on", "not installed"},
+	} {
+		if _, err := exec.LookPath(tool.name); err == nil {
+			cs = append(cs, choice{value: tool.name, title: tool.name, note: tool.note})
+		} else {
+			cs = append(cs, choice{value: tool.name, title: tool.name, note: tool.missing})
+		}
 	}
 	if out, err := exec.Command("ollama", "list").Output(); err == nil {
 		for i, line := range strings.Split(string(out), "\n") {
 			if i == 0 {
 				continue
 			}
-			f := strings.Fields(line)
-			if len(f) > 0 {
-				cs = append(cs, choice{value: "ollama:" + f[0], title: "ollama " + f[0], note: "local, streamed"})
+			if f := strings.Fields(line); len(f) > 0 && !strings.Contains(f[0], "embed") {
+				cs = append(cs, choice{value: "ollama:" + f[0], title: "ollama " + f[0], note: "local, streamed; no web"})
 			}
 		}
 	}
-	cs = append(cs, choice{value: "", title: "The line in ~/.config/swoop/ai", note: "a command of your own; or the defaults when there is none"})
+	for _, m := range lmStudioModels() {
+		cs = append(cs, choice{value: "lmstudio:" + m, title: "lmstudio " + m, note: "local, streamed; no web"})
+	}
+	cs = append(cs,
+		choice{value: "openai:gpt-5", title: "openai gpt-5", note: "needs an API key; type openai:<model> for another"},
+		choice{value: "", title: "The line in ~/.config/swoop/ai", note: "a command of your own; or the defaults when there is none"},
+	)
 	return cs
+}
+
+// lmStudioModels asks LM Studio's server, when it is up, what it has.
+func lmStudioModels() []string {
+	base := settings.Get(settings.AIURL, "http://localhost:1234/v1")
+	if !strings.Contains(base, "localhost") && !strings.Contains(base, "127.0.0.1") {
+		base = "http://localhost:1234/v1"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base, "/")+"/models", nil)
+	if err != nil {
+		return nil
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	var out struct {
+		Data []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if json.NewDecoder(resp.Body).Decode(&out) != nil {
+		return nil
+	}
+	var ids []string
+	for _, m := range out.Data {
+		if !strings.Contains(m.ID, "embed") {
+			ids = append(ids, m.ID)
+		}
+	}
+	return ids
 }
 
 func atoi(s string, fallback int) int {

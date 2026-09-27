@@ -37,39 +37,134 @@ func work(store chat.Store, id string) error {
 	fzf := newRedrawer()
 	c.Worker = os.Getpid()
 	_ = store.Save(c)
-	line, err := commandLine()
+	p, err := resolve()
 	if err != nil {
 		return finish(store, c, fzf, "", "", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	// What the transports write into, and the clock reads from.
+	k := &sink{}
+	if note := webNote(p); note != "" {
+		// Said before the model says anything, and kept until it does.
+		k.say(note)
+	}
+	done := make(chan struct{})
+	go clock(store, c, fzf, k, done)
+
+	var runErr error
+	if p.api {
+		runErr = askAPI(ctx, p, c, k.emit, k.say)
+	} else {
+		runErr = askCommand(ctx, p.line, c.Prompt(), k.emit, k.say)
+	}
+	close(done)
+	answer, status := k.snapshot()
+	if ctx.Err() == context.DeadlineExceeded {
+		runErr = fmt.Errorf("no answer after %s", timeout)
+	}
+	text, failure := outcome(answer, status, runErr)
+	if failure != nil && p.name != "" {
+		failure = fmt.Errorf("%s: %w", p.name, failure)
+	}
+	return finish(store, c, fzf, text, "", failure)
+}
+
+// sink is where an answer gathers: the text so far and the last few
+// status lines, under one lock, with a flag for the clock to know there
+// is something new to draw.
+type sink struct {
+	mu     sync.Mutex
+	text   strings.Builder
+	status []string
+	dirty  bool
+}
+
+func (k *sink) emit(s string) {
+	k.mu.Lock()
+	k.text.WriteString(s)
+	k.dirty = true
+	k.mu.Unlock()
+}
+
+// say records a status line: a tool being used, a warning, the reason
+// something failed. Escape codes go, since ollama draws a spinner there,
+// and an empty line is not a status.
+func (k *sink) say(line string) {
+	line = strings.TrimSpace(stripANSI(line))
+	if line == "" {
+		return
+	}
+	k.mu.Lock()
+	k.status = append(k.status, line)
+	if len(k.status) > 5 {
+		k.status = k.status[1:]
+	}
+	k.dirty = true
+	k.mu.Unlock()
+}
+
+func (k *sink) snapshot() (answer, status string) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	return stripANSI(k.text.String()), strings.Join(k.status, "\n")
+}
+
+// clock is the redraw rhythm: while the answer is still empty, a tick
+// every 300 ms advances the dots; while text is arriving, a redraw at
+// most every 100 ms, so a model that streams a token at a time does not
+// run the preview command a hundred times a second.
+func clock(store chat.Store, c *chat.Conversation, fzf redrawer, k *sink, done <-chan struct{}) {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+	n := 0
+	for {
+		select {
+		case <-done:
+			return
+		case <-ticker.C:
+			n++
+			k.mu.Lock()
+			waiting := k.text.Len() == 0
+			redraw := k.dirty
+			k.dirty = false
+			if waiting && n%3 == 0 {
+				c.Tick++
+				redraw = true
+			}
+			if redraw {
+				c.Turns[len(c.Turns)-1].Text = stripANSI(k.text.String())
+				if len(k.status) > 0 {
+					c.Status = k.status[len(k.status)-1]
+				}
+				_ = store.Save(c)
+			}
+			k.mu.Unlock()
+			if redraw {
+				fzf.post("refresh-preview")
+			}
+		}
+	}
+}
+
+// askCommand runs a shell line with the prompt on its stdin: its stdout
+// is the answer as it comes, its stderr lines are status.
+func askCommand(ctx context.Context, line, prompt string, emit func(string), say func(string)) error {
 	cmd := exec.CommandContext(ctx, "sh", "-c", line)
-	cmd.Stdin = strings.NewReader(c.Prompt())
+	cmd.Stdin = strings.NewReader(prompt)
 	out, err := cmd.StdoutPipe()
 	if err != nil {
-		return finish(store, c, fzf, "", "", err)
+		return err
 	}
 	errPipe, err := cmd.StderrPipe()
 	if err != nil {
-		return finish(store, c, fzf, "", "", err)
+		return err
 	}
 	if err := cmd.Start(); err != nil {
-		return finish(store, c, fzf, "", "", err)
+		return err
 	}
-
-	var mu sync.Mutex
-	var text strings.Builder
-	var status []string // the command's stderr, last lines only
-	if note := webNote(); note != "" {
-		// Said before the command says anything, and kept until it does.
-		status = append(status, note)
-	}
-	dirty := false
-	done := make(chan struct{})
-
-	// The command's stderr, a line at a time, is the status under the
-	// dots: a tool being used, a warning, the reason it failed.
 	var stderrDone sync.WaitGroup
 	stderrDone.Add(1)
 	go func() {
@@ -77,82 +172,21 @@ func work(store chat.Store, id string) error {
 		sc := bufio.NewScanner(errPipe)
 		sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
 		for sc.Scan() {
-			// ollama draws a spinner on stderr, escape codes and all; a
-			// status line is words, so the codes go and an empty line
-			// is not a status.
-			l := strings.TrimSpace(stripANSI(sc.Text()))
-			if l == "" {
-				continue
-			}
-			mu.Lock()
-			status = append(status, l)
-			if len(status) > 5 {
-				status = status[1:]
-			}
-			dirty = true
-			mu.Unlock()
+			say(sc.Text())
 		}
 	}()
-
-	// The clock: dots while nothing has arrived, redraws while it is.
-	go func() {
-		ticker := time.NewTicker(100 * time.Millisecond)
-		defer ticker.Stop()
-		n := 0
-		for {
-			select {
-			case <-done:
-				return
-			case <-ticker.C:
-				n++
-				mu.Lock()
-				waiting := text.Len() == 0
-				redraw := dirty
-				dirty = false
-				if waiting && n%3 == 0 {
-					c.Tick++
-					redraw = true
-				}
-				if redraw {
-					c.Turns[len(c.Turns)-1].Text = stripANSI(text.String())
-					if len(status) > 0 {
-						c.Status = status[len(status)-1]
-					}
-					_ = store.Save(c)
-				}
-				mu.Unlock()
-				if redraw {
-					fzf.post("refresh-preview")
-				}
-			}
-		}
-	}()
-
 	buf := make([]byte, 4096)
 	for {
 		n, err := out.Read(buf)
 		if n > 0 {
-			mu.Lock()
-			text.Write(buf[:n])
-			dirty = true
-			mu.Unlock()
+			emit(string(buf[:n]))
 		}
 		if err != nil {
 			break
 		}
 	}
 	stderrDone.Wait()
-	waitErr := cmd.Wait()
-	close(done)
-	mu.Lock()
-	answer := stripANSI(text.String())
-	stderrText := strings.Join(status, "\n")
-	mu.Unlock()
-	if ctx.Err() == context.DeadlineExceeded {
-		waitErr = fmt.Errorf("no answer after %s", timeout)
-	}
-	text2, failure := outcome(answer, stderrText, waitErr)
-	return finish(store, c, fzf, text2, "", failure)
+	return cmd.Wait()
 }
 
 // ansi matches the escape sequences a command may write when it thinks
@@ -160,12 +194,21 @@ func work(store chat.Store, id string) error {
 // strings, and the two-byte kind. What is left is the text.
 var ansi = regexp.MustCompile("\x1b\\[[0-9;?<=>]*[ -/]*[@-~]|\x1b\\][^\x07\x1b]*(\x07|\x1b\\\\)|\x1b[@-Z\\\\^_]")
 
-// stripANSI takes the escape sequences out of s and the spinner glyphs
-// ollama leaves behind with them.
+// citation matches the marks codex leaves in an answer for its own
+// renderer, private-use characters around "cite…": not text.
+var citation = regexp.MustCompile(`\x{e200}[^\x{e201}]*\x{e201}`)
+
+// stripANSI takes the escape sequences out of s, the spinner glyphs
+// ollama leaves behind with them, and the private-use marks codex
+// writes for citations.
 func stripANSI(s string) string {
 	s = ansi.ReplaceAllString(s, "")
+	s = citation.ReplaceAllString(s, "")
 	return strings.Map(func(r rune) rune {
 		if r >= 0x2800 && r <= 0x28FF { // braille, the spinner's frames
+			return -1
+		}
+		if r >= 0xE000 && r <= 0xF8FF { // private use: no model means these
 			return -1
 		}
 		return r

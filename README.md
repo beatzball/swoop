@@ -128,11 +128,23 @@ it comes. Name the command in `~/.config/swoop/ai`, one line:
 ollama run llama3.2
 ```
 
-Or pick one in Settings: `claude`, or `ollama` with any model you have
-pulled. Without either it uses `claude -p` if `claude` is on your PATH
-(streamed through `jq` when that is there too), then `ollama run` with the
-first model `ollama list` shows. Web search is off until you turn it on in
-Settings; on, claude may search and fetch, which only reads. Anything that reads a question and prints an answer
+Or pick one in Settings, under AI model:
+
+| you have | pick | streams | searches the web |
+|---|---|---|---|
+| Claude Code | `claude` | yes | yes, with the switch |
+| Codex | `codex` | no, answers whole | yes, with the switch |
+| Ollama | `ollama:<model>`, each one listed | yes | no |
+| LM Studio | `lmstudio:<model>`, each loaded one listed | yes | no |
+| an OpenAI key | `openai:<model>`, key under API key | yes | yes, with the switch |
+| OpenRouter, Groq, vLLM, any server with the OpenAI API | `openai:<model>`, its address under API URL | yes | no |
+| anything else | the line in `~/.config/swoop/ai` | if it does | if it does |
+
+Without a choice it uses the line in that file, then `claude -p` if `claude`
+is on your PATH, then `ollama run` with the first model `ollama list`
+shows. Web search is off until you turn it on in Settings; on, the models
+that can will search and fetch, and the line under the dots says when the
+one you picked cannot. Anything that reads a question and prints an answer
 works, streaming or not. Conversations are files in
 `~/.local/state/swoop/ai`, readable by you only.
 
