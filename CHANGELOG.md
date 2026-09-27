@@ -9,6 +9,13 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **A Homebrew tap.** `brew install beatzball/tap/swoop`, and on a Mac
+  `brew services start swoop` runs the frame at login. The formula is
+  written by `scripts/tap-formula` from a release's checksums, and the
+  release workflow pushes it to the tap when it has a token for it.
+
 ## [0.6.1] - 2026-09-26
 
 The renderer as a command, and the watcher put to rest.

@@ -102,3 +102,41 @@ jobs:
           gh release upload "$TAG" SHA256SUMS --clobber
       - name: Publish
         run: gh release edit "$TAG" --draft=false --latest
+
+  # The Homebrew tap, github.com/beatzball/homebrew-tap: its swoop formula
+  # is written by scripts/tap-formula from this release's checksums and
+  # pushed there. That needs a token with write access to the tap repo, the
+  # TAP_TOKEN secret; without it this job says so and does nothing, and the
+  # formula is updated by hand with the same script.
+  tap:
+    needs: [publish]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+      GH_REPO: ${{ github.repository }}
+      TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Write the formula to the tap
+        run: |
+          if [ -z "$TAP_TOKEN" ]; then
+            echo "TAP_TOKEN is not set; the tap keeps its formula. To update it by hand:"
+            echo "  gh release download $TAG --pattern SHA256SUMS -O - | scripts/tap-formula ${TAG#v} > Formula/swoop.rb"
+            exit 0
+          fi
+          v="${TAG#v}"
+          gh release download "$TAG" --pattern SHA256SUMS -O "$RUNNER_TEMP/SHA256SUMS"
+          git clone --depth 1 "https://x-access-token:${TAP_TOKEN}@github.com/beatzball/homebrew-tap.git" "$RUNNER_TEMP/tap"
+          scripts/tap-formula "$v" < "$RUNNER_TEMP/SHA256SUMS" > "$RUNNER_TEMP/tap/Formula/swoop.rb"
+          cd "$RUNNER_TEMP/tap"
+          git config user.name "beatzball"
+          git config user.email "38116726+beatzball@users.noreply.github.com"
+          git add Formula/swoop.rb
+          if git diff --cached --quiet; then
+            echo "the tap already has swoop $v"
+            exit 0
+          fi
+          git commit -m "swoop $v"
+          git push origin HEAD:main
+          echo "the tap has swoop $v"
