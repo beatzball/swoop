@@ -71,9 +71,14 @@ var all = []setting{
 	{
 		key: settings.Web, title: "Web search for AI", icon: "󰖟",
 		explain: "Whether the model may search and fetch the web. claude adds its\nWebSearch and WebFetch tools when this is on. Off, a question about your\nown text stays on your Mac.",
-		value:   func() string { return settings.Get(settings.Web, settings.WebDefault) },
+		value: func() string {
+			if settings.Get(settings.Web, settings.WebDefault) == "on" {
+				return "on · claude searches; an ollama model cannot"
+			}
+			return "off"
+		},
 		choices: func(string) []choice {
-			return []choice{{value: "on", title: "On", note: "claude may search and fetch"}, {value: "off", title: "Off", note: "nothing leaves for the web"}}
+			return []choice{{value: "on", title: "On", note: "claude may search and fetch; ollama has no way to"}, {value: "off", title: "Off", note: "nothing leaves for the web"}}
 		},
 	},
 	{

@@ -19,6 +19,15 @@ so here.
   watches that file, so a new hotkey works within a second.
 - **A Homebrew tap.**
 
+### Fixed
+
+- **ollama answers are clean.** `ollama run` wrapped words with cursor
+  moves even through a pipe, and a thinking model's reasoning came out
+  as the answer. The ollama line now runs with `--nowordwrap`,
+  `--hidethinking` and `--think=false`, escape codes are stripped from
+  what any command prints, and with web search on and an ollama model
+  the line under the dots says the model cannot search.
+
 ### Changed
 
 - **Web search is off by default.** claude may search and fetch only when

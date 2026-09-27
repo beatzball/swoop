@@ -42,7 +42,7 @@ func commandLine() (string, error) {
 	case choice == "claude":
 		return claudeLine(), nil
 	case strings.HasPrefix(choice, "ollama:"):
-		return "ollama run " + strings.TrimPrefix(choice, "ollama:"), nil
+		return ollamaLine(strings.TrimPrefix(choice, "ollama:")), nil
 	case choice != "":
 		return choice, nil
 	}
@@ -54,10 +54,38 @@ func commandLine() (string, error) {
 	}
 	if _, err := exec.LookPath("ollama"); err == nil {
 		if model := firstOllamaModel(); model != "" {
-			return "ollama run " + model, nil
+			return ollamaLine(model), nil
 		}
 	}
 	return "", errors.New("no AI command found. Put one line in " + configPath() + ", for example: claude -p")
+}
+
+// ollamaLine is the ollama preset for one model. --nowordwrap: through a
+// pipe ollama still wraps words with cursor moves, which would land in
+// the transcript. --hidethinking and --think=false: a thinking model's
+// reasoning is not the answer, and a model without thinking takes the
+// flags without complaint.
+func ollamaLine(model string) string {
+	return "ollama run --nowordwrap --hidethinking --think=false " + model
+}
+
+// webNote is what the status line says when the web switch is on but the
+// chosen model has no way to search: today, ollama. Empty when the
+// switch is off or the model can search.
+func webNote() string {
+	if settings.Get(settings.Web, settings.WebDefault) != "on" {
+		return ""
+	}
+	choice := settings.Get(settings.AI, "")
+	if strings.HasPrefix(choice, "ollama:") || (choice == "" && configured() == "" && !onPath("claude") && onPath("ollama")) {
+		return "this model cannot search the web"
+	}
+	return ""
+}
+
+func onPath(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
 }
 
 // claudeLine is the claude preset: streamed through jq when jq is there,
