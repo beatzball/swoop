@@ -1,0 +1,12 @@
+#!/bin/sh
+# The demo's model: a fixed answer, a line at a time, so the recording is
+# the same every time and shows the dots and then the streaming. The
+# question on stdin is read and ignored. printf '%s\n' rather than a bare
+# format: a line that starts with "- " would otherwise read as an option.
+cat > /dev/null
+sleep 1.4
+printf '%s\n' 'Sunlight holds every colour. Air scatters the **blue** part far more than the red, so blue reaches your eyes from all over the sky.'
+sleep 0.5
+printf '\n%s\n' '- short waves scatter most'
+sleep 0.4
+printf '%s\n' '- at sunset the light crosses more air, and only the red is left'
