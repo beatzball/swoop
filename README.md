@@ -128,10 +128,11 @@ it comes. Name the command in `~/.config/swoop/ai`, one line:
 ollama run llama3.2
 ```
 
-Without that file it uses `claude -p` if `claude` is on your PATH (streamed
-through `jq` when that is there too, and allowed to search and fetch the
-web, which only reads), then `ollama run` with the first model `ollama
-list` shows. Anything that reads a question and prints an answer
+Or pick one in Settings: `claude`, or `ollama` with any model you have
+pulled. Without either it uses `claude -p` if `claude` is on your PATH
+(streamed through `jq` when that is there too), then `ollama run` with the
+first model `ollama list` shows. Web search is off until you turn it on in
+Settings; on, claude may search and fetch, which only reads. Anything that reads a question and prints an answer
 works, streaming or not. Conversations are files in
 `~/.local/state/swoop/ai`, readable by you only.
 
@@ -148,6 +149,15 @@ And the transcript can be drawn by any command instead. One line in
 ```
 render = glow -s dark
 ```
+
+## Settings
+
+Type `settings` and press Enter, or cmd+, in the frame (alt+, in a
+terminal). One row per setting, the current value beside it; Enter on a row
+to change it: the hotkey, the preview width, the AI model, whether the model
+may search the web, what draws the transcript. Every value is one line in
+`~/.config/swoop/config`, which you can also edit by hand. The frame watches
+that file, so a new hotkey works within a second, no restart.
 
 ## What runs when the launcher is closed
 

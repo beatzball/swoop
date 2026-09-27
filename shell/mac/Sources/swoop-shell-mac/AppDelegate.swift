@@ -7,6 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var toggleSignal: DispatchSourceSignal?
     private var endedSignal: DispatchSourceSignal?
     private var statusItem: StatusItem?
+    private var configWatch: Timer?
+    private var hotkeySpec = ""
 
     func applicationDidFinishLaunching(_: Notification) {
         // SWOOP_SHELL_DEBUG=1 logs every libghostty callback and every
@@ -24,14 +26,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let launcher = LauncherController(command: command)
         self.launcher = launcher
 
-        let spec = ProcessInfo.processInfo.environment["SWOOP_HOTKEY"] ?? "alt+shift+space"
-        do {
-            hotKey = try HotKey(spec) { [weak launcher] in launcher?.toggle() }
-        } catch {
-            // Keep running without the key rather than quit: under launchd a
-            // quit is a restart loop, and SIGUSR1 still works. The log says
-            // what to fix.
-            FileHandle.standardError.write(Data("swoop-shell-mac: \(error); running without a hotkey\n".utf8))
+        let spec = Config.hotkey()
+        registerHotkey(spec)
+        // The Settings pane writes a new hotkey to the settings file; the
+        // frame takes it within a second, no restart.
+        configWatch = Config.watch { [weak self] in
+            guard let self else { return }
+            let now = Config.hotkey()
+            if now != self.hotkeySpec { self.registerHotkey(now) }
         }
 
         // The bird in the menu bar. SWOOP_NO_MENU_BAR=1 leaves it out.
@@ -57,6 +59,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         endedSignal = ended
 
         FileHandle.standardError.write(Data("swoop-shell-mac: ready; hotkey \(spec); running \(command)\n".utf8))
+    }
+
+    /// Register spec as the hotkey, in place of the one before. A key that
+    /// cannot be taken leaves the frame without one, and the log says so:
+    /// under launchd a quit is a restart loop, and SIGUSR1 still works.
+    private func registerHotkey(_ spec: String) {
+        hotKey = nil
+        hotkeySpec = spec
+        do {
+            hotKey = try HotKey(spec) { [weak launcher] in
+                DispatchQueue.main.async { launcher?.toggle() }
+            }
+            FileHandle.standardError.write(Data("swoop-shell-mac: hotkey \(spec)\n".utf8))
+        } catch {
+            FileHandle.standardError.write(Data("swoop-shell-mac: \(error); running without a hotkey\n".utf8))
+        }
     }
 
     /// The launcher script: SWOOP_LAUNCHER, or `swoop` on PATH. The frame

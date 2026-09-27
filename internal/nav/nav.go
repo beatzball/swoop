@@ -108,11 +108,35 @@ func Enter(st *State, id, kind, title, query string, pos int, runCmd func(target
 		// runs a row or pushes a pane.
 		return "ignore"
 	}
+	if kind == "refresh" && st.Top() != nil {
+		// A row that changes something and stays: a setting's choice.
+		// Run it quietly, then back to the pane below, reloaded, so it
+		// shows the change. The same shape as a refresh action.
+		return Wrap("execute-silent", "swoop-run "+ShellQuote(id)) + "+" + popActions(st)
+	}
 	if kind != "view" {
 		return runCmd(id, "")
 	}
 	st.Stack = append(st.Stack, Frame{Kind: "view", View: id, Title: title, Query: query, Pos: pos})
 	return push(title + " > ")
+}
+
+// SettingsView is the id of the Settings pane's view, and SettingsTitle
+// its prompt.
+const (
+	SettingsView  = "ext/settings/settings"
+	SettingsTitle = "Settings"
+)
+
+// Settings decides what the settings key does (cmd+, in the frame, alt+,
+// in a terminal): open the Settings pane, as Enter on its row would.
+// Inside it already, nothing.
+func Settings(st *State, query string, pos int) string {
+	if top := st.Top(); top != nil && top.View == SettingsView {
+		return "ignore"
+	}
+	st.Stack = append(st.Stack, Frame{Kind: "view", View: SettingsView, Title: SettingsTitle, Query: query, Pos: pos})
+	return push(SettingsTitle + " > ")
 }
 
 // enterAction runs the picked action for the actions pane's target. Kind

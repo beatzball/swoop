@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/beatzball/swoop/internal/settings"
 )
 
 // commandLine is the shell line that answers: the first line of
@@ -17,9 +19,9 @@ import (
 //	                the text as it arrives, so the answer streams
 //	claude          claude -p, which answers in one piece
 //
-// Both claude forms allow WebSearch and WebFetch, which only read: without
-// them a question about the weather ends in a refusal, since claude -p
-// declines any tool it has not been given.
+// Both claude forms allow WebSearch and WebFetch, which only read, when
+// the web setting is on: without them a question about the weather ends
+// in a refusal, since claude -p declines any tool it has not been given.
 //
 //	ollama          ollama run <the first model ollama lists>, which streams
 //
@@ -34,17 +36,21 @@ const jqFilter = `(select(.type == "stream_event") | .event.delta.text // empty)
 	`(select(.type == "result" and .is_error == true) | ((.result // .error // "the model returned an error") | tostring) + "\n" | stderr | empty)`
 
 func commandLine() (string, error) {
+	// The ai setting first: a preset by name, ollama with a model, or a
+	// line of its own. Then the ai file. Then what is on PATH.
+	switch choice := settings.Get(settings.AI, ""); {
+	case choice == "claude":
+		return claudeLine(), nil
+	case strings.HasPrefix(choice, "ollama:"):
+		return "ollama run " + strings.TrimPrefix(choice, "ollama:"), nil
+	case choice != "":
+		return choice, nil
+	}
 	if line := configured(); line != "" {
 		return line, nil
 	}
 	if _, err := exec.LookPath("claude"); err == nil {
-		if _, err := exec.LookPath("jq"); err == nil {
-			// -j: no newline after each delta, they are pieces of text
-			// and the model writes its own newlines. --unbuffered: each
-			// piece out as it comes in.
-			return `claude -p --allowedTools WebSearch WebFetch --output-format stream-json --verbose --include-partial-messages | jq --unbuffered -rj '` + jqFilter + `'`, nil
-		}
-		return "claude -p --allowedTools WebSearch WebFetch", nil
+		return claudeLine(), nil
 	}
 	if _, err := exec.LookPath("ollama"); err == nil {
 		if model := firstOllamaModel(); model != "" {
@@ -52,6 +58,22 @@ func commandLine() (string, error) {
 		}
 	}
 	return "", errors.New("no AI command found. Put one line in " + configPath() + ", for example: claude -p")
+}
+
+// claudeLine is the claude preset: streamed through jq when jq is there,
+// and allowed to search and fetch the web when the web setting is on.
+func claudeLine() string {
+	tools := ""
+	if settings.Get(settings.Web, settings.WebDefault) == "on" {
+		tools = " --allowedTools WebSearch WebFetch"
+	}
+	if _, err := exec.LookPath("jq"); err == nil {
+		// -j: no newline after each delta, they are pieces of text and
+		// the model writes its own newlines. --unbuffered: each piece
+		// out as it comes in.
+		return `claude -p` + tools + ` --output-format stream-json --verbose --include-partial-messages | jq --unbuffered -rj '` + jqFilter + `'`
+	}
+	return "claude -p" + tools
 }
 
 func configPath() string {

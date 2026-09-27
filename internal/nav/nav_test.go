@@ -258,3 +258,35 @@ func TestDividerKeepsThePanesShape(t *testing.T) {
 		t.Fatalf("Window: %q", got)
 	}
 }
+
+func TestRefreshRowInAViewRunsAndReturns(t *testing.T) {
+	st := &State{Stack: []Frame{
+		{Kind: "view", View: SettingsView, Title: SettingsTitle, Query: "", Pos: 1},
+		{Kind: "view", View: "ext/settings/preview", Title: "Preview width", Query: "", Pos: 2},
+	}}
+	got := Enter(st, "ext/settings/preview=65", "refresh", "65%", "", 3, run)
+	if !strings.HasPrefix(got, "execute-silent(swoop-run 'ext/settings/preview=65')+") {
+		t.Fatalf("runs the row quietly: %q", got)
+	}
+	if !strings.Contains(got, "change-prompt(Settings > )") || !strings.Contains(got, "reload-sync(swoop-nav rows {q})") {
+		t.Fatalf("returns to the pane below, reloaded: %q", got)
+	}
+	if len(st.Stack) != 1 || st.Stack[0].View != SettingsView {
+		t.Fatalf("stack: %+v", st.Stack)
+	}
+	// At the root a refresh row is just a row: it runs and the launcher ends.
+	if got := Enter(&State{}, "ext/x/y", "refresh", "y", "", 1, run); !strings.HasPrefix(got, "become:") {
+		t.Fatalf("at the root: %q", got)
+	}
+}
+
+func TestSettingsKeyOpensThePaneOnce(t *testing.T) {
+	st := &State{}
+	got := Settings(st, "typed", 4)
+	if !strings.Contains(got, "change-prompt(Settings > )") || len(st.Stack) != 1 || st.Stack[0].Query != "typed" {
+		t.Fatalf("got %q, stack %+v", got, st.Stack)
+	}
+	if got := Settings(st, "", 1); got != "ignore" {
+		t.Fatalf("inside the pane: %q", got)
+	}
+}

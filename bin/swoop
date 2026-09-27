@@ -57,6 +57,7 @@ export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIO
 #   ctrl-k:      the row's actions as a pane of their own; cmd+K in the
 #                frame is mapped to it. fzf's own ctrl-k is "up", which the
 #                arrow key still does
+#   alt-,:       opens the Settings pane; cmd+, in the frame is this key
 #   tab:         opens the Ask AI pane with what is in the bar; Enter there
 #                sends it, and the answer arrives on the right. See
 #                cmd/swoop-ai
@@ -122,6 +123,7 @@ fzf < "$rows" \
   --bind 'left-click:transform:swoop-nav enter {1} {2} {4}' \
   --bind 'ctrl-k:transform:swoop-nav actions {1} {2} {4}' \
   --bind 'tab:transform:swoop-nav ai' \
+  --bind 'alt-,:transform:swoop-nav settings' \
   --listen "$listen" \
   --bind 'esc:transform:swoop-nav esc' \
   --bind 'change:transform:swoop-nav change' || status=$?

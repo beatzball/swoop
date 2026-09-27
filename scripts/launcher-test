@@ -325,7 +325,39 @@ esac
                     fail("alt-right did not save preview = 58", L.buf)
         check("divider keys", divider)
 
-        # 6. Enter on a plain row runs it and the launcher exits
+        # 6. Settings: the key opens the pane, a choice sets a value and returns
+        def settings_pane():
+            # Text in the bar first: Settings keeps it and gives it back on
+            # the way out, which is how the return to the root is known.
+            L.send("fake")
+            L.wait_state(lambda s: s["query"] == "fake", what="text in the bar before Settings")
+            L.clear()
+            L.send("\x1b,")  # alt-,
+            L.expect(r"Settings > ", what="the Settings prompt")
+            L.expect(r"Preview width", what="the settings rows")
+            L.clear()
+            L.send("preview")
+            L.wait_state(lambda s: s["query"] == "preview" and s["matchCount"] == 1, what="one row for 'preview'")
+            L.send("\r")
+            L.expect(r"Preview width > ", what="the choices pane")
+            L.clear()
+            L.send("70")
+            L.wait_state(lambda s: s["query"] == "70" and s["matchCount"] == 1, what="the 70% choice")
+            L.send("\r")
+            L.wait_state(lambda s: s["query"] == "preview", what="back in Settings with the earlier text")
+            L.expect(r"70%", what="the new width in the row's subtitle")
+            with open(config) as f:
+                if "preview = 70" not in f.read():
+                    fail("the choice did not write preview = 70", L.buf)
+            L.send("\x1b")  # clears 'preview'
+            L.wait_state(lambda s: s["query"] == "", what="the bar cleared in Settings")
+            L.send("\x1b")  # pops to the root
+            L.wait_state(lambda s: s["query"] == "fake", what="the root with the earlier text back")
+            L.send("\x1b")  # and clear it for the next step
+            L.wait_state(lambda s: s["query"] == "", what="an empty bar at the root")
+        check("Settings pane", settings_pane)
+
+        # 7. Enter on a plain row runs it and the launcher exits
         def run():
             L.clear()
             L.send("plain")

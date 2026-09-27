@@ -11,7 +11,19 @@ so here.
 
 ### Added
 
-- **A Homebrew tap.** `brew install beatzball/tap/swoop`, and on a Mac
+- **Settings, inside the launcher.** Type `settings`, or cmd+, in the
+  frame: one row per setting, Enter to change it. The hotkey, the preview
+  width, the AI model (claude, or ollama with any model you have), web
+  search on or off, the transcript renderer, and a door to the config
+  folder. Every value is one line in `~/.config/swoop/config`. The frame
+  watches that file, so a new hotkey works within a second.
+- **A Homebrew tap.**
+
+### Changed
+
+- **Web search is off by default.** claude may search and fetch only when
+  the Web search setting is on. Turn it on in Settings, or `web = on` in
+  the config file. `brew install beatzball/tap/swoop`, and on a Mac
   `brew services start swoop` runs the frame at login. The formula is
   written by `scripts/tap-formula` from a release's checksums, and the
   release workflow pushes it to the tap when it has a token for it.

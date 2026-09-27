@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# settings: the Settings pane, the one the Settings row and cmd+, open.
+# The work is in swoop-settings, a Go tool in bin/, which knows each
+# setting's choices and writes ~/.config/swoop/config. This shim is here
+# so the pane is routed like every other extension. See cmd/swoop-settings.
+exec swoop-settings "$@"

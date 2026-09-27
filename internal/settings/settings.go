@@ -40,6 +40,34 @@ const (
 // `render = swoop-md`. Unset, the built-in renderer runs in-process.
 const Render = "render"
 
+// Hotkey is the key that opens the frame, "mod+mod+key"; the frame reads
+// it at start and whenever the file changes. SWOOP_HOTKEY in the frame's
+// environment overrides it.
+const (
+	Hotkey        = "hotkey"
+	HotkeyDefault = "alt+shift+space"
+)
+
+// AI names what answers in the Ask AI pane: a preset ("claude"), ollama
+// with a model ("ollama:llama3.2"), or a command line of your own. Unset,
+// the line in ~/.config/swoop/ai, then the defaults.
+const AI = "ai"
+
+// Web says whether the model may search and fetch the web: "on" or "off".
+const (
+	Web        = "web"
+	WebDefault = "off"
+)
+
+// Dir is the config directory the file lives in.
+func Dir() string {
+	p := Path()
+	if p == "" {
+		return ""
+	}
+	return filepath.Dir(p)
+}
+
 // Get returns the value of key in the file, or fallback when the file or
 // the key is not there. A file that cannot be read is the same as none.
 func Get(key, fallback string) string {
