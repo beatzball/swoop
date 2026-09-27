@@ -6,43 +6,6 @@ An open-source keyboard launcher built the Unix way: fzf does
 the finding, libghostty does the drawing, and every extension is a program
 that prints lines.
 
-Early days, but it installs in one line: see [Install](#install).
-
-## Try it in any terminal
-
-Without the frame, swoop is still a terminal program. You need Go and fzf.
-Then:
-
-```sh
-make build        # compiles the tools into bin/
-bin/swoop         # lists your apps; type to filter; Enter opens; Esc quits
-```
-
-It runs in any terminal. Icons and previews are pictures in a terminal that
-draws them (Ghostty, kitty, WezTerm, Konsole) and glyphs and text anywhere
-else; `SWOOP_PICTURES=1` or `0` overrides the guess. The frame above is the
-launcher; this is the same program without it, which is also how you run it
-on Linux or Windows, or
-inside Ghostty's own quick terminal if you prefer that to the frame. For the
-quick terminal, add to your Ghostty config:
-
-```
-keybind = global:alt+space=toggle_quick_terminal
-quick-terminal-position = center
-```
-
-reload it with `cmd+shift+,`, grant Ghostty Accessibility access when it
-asks, and add to the end of your `~/.zshrc`, with the path to your checkout:
-
-```sh
-# Ghostty sets this in its quick terminal and nowhere else.
-if [[ -n "$GHOSTTY_QUICK_TERMINAL" ]] && [[ -x /absolute/path/to/swoop/bin/swoop ]]; then
-  exec /absolute/path/to/swoop/bin/swoop
-fi
-```
-
-Take those lines out again to get a plain quick terminal back.
-
 ![swoop: filtering apps, the action menu, the calculator, and Ask AI answering a question](demo/swoop.gif)
 
 The plan, every design decision, and the work in progress live in the
@@ -76,7 +39,7 @@ latest. Run it again to upgrade. Logs are in `~/Library/Logs/swoop`, and
 `~/.local/share/swoop/current/scripts/uninstall` removes the agents and keeps
 your history.
 
-### From a checkout
+## From a checkout
 
 ```sh
 git clone https://github.com/beatzball/swoop.git && cd swoop && make install
@@ -85,6 +48,41 @@ git clone https://github.com/beatzball/swoop.git && cd swoop && make install
 The same two agents, pointed at the checkout. You need Go, fzf, and Xcode's
 tools. `make install` again after a pull restarts them on the new build;
 `make uninstall` removes them and keeps your history.
+
+## Try it in any terminal
+
+Without the frame, swoop is still a terminal program: the same one the
+frame runs. You need Go and fzf. Then:
+
+```sh
+make build        # compiles the tools into bin/
+bin/swoop         # lists your apps; type to filter; Enter opens; Esc quits
+```
+
+It runs in any terminal. Icons and previews are pictures in a terminal that
+draws them (Ghostty, kitty, WezTerm, Konsole) and glyphs and text anywhere
+else; `SWOOP_PICTURES=1` or `0` overrides the guess. The frame above is the
+launcher; this is the same program without it, which is also how you run it
+on Linux or Windows, or
+inside Ghostty's own quick terminal if you prefer that to the frame. For the
+quick terminal, add to your Ghostty config:
+
+```
+keybind = global:alt+space=toggle_quick_terminal
+quick-terminal-position = center
+```
+
+reload it with `cmd+shift+,`, grant Ghostty Accessibility access when it
+asks, and add to the end of your `~/.zshrc`, with the path to your checkout:
+
+```sh
+# Ghostty sets this in its quick terminal and nowhere else.
+if [[ -n "$GHOSTTY_QUICK_TERMINAL" ]] && [[ -x /absolute/path/to/swoop/bin/swoop ]]; then
+  exec /absolute/path/to/swoop/bin/swoop
+fi
+```
+
+Take those lines out again to get a plain quick terminal back.
 
 ## The macOS frame
 
