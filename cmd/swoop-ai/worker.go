@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -60,6 +61,10 @@ func work(store chat.Store, id string) error {
 	var mu sync.Mutex
 	var text strings.Builder
 	var status []string // the command's stderr, last lines only
+	if note := webNote(); note != "" {
+		// Said before the command says anything, and kept until it does.
+		status = append(status, note)
+	}
 	dirty := false
 	done := make(chan struct{})
 
@@ -72,7 +77,10 @@ func work(store chat.Store, id string) error {
 		sc := bufio.NewScanner(errPipe)
 		sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
 		for sc.Scan() {
-			l := strings.TrimSpace(sc.Text())
+			// ollama draws a spinner on stderr, escape codes and all; a
+			// status line is words, so the codes go and an empty line
+			// is not a status.
+			l := strings.TrimSpace(stripANSI(sc.Text()))
 			if l == "" {
 				continue
 			}
@@ -106,7 +114,7 @@ func work(store chat.Store, id string) error {
 					redraw = true
 				}
 				if redraw {
-					c.Turns[len(c.Turns)-1].Text = text.String()
+					c.Turns[len(c.Turns)-1].Text = stripANSI(text.String())
 					if len(status) > 0 {
 						c.Status = status[len(status)-1]
 					}
@@ -137,7 +145,7 @@ func work(store chat.Store, id string) error {
 	waitErr := cmd.Wait()
 	close(done)
 	mu.Lock()
-	answer := text.String()
+	answer := stripANSI(text.String())
 	stderrText := strings.Join(status, "\n")
 	mu.Unlock()
 	if ctx.Err() == context.DeadlineExceeded {
@@ -145,6 +153,23 @@ func work(store chat.Store, id string) error {
 	}
 	text2, failure := outcome(answer, stderrText, waitErr)
 	return finish(store, c, fzf, text2, "", failure)
+}
+
+// ansi matches the escape sequences a command may write when it thinks
+// it has a terminal: CSI sequences (cursor moves, erase, modes), OSC
+// strings, and the two-byte kind. What is left is the text.
+var ansi = regexp.MustCompile("\x1b\\[[0-9;?<=>]*[ -/]*[@-~]|\x1b\\][^\x07\x1b]*(\x07|\x1b\\\\)|\x1b[@-Z\\\\^_]")
+
+// stripANSI takes the escape sequences out of s and the spinner glyphs
+// ollama leaves behind with them.
+func stripANSI(s string) string {
+	s = ansi.ReplaceAllString(s, "")
+	return strings.Map(func(r rune) rune {
+		if r >= 0x2800 && r <= 0x28FF { // braille, the spinner's frames
+			return -1
+		}
+		return r
+	}, s)
 }
 
 // timeout is how long one answer may take. Long enough for a model that
