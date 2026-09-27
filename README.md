@@ -50,6 +50,15 @@ The plan, every design decision, and the work in progress live in the
 
 ## Install
 
+With Homebrew, on a Mac or on Linux:
+
+```sh
+brew install beatzball/tap/swoop
+brew services start swoop   # Mac: the frame at login, alt+shift+space
+```
+
+Or with nothing but curl:
+
 ```sh
 curl -fsSL https://raw.githubusercontent.com/beatzball/swoop/main/scripts/get | bash
 ```
