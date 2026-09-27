@@ -11,6 +11,15 @@ so here.
 
 ### Added
 
+- **Ask AI with any model.** Presets under AI model in Settings: `claude`,
+  `codex`, each `ollama` model, each model LM Studio has loaded, and
+  `openai:<model>` for OpenAI or any server with that API (OpenRouter,
+  Groq, vLLM) with the address under API URL and the key under API key.
+  Two transports: a command with the conversation on stdin, or a small
+  HTTP client in the OpenAI chat shape, streamed, with a model's thinking
+  shown as "thinking" under the dots rather than in the answer. Web
+  search, when on, reaches claude, codex and OpenAI; the line under the
+  dots says when the model you picked cannot search.
 - **Settings, inside the launcher.** Type `settings`, or cmd+, in the
   frame: one row per setting, Enter to change it. The hotkey, the preview
   width, the AI model (claude, or ollama with any model you have), web

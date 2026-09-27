@@ -53,6 +53,15 @@ const (
 // the line in ~/.config/swoop/ai, then the defaults.
 const AI = "ai"
 
+// AIURL and AIKey are for the API kind of model, openai:<model> and
+// lmstudio:<model>: the base URL ending in /v1, and the key. The file
+// is mode 600, the user's alone, which is where a key belongs on a
+// machine where launchd's environment is not yours to set.
+const (
+	AIURL = "ai_url"
+	AIKey = "ai_key"
+)
+
 // Web says whether the model may search and fetch the web: "on" or "off".
 const (
 	Web        = "web"

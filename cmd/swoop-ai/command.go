@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,23 +9,6 @@ import (
 	"github.com/beatzball/swoop/internal/settings"
 )
 
-// commandLine is the shell line that answers: the first line of
-// ~/.config/swoop/ai, or a default from what is on PATH.
-//
-// The defaults, in order:
-//
-//	claude and jq   claude -p with its stream-json output through jq for
-//	                the text as it arrives, so the answer streams
-//	claude          claude -p, which answers in one piece
-//
-// Both claude forms allow WebSearch and WebFetch, which only read, when
-// the web setting is on: without them a question about the weather ends
-// in a refusal, since claude -p declines any tool it has not been given.
-//
-//	ollama          ollama run <the first model ollama lists>, which streams
-//
-// The command reads the conversation on stdin and writes the answer on
-// stdout. That is the whole contract; nothing else is asked of it.
 // jqFilter turns claude's stream-json into what the worker wants: the
 // text on stdout as it arrives, and on stderr, for the line under the
 // dots, each tool claude starts to use and the reason if it fails.
@@ -35,31 +17,6 @@ const jqFilter = `(select(.type == "stream_event") | .event.delta.text // empty)
 	`(select(.type == "assistant") | .message.content[]? | select(.type == "tool_use") | "using \(.name)\n" | stderr | empty),` +
 	`(select(.type == "result" and .is_error == true) | ((.result // .error // "the model returned an error") | tostring) + "\n" | stderr | empty)`
 
-func commandLine() (string, error) {
-	// The ai setting first: a preset by name, ollama with a model, or a
-	// line of its own. Then the ai file. Then what is on PATH.
-	switch choice := settings.Get(settings.AI, ""); {
-	case choice == "claude":
-		return claudeLine(), nil
-	case strings.HasPrefix(choice, "ollama:"):
-		return ollamaLine(strings.TrimPrefix(choice, "ollama:")), nil
-	case choice != "":
-		return choice, nil
-	}
-	if line := configured(); line != "" {
-		return line, nil
-	}
-	if _, err := exec.LookPath("claude"); err == nil {
-		return claudeLine(), nil
-	}
-	if _, err := exec.LookPath("ollama"); err == nil {
-		if model := firstOllamaModel(); model != "" {
-			return ollamaLine(model), nil
-		}
-	}
-	return "", errors.New("no AI command found. Put one line in " + configPath() + ", for example: claude -p")
-}
-
 // ollamaLine is the ollama preset for one model. --nowordwrap: through a
 // pipe ollama still wraps words with cursor moves, which would land in
 // the transcript. --hidethinking and --think=false: a thinking model's
@@ -67,25 +24,6 @@ func commandLine() (string, error) {
 // flags without complaint.
 func ollamaLine(model string) string {
 	return "ollama run --nowordwrap --hidethinking --think=false " + model
-}
-
-// webNote is what the status line says when the web switch is on but the
-// chosen model has no way to search: today, ollama. Empty when the
-// switch is off or the model can search.
-func webNote() string {
-	if settings.Get(settings.Web, settings.WebDefault) != "on" {
-		return ""
-	}
-	choice := settings.Get(settings.AI, "")
-	if strings.HasPrefix(choice, "ollama:") || (choice == "" && configured() == "" && !onPath("claude") && onPath("ollama")) {
-		return "this model cannot search the web"
-	}
-	return ""
-}
-
-func onPath(name string) bool {
-	_, err := exec.LookPath(name)
-	return err == nil
 }
 
 // claudeLine is the claude preset: streamed through jq when jq is there,
