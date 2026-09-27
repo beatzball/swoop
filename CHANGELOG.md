@@ -9,6 +9,10 @@ so here.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-26
+
+The renderer as a command, and the watcher put to rest.
+
 ### Fixed
 
 - **The launcher never starts a watcher launchd owns.** On a Mac with
@@ -242,7 +246,8 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/beatzball/swoop/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/beatzball/swoop/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/beatzball/swoop/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/beatzball/swoop/compare/v0.4.0...v0.4.1
