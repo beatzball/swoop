@@ -2,8 +2,8 @@ package main
 
 import (
 	"os"
-	"runtime"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
