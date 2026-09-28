@@ -16,8 +16,11 @@ import (
 	"image"
 	"image/png"
 	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
 
+	"github.com/beatzball/swoop/internal/apps"
 	"github.com/beatzball/swoop/internal/bundle"
 	"github.com/beatzball/swoop/internal/ext"
 	"github.com/beatzball/swoop/internal/picture"
@@ -47,6 +50,13 @@ func main() {
 		return
 	}
 
+	// A .desktop file is a Linux app. It is told apart by the id's shape,
+	// not the OS, so this builds and behaves the same everywhere.
+	if strings.HasSuffix(id, ".desktop") {
+		writeDesktop(out, id)
+		return
+	}
+
 	info := bundle.Describe(id)
 	if !picture.Enabled() {
 		// The pane starts at the name; a terminal without pictures gets
@@ -67,6 +77,27 @@ func main() {
 		fmt.Fprintf(out, "\x1b[2mBundle\x1b[22m   %s\n", info.BundleID)
 	}
 	fmt.Fprintf(out, "\x1b[2mPath\x1b[22m     %s\n", id)
+}
+
+// writeDesktop prints a Linux app's pane: the name, the command it runs,
+// what it says about itself, and where the file is. No icon yet; theme
+// icons are a later step. An unreadable file still shows its path.
+func writeDesktop(out *bufio.Writer, path string) {
+	d, err := apps.ReadDesktop(path)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "swoop-preview:", err)
+	}
+	if d.Name == "" {
+		d.Name = strings.TrimSuffix(filepath.Base(path), ".desktop")
+	}
+	fmt.Fprintf(out, "\x1b[1m%s\x1b[22m\n", d.Name)
+	if d.Exec != "" {
+		fmt.Fprintf(out, "\x1b[2mExec\x1b[22m     %s\n", d.Exec)
+	}
+	if d.Comment != "" {
+		fmt.Fprintf(out, "\x1b[2mComment\x1b[22m  %s\n", d.Comment)
+	}
+	fmt.Fprintf(out, "\x1b[2mPath\x1b[22m     %s\n", path)
 }
 
 // previewIconPx is the icon size for the pane: a 256px icon fills a

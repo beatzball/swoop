@@ -10,6 +10,10 @@ import (
 	"github.com/beatzball/swoop/internal/protocol"
 )
 
+// RevealTitle is the menu label for "reveal", named for the file manager
+// it opens.
+const RevealTitle = "Reveal in Finder"
+
 // dirs are the places macOS keeps launchable applications. Each is read one
 // level deep and never recursed: an app bundle holds helper .app bundles
 // inside it, and those must not show up as results. Utilities is listed on
