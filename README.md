@@ -59,6 +59,9 @@ make build        # compiles the tools into bin/
 bin/swoop         # lists your apps; type to filter; Enter opens; Esc quits
 ```
 
+On Linux the apps come from `.desktop` files, in XDG order: your own
+`~/.local/share/applications` first, then each of `XDG_DATA_DIRS`.
+
 It runs in any terminal. Icons and previews are pictures in a terminal that
 draws them (Ghostty, kitty, WezTerm, Konsole) and glyphs and text anywhere
 else; `SWOOP_PICTURES=1` or `0` overrides the guess. The frame above is the

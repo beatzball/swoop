@@ -9,6 +9,14 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **Apps on Linux.** swoop lists the applications in `.desktop` files, in
+  XDG order, so a copy in `~/.local/share/applications` overrides or hides
+  the system's. Enter launches with `gio launch`, or runs the Exec line
+  when gio is missing; the menu shows the folder and copies the path. The
+  preview shows the name, the command, the comment, and the file.
+
 ### Changed
 
 - **Lighter tools.** The twelve tools together are 30 MB stripped, from
