@@ -304,6 +304,27 @@ esac
             L.expect(r"using Fake", timeout=5, what="the command's stderr under the dots")
             L.expect(r"The answer is 42", timeout=8, what="the answer in the preview")
             L.expect(r"1 turn", timeout=5, what="the subtitle after the answer")
+            # ctrl-k on New conversation: the model list; Enter on one sets it
+            L.send("\x1b[A")  # up, onto New conversation
+            L.wait_state(lambda s: "ext/ai/new" in s["current"]["text"], what="the cursor on New conversation")
+            L.clear()
+            L.send("\x0b")
+            L.expect(r"New conversation actions > ", what="the model menu")
+            L.expect(r"The line in", what="the custom-line choice in the menu")
+            L.send("claude")
+            L.wait_state(lambda s: s["query"] == "claude" and s["matchCount"] == 1, what="the claude row")
+            L.send("\r")
+            L.expect(r"Ask AI > ", what="back in the pane")
+            with open(config) as f:
+                if "ai = claude" not in f.read():
+                    fail("ctrl-k on New did not set ai = claude", L.buf)
+            # and back to the custom line, so the fake model answers again
+            L.send("\x0b")
+            L.expect(r"New conversation actions > ", what="the model menu again")
+            L.send("The line")
+            L.wait_state(lambda s: s["matchCount"] == 1, what="the custom-line row")
+            L.send("\r")
+            L.expect(r"Ask AI > ", what="back in the pane again")
             L.clear()
             L.send("\x1b")
             # Back at the root: the whole list, an empty bar (it was empty

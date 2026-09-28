@@ -14,18 +14,15 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
 
+	"github.com/beatzball/swoop/internal/models"
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
 )
@@ -324,84 +321,14 @@ func looksLikeHotkey(spec string) bool {
 	return parts[len(parts)-1] != ""
 }
 
-func aiValue() string {
-	if v := settings.Get(settings.AI, ""); v != "" {
-		return v
-	}
-	return "default: the line in ~/.config/swoop/ai, else claude, else ollama"
-}
+func aiValue() string { return models.Current() }
 
-// aiChoices lists what is actually here: claude and codex when on PATH
-// (and says so when not), each ollama model, each model LM Studio's
-// server offers, openai with the model name typed after "openai:", and
-// the line of your own.
 func aiChoices(query string) []choice {
 	var cs []choice
-	if q := strings.TrimSpace(query); strings.HasPrefix(q, "openai:") && len(q) > len("openai:") {
-		cs = append(cs, choice{value: q, title: q, note: "what you typed"})
+	for _, m := range models.Choices(query) {
+		cs = append(cs, choice{value: m.Value, title: m.Title, note: m.Note})
 	}
-	for _, tool := range []struct{ name, note, missing string }{
-		{"claude", "claude -p, streamed; searches the web when that is on", "not installed"},
-		{"codex", "codex exec, answers whole; searches the web when that is on", "not installed"},
-	} {
-		if _, err := exec.LookPath(tool.name); err == nil {
-			cs = append(cs, choice{value: tool.name, title: tool.name, note: tool.note})
-		} else {
-			cs = append(cs, choice{value: tool.name, title: tool.name, note: tool.missing})
-		}
-	}
-	if out, err := exec.Command("ollama", "list").Output(); err == nil {
-		for i, line := range strings.Split(string(out), "\n") {
-			if i == 0 {
-				continue
-			}
-			if f := strings.Fields(line); len(f) > 0 && !strings.Contains(f[0], "embed") {
-				cs = append(cs, choice{value: "ollama:" + f[0], title: "ollama " + f[0], note: "local, streamed; no web"})
-			}
-		}
-	}
-	for _, m := range lmStudioModels() {
-		cs = append(cs, choice{value: "lmstudio:" + m, title: "lmstudio " + m, note: "local, streamed; no web"})
-	}
-	cs = append(cs,
-		choice{value: "openai:gpt-5", title: "openai gpt-5", note: "needs an API key; type openai:<model> for another"},
-		choice{value: "", title: "The line in ~/.config/swoop/ai", note: "a command of your own; or the defaults when there is none"},
-	)
 	return cs
-}
-
-// lmStudioModels asks LM Studio's server, when it is up, what it has.
-func lmStudioModels() []string {
-	base := settings.Get(settings.AIURL, "http://localhost:1234/v1")
-	if !strings.Contains(base, "localhost") && !strings.Contains(base, "127.0.0.1") {
-		base = "http://localhost:1234/v1"
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base, "/")+"/models", nil)
-	if err != nil {
-		return nil
-	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
-	var out struct {
-		Data []struct {
-			ID string `json:"id"`
-		} `json:"data"`
-	}
-	if json.NewDecoder(resp.Body).Decode(&out) != nil {
-		return nil
-	}
-	var ids []string
-	for _, m := range out.Data {
-		if !strings.Contains(m.ID, "embed") {
-			ids = append(ids, m.ID)
-		}
-	}
-	return ids
 }
 
 func atoi(s string, fallback int) int {

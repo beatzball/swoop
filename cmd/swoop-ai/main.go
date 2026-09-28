@@ -32,6 +32,7 @@ import (
 
 	"github.com/beatzball/swoop/internal/chat"
 	"github.com/beatzball/swoop/internal/markdown"
+	"github.com/beatzball/swoop/internal/models"
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
 )
@@ -89,7 +90,7 @@ func fatal(msg string) {
 // view prints the pane's rows. The text in the bar is a prompt, not a
 // filter, so it is ignored: every conversation is always listed.
 func view(store chat.Store) error {
-	items := []protocol.Item{{ID: newID, Kind: "new", Icon: "", Title: "New conversation", Subtitle: "type, then Enter"}}
+	items := []protocol.Item{{ID: newID, Kind: "new", Icon: "", Title: "New conversation", Subtitle: "type, then Enter · " + shortModel()}}
 	all, err := store.List()
 	if err != nil {
 		return err
@@ -126,6 +127,15 @@ func ago(t time.Time) string {
 	}
 }
 
+// shortModel is the current model for the New row's subtitle: the
+// setting, or "default" when there is none.
+func shortModel() string {
+	if v := settings.Get(settings.AI, ""); v != "" {
+		return v
+	}
+	return "default model"
+}
+
 // dots are the frames under a prompt while the model has said nothing
 // yet. The worker's tick picks the frame.
 var dots = []string{"·", "··", "···"}
@@ -160,7 +170,7 @@ func elapsed(d time.Duration) string {
 // answer keeps its end in view.
 func preview(store chat.Store, id string) error {
 	if id == newID || id == "" {
-		fmt.Println("Type a question and press Enter.")
+		fmt.Printf("Type a question and press Enter.\n\n\x1b[2mModel: %s\nctrl-k changes it.\x1b[22m\n", models.Current())
 		return nil
 	}
 	c, err := store.Load(id)
@@ -218,10 +228,24 @@ func renderer() func(string) string {
 	}
 }
 
-// actions is the ctrl-k menu for a conversation. The New row has none.
+// actions is the ctrl-k menu: for New conversation, the models to pick
+// from, each a refresh row so Enter sets it and returns to the pane; for
+// a conversation, copy and delete.
 func actions(id string) error {
-	if id == newID || id == "" {
+	if id == "" {
 		return nil
+	}
+	if id == newID {
+		current := settings.Get(settings.AI, "")
+		var items []protocol.Item
+		for _, m := range models.Choices("") {
+			note := m.Note
+			if m.Value == current {
+				note = strings.TrimSpace("current  " + note)
+			}
+			items = append(items, protocol.Item{ID: "model:" + m.Value, Kind: "refresh", Icon: "󰭹", Title: m.Title, Subtitle: note})
+		}
+		return protocol.Write(os.Stdout, items)
 	}
 	return protocol.Write(os.Stdout, []protocol.Item{
 		{ID: "copy", Kind: "action", Icon: "", Title: "Copy last answer", Subtitle: "Enter"},
@@ -231,7 +255,14 @@ func actions(id string) error {
 }
 
 func run(store chat.Store, id, action string) error {
-	if id == newID || id == "" {
+	if id == "" {
+		return nil
+	}
+	if id == newID {
+		// The one thing New runs: a model picked from its ctrl-k menu.
+		if value, ok := strings.CutPrefix(action, "model:"); ok {
+			return settings.Set(settings.AI, value)
+		}
 		return nil
 	}
 	c, err := store.Load(id)

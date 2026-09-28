@@ -11,6 +11,9 @@ so here.
 
 ### Added
 
+- **ctrl-k on New conversation changes the model.** The same list as
+  Settings, Enter picks one and returns to the pane; the New row says
+  which model will answer.
 - **Ask AI with any model.** Presets under AI model in Settings: `claude`,
   `codex`, each `ollama` model, each model LM Studio has loaded, and
   `openai:<model>` for OpenAI or any server with that API (OpenRouter,
