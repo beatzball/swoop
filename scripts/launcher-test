@@ -17,6 +17,7 @@ searched. That is enough to say "this word appeared after that key",
 which is what every check here is.
 """
 
+import datetime
 import glob
 import json
 import os
@@ -219,6 +220,13 @@ esac
         write_exe(os.path.join(fakebin, name), f"""#!/usr/bin/env bash
 printf '%s\\n' "$@" > '{opened}'
 """)
+
+    # A snippet with a keyword, a placeholder filled on Enter, and a
+    # {cursor}, which outside a frame is only removed.
+    snippets = os.path.join(home, ".config", "swoop", "snippets")
+    os.makedirs(snippets)
+    with open(os.path.join(snippets, "fake-greeting.md"), "w") as f:
+        f.write("Fake Greeting\nkeyword: ;fg\n\nHello on {date}{cursor}!\n")
 
     # A fake clipboard, pbcopy on a Mac and wl-copy on Linux, that
     # records what it was given.
@@ -529,6 +537,35 @@ cat > '{copied}'
             finally:
                 fifth.kill()
         check("emoji", emoji)
+
+        # 11. a snippet: its name finds its row, Enter copies the text
+        # with {date} filled (outside a frame there is no app to paste
+        # into, as with emoji)
+        def snippet():
+            if os.path.exists(copied):
+                os.remove(copied)
+            sixth = Launcher(env)
+            sixth.key = key
+            try:
+                sixth.wait_state(lambda s: s["totalCount"] > 3, what="the sixth launcher's list")
+                sixth.send("fake greeting")
+                st = sixth.wait_state(lambda s: s["query"] == "fake greeting" and "Fake Greeting" in s["current"]["text"], what="the snippet row")
+                if ";fg" not in st["current"]["text"]:
+                    fail(f"the snippet's keyword should be in its row: {st['current']}", sixth.buf)
+                before = datetime.date.today().isoformat()
+                sixth.send("\r")
+                code = sixth.wait_exit()
+                after = datetime.date.today().isoformat()
+                if not os.path.exists(copied):
+                    fail(f"Enter on the snippet copied nothing (exit {code})", sixth.buf)
+                with open(copied, encoding="utf-8") as f:
+                    got = f.read()
+                if got not in (f"Hello on {before}!", f"Hello on {after}!"):
+                    fail(f"the clipboard got {got!r}", sixth.buf)
+                sixth.expect(r"Copied Hello on", what="the note that it was copied")
+            finally:
+                sixth.kill()
+        check("snippet", snippet)
     finally:
         L.kill()
         # The worker may still be around on a fast failure.

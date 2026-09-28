@@ -201,6 +201,32 @@ for now, Enter copies. ctrl-k copies, or pastes in one of the six skin
 tones; the default tone is in Settings. Words of your own go in
 `~/.config/swoop/emoji.keywords`, one line per character: `😀 grin happy`.
 
+## Snippets
+
+A snippet is named text you paste often: a signature, an address, a reply.
+Type its name, press Enter, and it is pasted into the app you came from,
+the same way as emoji (Accessibility; in a plain terminal, and on Linux
+for now, Enter copies). Each snippet is a markdown file in
+`~/.config/swoop/snippets/`: the first line is the name, an optional
+`keyword:` line follows, and the rest is the text.
+
+```text
+Signature
+keyword: ;sig
+
+Best,
+{cursor}
+```
+
+`{date}`, `{time}`, `{clipboard}` and `{uuid}` are filled when you paste,
+and `{cursor}` is where the caret ends up. To bring snippets from another
+launcher, or write one from the shell:
+
+```sh
+swoop-snippets import ~/Downloads/snippets.json   # a JSON export: name, text, keyword
+echo 'Thanks, {clipboard}' | swoop-snippets add 'Thanks' ';ty'
+```
+
 ## Used recently, and Stats
 
 The list starts with the five things you opened most recently, marked
