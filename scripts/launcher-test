@@ -340,6 +340,9 @@ cat > '{copied}'
             L.wait_state(lambda s: s["query"] == "claude" and s["matchCount"] == 1, what="the claude row")
             L.send("\r")
             L.expect(r"Ask AI > ", what="back in the pane")
+            # The pane is back only once New is under the cursor again: a
+            # ctrl-k sent before that lands on a model row and is ignored.
+            L.wait_state(lambda s: "ext/ai/new" in s["current"]["text"], what="the pane back with New under the cursor")
             with open(config) as f:
                 if "ai = claude" not in f.read():
                     fail("ctrl-k on New did not set ai = claude", L.buf)

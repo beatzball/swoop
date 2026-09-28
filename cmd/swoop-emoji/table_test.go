@@ -158,6 +158,9 @@ func captureView(t *testing.T, query string) string {
 	os.Stdout = f
 	err = view(query)
 	os.Stdout = stdout
+	// Closed before the read, and before the test's cleanup: Windows
+	// refuses to remove a file that is still open.
+	f.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
