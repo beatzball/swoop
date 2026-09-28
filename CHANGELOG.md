@@ -296,7 +296,7 @@ build and test but have no app source or frame yet.
 - **Extensions that are programs.** A folder with one executable that answers
   `list`, `preview`, `run`, and `view`, printing tab-separated lines. Found in
   `~/.config/swoop/extensions` and in `SWOOP_EXTENSIONS` (#21, #27).
-- **Navigation like Raycast** (#27). Esc clears the bar, then closes. Enter on
+- **Navigation like the launchers you know** (#27). Esc clears the bar, then closes. Enter on
   a "view" row opens a pane with its own rows, prompt, and preview; Esc there
   clears, then returns to the root with the old text and the same row
   selected. Enter with no match does nothing (#24).

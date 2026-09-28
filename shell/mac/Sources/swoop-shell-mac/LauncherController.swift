@@ -103,7 +103,7 @@ final class LauncherController: NSObject, NSWindowDelegate,
             for key in ["super+equal", "super+plus", "super+minus", "super+zero"] {
                 builder.withCustom("keybind", "\(key)=unbind")
             }
-            // cmd+K is the action menu, as in Raycast. The terminal never
+            // cmd+K is the action menu, as in the launchers you know. The terminal never
             // sees cmd keys, so the frame turns it into ctrl-k, which
             // bin/swoop binds.
             builder.withCustom("keybind", "super+k=text:\\x0b")
@@ -233,7 +233,7 @@ final class LauncherController: NSObject, NSWindowDelegate,
     // MARK: the panel lost the keyboard
 
     func windowDidResignKey(_: Notification) {
-        // A click into another app: the launcher goes away, like Raycast.
+        // A click into another app: the launcher goes away, like any launcher.
         if panel.isVisible { hide() }
     }
 }

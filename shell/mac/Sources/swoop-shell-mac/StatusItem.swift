@@ -1,7 +1,7 @@
 import AppKit
 
 /// The bird in the menu bar: the one visible sign that swoop is running,
-/// as Raycast and the other launchers have. Its menu opens the launcher,
+/// as the launchers you know have. Its menu opens the launcher,
 /// opens the settings folder, and quits. An accessory app has no Dock
 /// icon, so without this there is nothing to click.
 final class StatusItem {
