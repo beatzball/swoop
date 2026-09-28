@@ -133,6 +133,10 @@ final class LauncherController: NSObject, NSWindowDelegate,
         if panel.isVisible { hide() } else { show() }
     }
 
+    /// Whether the panel is on screen. The frame never restarts itself
+    /// while it is: see SelfWatch.
+    var isShowing: Bool { panel.isVisible }
+
     /// Start a swoop in the hidden panel, ready to be shown.
     private func prepare() {
         guard terminal == nil, let content = panel.contentView else { return }

@@ -39,6 +39,13 @@ latest. Run it again to upgrade. Logs are in `~/Library/Logs/swoop`, and
 `~/.local/share/swoop/current/scripts/uninstall` removes the agents and keeps
 your history.
 
+However it was installed, `swoop restart` restarts the frame and the
+clipboard watcher, `swoop stop` and `swoop start` stop and start them, and
+`swoop status` says whether they run, where from, and how they were
+installed. The bird in the menu bar has the same: Restart, and Quit, which
+keeps it down until the next login or `swoop start`. After an upgrade the
+frame restarts itself, once the panel is hidden.
+
 ## From a checkout
 
 ```sh

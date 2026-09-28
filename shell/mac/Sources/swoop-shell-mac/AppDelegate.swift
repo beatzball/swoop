@@ -8,6 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var endedSignal: DispatchSourceSignal?
     private var statusItem: StatusItem?
     private var configWatch: Timer?
+    private var selfWatch: Timer?
     private var hotkeySpec = ""
 
     func applicationDidFinishLaunching(_: Notification) {
@@ -34,6 +35,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard let self else { return }
             let now = Config.hotkey()
             if now != self.hotkeySpec { self.registerHotkey(now) }
+        }
+
+        // A new frame at our own path (an upgrade, a rebuild): exit once
+        // the panel is hidden, and the service starts the new one.
+        selfWatch = SelfWatch.watch(busy: { [weak launcher] in launcher?.isShowing ?? false }) {
+            FileHandle.standardError.write(Data("swoop-shell-mac: \(SelfWatch.path) changed; exiting so the service starts the new one\n".utf8))
+            exit(0)
         }
 
         // The bird in the menu bar. SWOOP_NO_MENU_BAR=1 leaves it out.

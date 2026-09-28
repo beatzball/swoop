@@ -6,8 +6,15 @@
 # the two stray-watcher bugs taught: both services unloaded before any
 # process is killed, every process gone before any service is started.
 #
+# The second half drives `swoop start|stop|restart|status` in bin/swoop
+# against the same fakes, plus a fake brew, ps and uname: which install it
+# recognises, and which commands it runs for each.
+#
 # It runs everywhere, in seconds, as part of `make test`.
 set -euo pipefail
+# A hotkey from the caller's environment would land in the plist and in
+# `swoop status`; the checks below expect the config file's.
+unset SWOOP_HOTKEY XDG_CONFIG_HOME
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/swoop-launchd-test.XXXXXX")"
@@ -21,7 +28,8 @@ log="$tmp/log"
 export SWOOP_TEST_STATE="$state" SWOOP_TEST_PROCS="$procs" SWOOP_TEST_LOG="$log"
 
 # The fakes. launchctl print succeeds while the label is loaded; bootout
-# unloads; bootstrap loads it as running and starts its process.
+# unloads; bootstrap loads it as running and starts its process; kickstart
+# needs it loaded.
 cat > "$tmp/bin/launchctl" <<'EOF'
 #!/usr/bin/env bash
 echo "launchctl $*" >> "$SWOOP_TEST_LOG"
@@ -42,6 +50,9 @@ case "$1" in
       dev.swoop.shell) echo swoop-shell-mac >> "$SWOOP_TEST_PROCS" ;;
       dev.swoop.clipd) rm -f "$SWOOP_TEST_PROCS.status" ;;
     esac ;;
+  kickstart)
+    label="${3##*/}"
+    grep -q "^$label " "$SWOOP_TEST_STATE" || exit 113 ;;
   *) exit 2 ;;
 esac
 EOF
@@ -53,10 +64,40 @@ grep -q "$pattern" "$SWOOP_TEST_PROCS" || exit 1
 grep -v "$pattern" "$SWOOP_TEST_PROCS" > "$SWOOP_TEST_PROCS.new" || true
 mv "$SWOOP_TEST_PROCS.new" "$SWOOP_TEST_PROCS"
 EOF
+# pgrep prints a pid: the process's line number, which the fake ps reads
+# back to say where that process's program is.
 cat > "$tmp/bin/pgrep" <<'EOF'
 #!/usr/bin/env bash
 pattern="${2:-$1}"
-grep -q "$pattern" "$SWOOP_TEST_PROCS"
+grep -n "$pattern" "$SWOOP_TEST_PROCS" | cut -d: -f1 | grep .
+EOF
+cat > "$tmp/bin/ps" <<'EOF'
+#!/usr/bin/env bash
+pid="${4:-}"
+case "$(sed -n "${pid}p" "$SWOOP_TEST_PROCS")" in
+  swoop-shell-mac) echo "$SWOOP_TEST_FRAME" ;;
+  "swoop-clipd run") echo "$SWOOP_TEST_DIR/bin/swoop-clipd" ;;
+  *) exit 1 ;;
+esac
+EOF
+# brew services list names swoop only when SWOOP_TEST_BREW_LISTS is set.
+cat > "$tmp/bin/brew" <<'EOF'
+#!/usr/bin/env bash
+echo "brew $*" >> "$SWOOP_TEST_LOG"
+if [ "$*" = "services list" ]; then
+  echo "Name   Status  User  File"
+  [ -z "${SWOOP_TEST_BREW_LISTS:-}" ] || echo "swoop  none"
+fi
+EOF
+cat > "$tmp/bin/uname" <<'EOF'
+#!/usr/bin/env bash
+echo "${SWOOP_TEST_UNAME:-Darwin}"
+EOF
+# A verb that fell through to the launcher would open fzf; this one says so.
+cat > "$tmp/bin/fzf" <<'EOF'
+#!/usr/bin/env bash
+echo "fzf $*" >> "$SWOOP_TEST_LOG"
+exit 2
 EOF
 cat > "$tmp/bin/id" <<'EOF'
 #!/usr/bin/env bash
@@ -133,5 +174,77 @@ grep -q "<string>$tmp/dir/bin/swoop-clipd</string>" "$HOME/Library/LaunchAgents/
 out="$(swoop_launchd "$tmp/dir" "$tmp/frame" 2>&1)" || fail "second swoop_launchd failed: $out"
 [ "$(grep -c 'swoop-clipd run' "$procs")" = 1 ] || fail "second run: watchers $(grep -c 'swoop-clipd run' "$procs")"
 [ "$(grep -c running "$state")" = 2 ] || fail "second run: services $(cat "$state")"
+
+# The verbs. bin/swoop finds the fakes first: it puts only its own bin/
+# ahead of PATH, and none of these live there.
+export SWOOP_TEST_FRAME="$tmp/frame" SWOOP_TEST_DIR="$tmp/dir" SWOOP_NO_CLIPD=1
+swoop="$root/bin/swoop"
+mkdir -p "$HOME/.config/swoop"
+echo "hotkey = ctrl+space" > "$HOME/.config/swoop/config"
+verb() { # expected-exit args...
+  local want="$1" got=0; shift
+  : > "$log"
+  out="$("$swoop" "$@" 2>&1)" || got=$?
+  [ "$got" = "$want" ] || fail "swoop $*: exit $got, want $want: $out"
+  if grep -q '^fzf' "$log"; then fail "swoop $* opened the launcher"; fi
+}
+line() { grep -n "^$1" "$log" | head -1 | cut -d: -f1; }
+
+# launchd, both running: restart kicks the watcher, then the frame.
+verb 0 restart
+k_clipd="$(line 'launchctl kickstart -k gui/501/dev.swoop.clipd')"
+k_shell="$(line 'launchctl kickstart -k gui/501/dev.swoop.shell')"
+[ -n "$k_clipd" ] && [ -n "$k_shell" ] || fail "restart did not kickstart both"
+[ "$k_clipd" -lt "$k_shell" ] || fail "restart kicked the frame before the watcher"
+if grep -q '^brew services restart' "$log"; then fail "a launchd install was restarted with brew"; fi
+
+# stop: the frame, then the watcher, and nothing left loaded.
+verb 0 stop
+b_shell="$(line 'launchctl bootout gui/501/dev.swoop.shell')"
+b_clipd="$(line 'launchctl bootout gui/501/dev.swoop.clipd')"
+[ -n "$b_shell" ] && [ -n "$b_clipd" ] || fail "stop did not boot out both"
+[ "$b_shell" -lt "$b_clipd" ] || fail "stop took the watcher down before the frame"
+[ ! -s "$state" ] || fail "stop left services loaded: $(cat "$state")"
+grep -v swoop-shell-mac "$procs" > "$procs.new" || true; mv "$procs.new" "$procs"
+
+verb 0 status
+case "$out" in *"frame:   not running, hotkey ctrl+space"*"installed by launchd"*) ;; *) fail "status, stopped: $out" ;; esac
+case "$out" in *"$tmp/frame"*) ;; *) fail "status does not say where the frame is: $out" ;; esac
+
+# start: the watcher's agent, then the frame's.
+verb 0 start
+s_clipd="$(line 'launchctl bootstrap gui/501 .*dev.swoop.clipd.plist')"
+s_shell="$(line 'launchctl bootstrap gui/501 .*dev.swoop.shell.plist')"
+[ -n "$s_clipd" ] && [ -n "$s_shell" ] || fail "start did not bootstrap both"
+[ "$s_clipd" -lt "$s_shell" ] || fail "start started the frame before the watcher"
+[ "$(grep -c running "$state")" = 2 ] || fail "start: services $(cat "$state")"
+verb 0 start
+grep -q '^launchctl bootstrap' "$log" && fail "start bootstrapped a service already running"
+
+verb 0 status
+case "$out" in *"frame:   running, pid "*"hotkey ctrl+space"*"$tmp/frame, installed by launchd"*) ;; *) fail "status, running: $out" ;; esac
+case "$out" in *"watcher: running, pid "*) ;; *) fail "status, watcher: $out" ;; esac
+
+# Homebrew, told by the running frame's path: brew services, no launchctl.
+SWOOP_TEST_FRAME=/opt/homebrew/Cellar/swoop/1.0.0/libexec/bin/swoop-shell-mac verb 0 restart
+grep -q '^brew services restart swoop$' "$log" || fail "a Homebrew frame was not restarted with brew services"
+if grep -q '^launchctl' "$log"; then fail "a Homebrew frame was restarted with launchctl"; fi
+
+# Homebrew, told by brew's list: no frame running and no plist of ours.
+rm -f "$HOME/Library/LaunchAgents/"dev.swoop.*.plist
+grep -v swoop-shell-mac "$procs" > "$procs.new" || true; mv "$procs.new" "$procs"
+SWOOP_TEST_BREW_LISTS=1 verb 0 stop
+grep -q '^brew services stop swoop$' "$log" || fail "brew's list did not make stop a brew services stop"
+SWOOP_TEST_BREW_LISTS=1 verb 0 status
+case "$out" in *"installed by homebrew"*) ;; *) fail "status, Homebrew: $out" ;; esac
+
+# Neither: say how to install it, and exit 1.
+verb 1 restart
+case "$out" in *"not installed"*) ;; *) fail "no install, restart said: $out" ;; esac
+verb 1 status
+
+# Linux and Windows: no frame yet.
+SWOOP_TEST_UNAME=Linux verb 1 restart
+case "$out" in *"no frame on this OS yet"*) ;; *) fail "Linux restart said: $out" ;; esac
 
 echo "launchd-test: ok"

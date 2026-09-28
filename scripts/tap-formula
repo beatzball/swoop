@@ -90,6 +90,8 @@ class Swoop < Formula
 
       On a Mac, the frame (a panel on alt+shift+space) runs at login with:
         brew services start swoop
+      After that, swoop restart, swoop stop, swoop start, swoop status;
+      the bird in the menu bar has Restart and Quit.
 
       The service sees Homebrew's PATH only. If your AI command lives
       elsewhere, name it in full in ~/.config/swoop/ai, for example:

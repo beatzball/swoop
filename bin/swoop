@@ -27,6 +27,134 @@ export PATH="$here:$PATH"
 # ~/.config/swoop/extensions. The user's win when names collide.
 export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIONS}"
 
+# swoop start|stop|restart|status: the frame's service, whichever way it
+# was installed, so nobody has to remember brew services or launchctl.
+# They run before fzf, so `swoop restart` never opens the launcher. Any
+# other argument, or none, opens the launcher as always.
+#
+#   Homebrew   the running frame's path is under a Homebrew prefix, or
+#              `brew services list` names swoop: brew services does it
+#   launchd    the curl installer or a checkout, ~/Library/LaunchAgents/
+#              dev.swoop.shell.plist exists: launchctl on dev.swoop.shell
+#              and dev.swoop.clipd
+#
+# Written for the bash macOS ships, 3.2: no arrays under set -u, no
+# readlink -f.
+swoop_service() {
+  local verb="$1" domain agents pid path how label plist
+  case "$(uname -s)" in
+    Darwin) ;;
+    *) echo "swoop $verb: there is no frame on this OS yet; run swoop in a terminal" >&2; return 1 ;;
+  esac
+  domain="gui/$(id -u)"
+  agents="$HOME/Library/LaunchAgents"
+  pid="$(pgrep -x swoop-shell-mac 2>/dev/null | head -1)"
+  path=""
+  [ -z "$pid" ] || path="$(ps -o comm= -p "$pid" 2>/dev/null)"
+
+  # The running frame knows best where it came from. When none runs, a
+  # plist of ours is firmer evidence than brew's list, which names swoop
+  # on any Mac that has the formula, used or not.
+  how=""
+  case "$path" in
+    */Cellar/*|/opt/homebrew/*|/home/linuxbrew/*) how=homebrew ;;
+  esac
+  [ -n "$how" ] || [ ! -f "$agents/dev.swoop.shell.plist" ] || how=launchd
+  if [ -z "$how" ] && command -v brew >/dev/null 2>&1 &&
+    brew services list 2>/dev/null | awk '$1 == "swoop" { f = 1 } END { exit !f }'; then
+    how=homebrew
+  fi
+
+  if [ "$verb" = status ]; then
+    _swoop_status "$how" "$pid" "$path"
+    [ -n "$how" ] || { _swoop_not_installed; return 1; }
+    return 0
+  fi
+  case "$how" in
+    homebrew)
+      # The clipboard watcher is no service under Homebrew: the launcher
+      # starts it the first time it runs, and it keeps running.
+      brew services "$verb" swoop ;;
+    launchd)
+      # The watcher first, so the frame's first swoop finds it running.
+      # Stop goes the other way: the frame, then the watcher.
+      local labels="dev.swoop.clipd dev.swoop.shell"
+      [ "$verb" = stop ] && labels="dev.swoop.shell dev.swoop.clipd"
+      for label in $labels; do
+        plist="$agents/$label.plist"
+        # An install older than the watcher's agent has only the frame's.
+        [ -f "$plist" ] || continue
+        if launchctl print "$domain/$label" >/dev/null 2>&1; then
+          case "$verb" in
+            start) echo "$label is already running" ;;
+            stop) launchctl bootout "$domain/$label" || return 1; echo "stopped $label" ;;
+            # -k kills the running one first; KeepAlive would bring it
+            # back anyway, but kickstart does it now and waits.
+            restart) launchctl kickstart -k "$domain/$label" || return 1; echo "restarted $label" ;;
+          esac
+        else
+          case "$verb" in
+            stop) echo "$label is not running" ;;
+            *) launchctl bootstrap "$domain" "$plist" || return 1; echo "started $label" ;;
+          esac
+        fi
+      done ;;
+    *)
+      _swoop_not_installed
+      return 1 ;;
+  esac
+}
+
+_swoop_not_installed() {
+  cat >&2 <<'MSG'
+swoop: the frame is not installed. Install it one of these ways:
+  brew install beatzball/tap/swoop && brew services start swoop
+  curl -fsSL https://raw.githubusercontent.com/beatzball/swoop/main/scripts/get | bash
+  make install, from a checkout
+MSG
+}
+
+# One line for the frame, one for the watcher. Reads agents and here from
+# the caller.
+_swoop_status() { # how pid path
+  local how="$1" pid="$2" path="$3" hotkey="" version="?" plist wpid wpath
+  plist="$agents/dev.swoop.shell.plist"
+  # The frame's own order: SWOOP_HOTKEY in its environment, then the
+  # config file, then the default. See shell/mac Config.hotkey.
+  [ ! -f "$plist" ] || hotkey="$(sed -n 's:.*<key>SWOOP_HOTKEY</key><string>\(.*\)</string>.*:\1:p' "$plist")"
+  [ -n "$hotkey" ] || hotkey="$(awk -F= '
+    /^[ \t]*#/ { next }
+    { k = $1; gsub(/[ \t]/, "", k) }
+    k == "hotkey" { v = substr($0, index($0, "=") + 1); gsub(/^[ \t]+|[ \t]+$/, "", v) }
+    END { print v }' "${XDG_CONFIG_HOME:-$HOME/.config}/swoop/config" 2>/dev/null)"
+  [ -n "$hotkey" ] || hotkey="alt+shift+space"
+  [ ! -f "$here/../VERSION" ] || version="$(tr -d '[:space:]' < "$here/../VERSION")"
+  # Where the frame is when it is not running: what its plist would run,
+  # or the one beside this script, as a release and Homebrew keep it.
+  if [ -z "$path" ]; then
+    [ ! -f "$plist" ] || path="$(sed -n '/<key>ProgramArguments<\/key>/,/<\/array>/s:.*<string>\(.*\)</string>.*:\1:p' "$plist" | head -1)"
+    [ -n "$path" ] || [ ! -x "$here/swoop-shell-mac" ] || path="$here/swoop-shell-mac"
+  fi
+  if [ -n "$pid" ]; then
+    echo "frame:   running, pid $pid, hotkey $hotkey, version $version, ${path:-?}, installed by ${how:-hand}"
+  else
+    echo "frame:   not running, hotkey $hotkey, version $version, ${path:-?}, installed by ${how:-nothing}"
+  fi
+  wpid="$(pgrep -f 'swoop-clipd run' 2>/dev/null | head -1)"
+  if [ -n "$wpid" ]; then
+    wpath="$(ps -o comm= -p "$wpid" 2>/dev/null)"
+    echo "watcher: running, pid $wpid, ${wpath:-?}"
+  else
+    echo "watcher: not running, $here/swoop-clipd"
+  fi
+}
+
+case "${1:-}" in
+  start|stop|restart|status)
+    swoop_service "$1" || status=$?
+    exit "$status" ;;
+esac
+
 # The line is: id, kind, icon, title, subtitle, tab-separated.
 #   --with-nth   a template: show "icon title", then a tab, then the subtitle;
 #                the id and kind stay hidden. {1} in the enter binding is still
