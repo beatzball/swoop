@@ -227,6 +227,18 @@ swoop-snippets import ~/Downloads/snippets.json   # a JSON export: name, text, k
 echo 'Thanks, {clipboard}' | swoop-snippets add 'Thanks' ';ty'
 ```
 
+## Notes
+
+Type `notes`, Enter: your notes, the most recently changed first, each
+previewed as rendered markdown. Typing searches the titles and the text.
+Enter opens the note in the app that opens `.md` files. `New note`, at
+the top, makes a note whose first line is what you typed, and opens it.
+ctrl-k copies the text, shows the file in its folder, or deletes it.
+
+Each note is a markdown file in `~/.local/share/swoop/notes/`, and its
+first line is its title. Any editor works, and so does any sync. Delete
+moves the file to `deleted/` in that folder, so you can get it back.
+
 ## Window management
 
 Rows that move the window you were in: Left, Right, Top, and Bottom Half;
