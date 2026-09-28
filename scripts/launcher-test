@@ -399,16 +399,22 @@ cat > '{copied}'
 
         # 5. the divider keys write the width
         def divider():
+            # The key's transform writes the file; on a slow runner that
+            # can take longer than a fixed pause, so the file is polled.
+            def saved(line, timeout=5.0):
+                end = time.time() + timeout
+                while time.time() < end:
+                    with open(config) as f:
+                        if line in f.read():
+                            return True
+                    L.read(0.1)
+                return False
             L.send("\x1b[1;3D")  # alt-left
-            L.read(0.6)
-            with open(config) as f:
-                if "preview = 63" not in f.read():
-                    fail("alt-left did not save preview = 63", L.buf)
+            if not saved("preview = 63"):
+                fail("alt-left did not save preview = 63", L.buf)
             L.send("\x1b[1;3C")  # alt-right
-            L.read(0.6)
-            with open(config) as f:
-                if "preview = 58" not in f.read():
-                    fail("alt-right did not save preview = 58", L.buf)
+            if not saved("preview = 58"):
+                fail("alt-right did not save preview = 58", L.buf)
         check("divider keys", divider)
 
         # 6. Settings: the key opens the pane, a choice sets a value and returns
