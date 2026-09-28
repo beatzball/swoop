@@ -101,7 +101,9 @@ PATH="$PWD/bin:$PATH" shell/mac/.build/release/swoop-shell-mac
 Then press alt+shift+space. Esc closes it, Enter opens what you picked, a
 click elsewhere hides it, and the next press is a fresh launcher with an
 empty bar. `SWOOP_HOTKEY=alt+space` picks another key; `SWOOP_LAUNCHER`
-points at a different `swoop`. It needs no Ghostty.app and no permission.
+points at a different `swoop`. It needs no Ghostty.app. One permission,
+Accessibility, and only to paste emoji and snippets for you: macOS asks
+the first time.
 
 cmd+[ and cmd+] move the divider between the list and the preview, 5% a
 step, and the width is remembered in `~/.config/swoop/config` (`preview =
@@ -194,10 +196,13 @@ Type `emoji`, Enter, then a name or a keyword: `rocket`, `+1`, `flag jap`,
 symbols: arrows, math, currency, punctuation, keyboard keys, box drawing,
 Greek. What you used last comes first.
 
-Enter pastes into the app you came from. That is a cmd+V keystroke, so
-the frame needs Accessibility (System Settings > Privacy & Security);
-without it Enter copies and says so. In a plain terminal, and on Linux
-for now, Enter copies. ctrl-k copies, or pastes in one of the six skin
+Enter pastes into the app you came from. The frame hides, then presses
+cmd+V, but only when a text field has the focus (or the app shows none,
+like a terminal); on a button or the desktop it copies and a
+notification says so. The keystroke needs Accessibility for
+swoop-shell-mac: the first paste brings up the system dialog, and until
+it is on Enter copies. In a plain terminal, and on Linux for now, Enter
+copies. ctrl-k copies, or pastes in one of the six skin
 tones; the default tone is in Settings. Words of your own go in
 `~/.config/swoop/emoji.keywords`, one line per character: `😀 grin happy`.
 
@@ -205,8 +210,9 @@ tones; the default tone is in Settings. Words of your own go in
 
 A snippet is named text you paste often: a signature, an address, a reply.
 Type its name, press Enter, and it is pasted into the app you came from,
-the same way as emoji (Accessibility; in a plain terminal, and on Linux
-for now, Enter copies). Each snippet is a markdown file in
+the same way as emoji (only into a text field, Accessibility for
+swoop-shell-mac; in a plain terminal, and on Linux for now, Enter
+copies). Each snippet is a markdown file in
 `~/.config/swoop/snippets/`: the first line is the name, an optional
 `keyword:` line follows, and the rest is the text.
 

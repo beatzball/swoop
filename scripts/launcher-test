@@ -291,6 +291,7 @@ cat > '{copied}'
     # not send a keystroke to whatever is on the screen.
     env.pop("SWOOP_SHELL", None)
     env.pop("SWOOP_SHELL_PID", None)
+    env.pop("SWOOP_PASTE", None)
     config = os.path.join(home, ".config", "swoop", "config")
 
     def check(name, fn):

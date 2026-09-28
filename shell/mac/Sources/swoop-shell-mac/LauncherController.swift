@@ -136,6 +136,7 @@ final class LauncherController: NSObject, NSWindowDelegate,
     /// Start a swoop in the hidden panel, ready to be shown.
     private func prepare() {
         guard terminal == nil, let content = panel.contentView else { return }
+        Paster.discard()
         let view = TerminalView(frame: content.bounds)
         view.autoresizingMask = [.width, .height]
         view.delegate = self
@@ -147,7 +148,10 @@ final class LauncherController: NSObject, NSWindowDelegate,
             // callback is never wired up for the exec backend). The frame
             // then replaces the surface before the terminal can show
             // "Process exited".
-            envVars: ["SWOOP_SHELL": "mac", "SWOOP_SHELL_PID": String(getpid())],
+            //
+            // SWOOP_PASTE is where the launcher leaves text to paste; the
+            // frame reads it on that same signal. See Paster.
+            envVars: ["SWOOP_SHELL": "mac", "SWOOP_SHELL_PID": String(getpid()), "SWOOP_PASTE": Paster.requestPath],
             command: command,
             waitAfterCommand: false
         )
@@ -171,9 +175,14 @@ final class LauncherController: NSObject, NSWindowDelegate,
         panel.orderOut(nil)
     }
 
-    /// swoop said it is exiting (SIGUSR2). Replace it.
+    /// swoop said it is exiting (SIGUSR2). Replace it, and once the panel
+    /// is off screen, paste what it asked for, if it asked.
     func launcherEnded() {
+        // Taken first: replace starts the next launcher, and that clears
+        // any request left over.
+        let request = Paster.take()
         replace()
+        if let request { Paster.paste(request) }
     }
 
     /// swoop ended: drop its surface and start the next one, hidden.

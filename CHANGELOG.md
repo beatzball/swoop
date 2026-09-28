@@ -46,6 +46,11 @@ so here.
 
 ### Changed
 
+- **Emoji and snippets paste from the frame.** The frame hides its panel,
+  then presses cmd+V itself, and only into a text field (or an app that
+  shows no focus, like a terminal); on a button or the desktop the text
+  is copied and a notification says so. No more osascript keystroke or
+  fixed wait, and the Accessibility prompt now names swoop-shell-mac.
 - **Lighter tools.** The twelve tools together are 30 MB stripped, from
   35. swoop-settings no longer carries an HTTP stack for one request to
   LM Studio on localhost; the Kitty placeholder table and a small width
