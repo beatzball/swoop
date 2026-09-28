@@ -66,6 +66,13 @@ so here.
   function replace a Charm package that brought four modules along for
   two constants and one measurement.
 
+### Fixed
+
+- **The Reminders pane is no longer empty.** It opens at once, from a
+  cache or with a `Loading reminders…` row, and fills itself when the
+  list arrives. The list is read through EventKit in a fraction of a
+  second, not in 40 through Apple Events.
+
 ## [0.7.0] - 2026-09-27
 
 Settings inside the launcher, Ask AI with any model, and the list that

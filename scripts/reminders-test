@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+# reminders-test: extensions/reminders against a pretend Reminders. A fake
+# osascript on PATH answers the fetch with made-up reminders after a pause,
+# and logs every call; a fake curl logs the reload it is asked to send to
+# fzf. The real osascript is never called.
+#
+# What it holds the script to: a view answers at once whatever the cache
+# holds (nothing, stale, fresh), a fetch runs behind it only when the cache
+# is not fresh, one fetch at a time, and the pane is reloaded after it.
+#
+# Reminders is a Mac's, and the script reads the clock the BSD way, so this
+# runs on a Mac only, as part of `make test`.
+set -euo pipefail
+
+if [ "$(uname)" != Darwin ]; then
+  echo "reminders-test: skipped, not a Mac"
+  exit 0
+fi
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/swoop-reminders-test.XXXXXX")"
+trap 'rm -rf "$tmp"' EXIT
+export HOME="$tmp/home" XDG_STATE_HOME="$tmp/state"
+mkdir -p "$HOME" "$tmp/bin"
+log="$tmp/log"
+: > "$log"
+export SWOOP_TEST_LOG="$log" SWOOP_TEST_DELAY=1
+export SWOOP_STATE="$tmp/swoop-state" FZF_API_KEY=test-key
+unset FZF_SOCK
+dir="$XDG_STATE_HOME/swoop/reminders"
+cache="$dir/reminders.tsv"
+reminders="$root/extensions/reminders/reminders"
+
+# The fakes. A fetch is told apart from a change by what it asks for.
+cat > "$tmp/bin/osascript" <<'EOF'
+#!/usr/bin/env bash
+script="$4"
+case "$script" in
+  *EKEventStore*)
+    echo fetch >> "$SWOOP_TEST_LOG"
+    sleep "$SWOOP_TEST_DELAY"
+    [ -z "${SWOOP_TEST_DENIED:-}" ] || { echo "not allowed" >&2; exit 1; }
+    printf 'x-apple-reminder://A\t2000-01-01\t\tHome\tFake water the plants\n'
+    printf 'x-apple-reminder://B\t\t\tWork\tFake send the report\n' ;;
+  *'function run() {'*Application*) echo slowfetch >> "$SWOOP_TEST_LOG"; exit 1 ;;
+  *completed\ =\ true*) echo "complete $5" >> "$SWOOP_TEST_LOG" ;;
+  *defaultList*) echo "add $5" >> "$SWOOP_TEST_LOG"; printf 'x-apple-reminder://C\tInbox\n' ;;
+  *) echo "unexpected osascript" >> "$SWOOP_TEST_LOG"; exit 1 ;;
+esac
+EOF
+cat > "$tmp/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+echo "curl $*" >> "$SWOOP_TEST_LOG"
+EOF
+cat > "$tmp/bin/swoop-tasks" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\t%s\n' "${2% tomorrow}" "$([ "${2% tomorrow}" = "$2" ] || date -v+1d +%F)"
+EOF
+chmod +x "$tmp/bin/"*
+export PATH="$tmp/bin:$PATH"
+
+fail() { echo "reminders-test: FAIL: $*" >&2; echo "--- log:" >&2; cat "$log" >&2; exit 1; }
+count() { grep -c "^$1\$" "$log" || true; }
+
+# view runs the view and fails if it took a second or more: the launcher
+# gives it two, and the fake fetch alone takes one.
+view() {
+  local start end
+  start=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
+  "$reminders" view reminders > "$tmp/out"
+  end=$(perl -MTime::HiRes=time -e 'printf "%.3f", time')
+  perl -e "exit(($end - $start) < 1 ? 0 : 1)" || fail "view took $(perl -e "print $end - $start")s"
+}
+
+# settle waits for the fetch in the background to finish.
+settle() {
+  local _
+  for _ in $(seq 1 50); do
+    [ -d "$dir/fetch.lock" ] || return 0
+    sleep 0.1
+  done
+  fail "the fetch did not finish"
+}
+
+check() { printf '  %s ...' "$1"; "$2"; echo " ok"; }
+
+empty_cache() {
+  view
+  grep -q $'^loading\ttoggle\t.*Loading reminders' "$tmp/out" || fail "no Loading row: $(cat "$tmp/out")"
+  [ "$(wc -l < "$tmp/out")" -eq 1 ] || fail "more than the Loading row: $(cat "$tmp/out")"
+  settle
+  [ "$(count fetch)" -eq 1 ] || fail "want one fetch"
+  grep -q -- "--unix-socket $SWOOP_STATE.sock -H x-api-key: test-key .*reload(swoop-nav rows {q})" "$log" || fail "the pane was not reloaded"
+  view
+  grep -q $'^r:x-apple-reminder://A\ttoggle\t.*\tFake water the plants\toverdue, 2000-01-01 · Home$' "$tmp/out" || fail "no overdue row: $(cat "$tmp/out")"
+  grep -q $'^r:x-apple-reminder://B\ttoggle\t.*\tFake send the report\tWork$' "$tmp/out" || fail "no row without a day: $(cat "$tmp/out")"
+  [ "$(count fetch)" -eq 1 ] || fail "a fresh cache started a fetch"
+}
+check "empty cache: Loading, a fetch, a reload, then rows" empty_cache
+
+stale_cache() {
+  : > "$log"
+  printf 'x-apple-reminder://Z\t\t\tOld\tFake old one\n' > "$cache"
+  touch -t 200001010000 "$cache"
+  view
+  grep -q 'Fake old one' "$tmp/out" || fail "the stale rows were not shown: $(cat "$tmp/out")"
+  settle
+  [ "$(count fetch)" -eq 1 ] || fail "want one fetch behind a stale cache"
+  view
+  grep -q 'Fake old one' "$tmp/out" && fail "the cache was not refreshed"
+  grep -q 'Fake water the plants' "$tmp/out" || fail "the fetched rows are missing"
+}
+check "stale cache: its rows at once, a fetch behind" stale_cache
+
+one_fetch() {
+  : > "$log"
+  rm -f "$cache"
+  view
+  view
+  view
+  settle
+  [ "$(count fetch)" -eq 1 ] || fail "want one fetch for three views, got $(count fetch)"
+}
+check "the lock: three views, one fetch" one_fetch
+
+dead_lock() {
+  : > "$log"
+  rm -f "$cache"
+  mkdir -p "$dir/fetch.lock"
+  touch -t 200001010000 "$dir/fetch.lock"
+  view
+  settle
+  [ "$(count fetch)" -eq 1 ] || fail "a lock left by a dead fetch blocked the next one"
+}
+check "a lock older than two minutes is broken" dead_lock
+
+denied() {
+  : > "$log"
+  rm -f "$cache"
+  SWOOP_TEST_DENIED=1 view
+  settle
+  [ "$(count slowfetch)" -eq 1 ] || fail "EventKit failing did not fall back to Apple Events"
+  SWOOP_TEST_DENIED=1 view
+  grep -q $'^perm\tcommand\t.*not allowed yet' "$tmp/out" || fail "no permission row: $(cat "$tmp/out")"
+  settle
+  view
+  settle
+  view
+  grep -q 'Fake water the plants' "$tmp/out" || fail "allowing it did not bring the rows"
+}
+check "no permission: the fallback, then the permission row" denied
+
+complete() {
+  : > "$log"
+  "$reminders" run r:x-apple-reminder://A complete
+  grep -q '^complete x-apple-reminder://A$' "$log" || fail "Reminders was not asked to complete it"
+  grep -q 'Fake water the plants' "$cache" && fail "the cache still holds the completed one"
+  view
+  grep -q 'Fake send the report' "$tmp/out" || fail "the other one went missing"
+  [ "$(count fetch)" -eq 0 ] || fail "completing started a fetch"
+}
+check "complete patches the cache" complete
+
+add() {
+  : > "$log"
+  "$reminders" run 'add:Fake buy stamps tomorrow'
+  grep -q '^add Fake buy stamps$' "$log" || fail "Reminders was not asked to add it"
+  view
+  grep -q $'^r:x-apple-reminder://C\ttoggle\t.*\tFake buy stamps\ttomorrow · Inbox$' "$tmp/out" || fail "the new one is not in the pane: $(cat "$tmp/out")"
+  [ "$(count fetch)" -eq 0 ] || fail "adding started a fetch"
+}
+check "add patches the cache" add
+
+loading_enter() {
+  "$reminders" run loading || fail "Enter on Loading failed"
+}
+check "Enter on Loading does nothing" loading_enter
+
+echo "reminders-test: ok"

@@ -6,28 +6,86 @@
 # date words at its end ("tomorrow", "friday", "2026-10-01") become its
 # due day, read by swoop-tasks so both checklists read them alike.
 #
-# Everything goes through osascript, in JavaScript for Automation, and
-# Reminders answers in a second or two. The view runs on every keystroke,
-# so the list is kept in a temp file for a few seconds. The first call
-# asks for permission to Reminders; until it is given, the view says so.
+# Everything goes through osascript, in JavaScript for Automation. The
+# list is read through EventKit, the framework Reminders itself sits on,
+# in a tenth of a second; asked through Apple Events, Reminders takes ten
+# seconds for every property of every reminder, and a minute for the list.
+# EventKit needs Reminders under Privacy & Security for the app swoop runs
+# in; without it, the list is read the slow way. Changes (complete, delete,
+# add) go through Apple Events, one reminder each.
+#
+# The view never waits for Reminders: the launcher gives a view two
+# seconds. It answers from a cache, however old, or with a Loading row
+# when there is none, and a fetch in the background fills the cache and
+# asks fzf to reload the pane. One fetch at a time; the cache is good for
+# a minute. The first call asks for permission; until it is given, the
+# view says so.
 #
 # On other systems there is no Reminders, and `list` prints nothing.
 set -euo pipefail
 
 [ "$(uname)" = Darwin ] || exit 0
 
-cache="${TMPDIR:-/tmp}/swoop-reminders.$(id -u).tsv"
-ttl=5
+dir="${XDG_STATE_HOME:-$HOME/.local/state}/swoop/reminders"
+cache="$dir/reminders.tsv"
+lock="$dir/fetch.lock"
+# denied is left by a fetch that failed, most likely for want of
+# permission, so the view can say so instead of Loading for ever.
+denied="$dir/denied"
+ttl=60
 settings='x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders'
 
 row() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5"; }
 clean() { printf '%s' "$1" | tr '\t\r\n' '   '; }
 
 # fetch prints every open reminder, one per line: id, due day, due time
-# (empty for none or midnight), list, name. The properties are read a
-# list at a time, one Apple event each, not one per reminder: that is
-# the difference between a second and a minute on a long list.
+# (empty for none or midnight), list, name. EventKit first; when it is
+# not allowed (it fails at once), Apple Events.
 fetch() {
+  fetch_eventkit || fetch_events
+}
+
+# fetch_eventkit asks EventKit for the incomplete reminders, in one call.
+# The ids are Apple Events', x-apple-reminder:// and the item's id, so
+# Enter completes the same reminder either way. A due date with no hour
+# is an all-day one: the hour is NSUndefinedDateComponent, a huge number.
+fetch_eventkit() {
+  # $ is the ObjC bridge in JavaScript, not a shell expansion.
+  # shellcheck disable=SC2016
+  osascript -l JavaScript -e '
+ObjC.import("EventKit");
+function run() {
+  const full = 3; // EKAuthorizationStatusFullAccess
+  if (Number($.EKEventStore.authorizationStatusForEntityType($.EKEntityTypeReminder)) !== full)
+    throw new Error("EventKit: no access to Reminders");
+  const store = $.EKEventStore.alloc.init;
+  const pred = store.predicateForIncompleteRemindersWithDueDateStartingEndingCalendars($(), $(), $());
+  let got = null;
+  store.fetchRemindersMatchingPredicateCompletion(pred, rs => { got = rs; });
+  const end = Date.now() + 20000;
+  while (got === null && Date.now() < end)
+    $.NSRunLoop.currentRunLoop.runUntilDate($.NSDate.dateWithTimeIntervalSinceNow(0.01));
+  if (got === null) throw new Error("EventKit: no answer");
+  const pad = n => (n < 10 ? "0" : "") + n;
+  const str = s => (s.isNil() ? "" : s.js).replace(/[\t\r\n]+/g, " ");
+  const out = [];
+  for (let i = 0; i < got.count; i++) {
+    const r = got.objectAtIndex(i);
+    const c = r.dueDateComponents;
+    let day = "", hm = "";
+    if (!c.isNil()) {
+      day = c.year + "-" + pad(c.month) + "-" + pad(c.day);
+      if (c.hour < 24 && (c.hour || c.minute)) hm = pad(c.hour) + ":" + pad(c.minute < 60 ? c.minute : 0);
+    }
+    out.push(["x-apple-reminder://" + r.calendarItemIdentifier.js, day, hm, str(r.calendar.title), str(r.title)].join("\t"));
+  }
+  return out.join("\n");
+}'
+}
+
+# fetch_events asks Reminders through Apple Events, a list at a time.
+# Slow: every property read is a pass over every reminder.
+fetch_events() {
   osascript -l JavaScript -e '
 function run() {
   const R = Application("Reminders");
@@ -59,18 +117,40 @@ fresh() {
   [ "$age" -lt "$ttl" ]
 }
 
-# load prints the list, from the cache when it is fresh. A fetch that
-# fails (no permission yet) leaves no cache, so the next call asks again.
-load() {
-  if ! fresh; then
-    local tmp="$cache.$$"
-    if ! fetch > "$tmp" 2>/dev/null; then
-      rm -f "$tmp"
-      return 1
-    fi
-    mv "$tmp" "$cache"
+# refresh starts a fetch in the background, unless one is running, and
+# returns at once. The lock is a directory, since mkdir either makes it
+# or fails, atomically; one older than two minutes was left by a fetch
+# that died. The fetch's streams go to /dev/null: the launcher reads the
+# view's stdout until it closes, and would wait for the fetch too.
+refresh() {
+  mkdir -p "$dir"
+  if ! mkdir "$lock" 2>/dev/null; then
+    [ -n "$(find "$lock" -maxdepth 0 -mmin +2 2>/dev/null)" ] || return 0
+    rm -rf "$lock"
+    mkdir "$lock" 2>/dev/null || return 0
   fi
-  cat "$cache"
+  (
+    trap 'rm -rf "$lock"' EXIT
+    tmp="$cache.fetch"
+    if fetch > "$tmp"; then
+      mv "$tmp" "$cache"
+      rm -f "$denied"
+    else
+      rm -f "$tmp"
+      : > "$denied"
+    fi
+    redraw
+  ) < /dev/null > /dev/null 2>&1 &
+}
+
+# redraw asks the fzf that shows the pane to reload it, through the socket
+# bin/swoop gave it, as swoop-ai's worker does. Outside a launcher there
+# is none, and the next keystroke shows the new list.
+redraw() {
+  local sock="${FZF_SOCK:-${SWOOP_STATE:+$SWOOP_STATE.sock}}"
+  [ -n "$sock" ] || return 0
+  curl -s -m 2 --unix-socket "$sock" -H "x-api-key: ${FZF_API_KEY:-}" \
+    --data-binary 'reload(swoop-nav rows {q})' http://fzf/ > /dev/null || true
 }
 
 # forget takes one reminder out of the cache, so the view reloads without
@@ -80,11 +160,21 @@ forget() {
   awk -F '\t' -v id="$1" '$1 != id' "$cache" > "$cache.$$" && mv "$cache.$$" "$cache"
 }
 
+# remember puts one new reminder's line in the cache, the same way. With
+# no cache there is nothing to patch: a cache of that one line would look
+# like the whole list, and the next view fetches anyway.
+remember() {
+  [ -f "$cache" ] || return 0
+  printf '%s\n' "$1" >> "$cache"
+}
+
 # field prints field $2 of reminder $1's cached line: 2 the due day, 3
 # the time, 4 the list, 5 the name. awk, not read: a tab is whitespace to
-# read, so an empty field in the middle would shift the rest left.
+# read, so an empty field in the middle would shift the rest left. From
+# the cache only: a row on screen came from it.
 field() {
-  load | awk -F '\t' -v id="$1" -v n="$2" '$1 == id { print $n; exit }'
+  [ -f "$cache" ] || return 0
+  awk -F '\t' -v id="$1" -v n="$2" '$1 == id { print $n; exit }' "$cache"
 }
 
 # rows prints the view's reminder rows, filtered by every word of $1:
@@ -93,7 +183,7 @@ rows() {
   local today tomorrow
   today=$(date +%F)
   tomorrow=$(date -v+1d +%F)
-  load | Q="$1" awk -F '\t' -v today="$today" -v tomorrow="$tomorrow" '
+  Q="$1" awk -F '\t' -v today="$today" -v tomorrow="$tomorrow" '
     BEGIN { n = split(tolower(ENVIRON["Q"]), words, " ") }
     {
       name = tolower($5)
@@ -104,7 +194,7 @@ rows() {
       if ($3 != "") when = when " " $3
       note = (when == "" ? $4 : when " · " $4)
       printf "%d\t%s\t%s\tr:%s\ttoggle\t󰄱\t%s\t%s\n", rank, $2, $3, $1, $5, note
-    }' | sort -t "$(printf '\t')" -k1,1n -k2,2 -k3,3 -s | cut -f 4-
+    }' "$cache" | sort -t "$(printf '\t')" -k1,1n -k2,2 -k3,3 -s | cut -f 4-
 }
 
 case "${1:-}" in
@@ -122,9 +212,14 @@ case "${1:-}" in
     fi
     # The filter is the text without its date words: "milk friday" is
     # about to add a reminder, and still finds the milk one already there.
-    if ! rows "$text"; then
+    if [ -f "$cache" ]; then
+      rows "$text"
+    elif [ -f "$denied" ]; then
       row perm command '' 'Reminders is not allowed yet' 'Enter opens Privacy & Security to allow it'
+    else
+      row loading toggle '󰔟' 'Loading reminders…' 'The list appears here in a moment'
     fi
+    fresh || refresh
     ;;
   preview)
     id="${2:-}"
@@ -174,13 +269,16 @@ case "${1:-}" in
     action="${3:-complete}"
     case "$id" in
       perm) open "$settings" ;;
+      # Enter on Loading only reloads the pane, as a toggle does.
+      loading) ;;
       add:*)
         parsed=$(swoop-tasks parse "${id#add:}")
         text="${parsed%%$'\t'*}"
         due="${parsed#*$'\t'}"
         [ -n "$text" ] || exit 0
         # An all-day due date: the date words name a day, not an hour.
-        osascript -l JavaScript -e '
+        # It prints the new one's id and list, for the cache.
+        made=$(osascript -l JavaScript -e '
 function run(a) {
   const R = Application("Reminders");
   const p = {name: a[0]};
@@ -188,10 +286,16 @@ function run(a) {
     const d = a[1].split("-").map(Number);
     p.alldayDueDate = new Date(d[0], d[1] - 1, d[2]);
   }
-  R.defaultList.reminders.push(R.Reminder(p));
-}' "$text" "$due" > /dev/null
-        # The new one's id is Reminders', so the list is asked again.
-        rm -f "$cache"
+  const r = R.Reminder(p);
+  R.defaultList.reminders.push(r);
+  try { return r.id() + "\t" + R.defaultList.name(); } catch (e) { return ""; }
+}' "$text" "$due")
+        # The pane shows it at once from the cache. Without an id to put
+        # there, the cache is aged instead, so the view asks again.
+        case "$made" in
+          *$'\t'*) remember "${made%%$'\t'*}"$'\t'"$due"$'\t\t'"$(clean "${made#*$'\t'}")"$'\t'"$(clean "$text")" ;;
+          *) [ ! -f "$cache" ] || touch -t 200001010000 "$cache" ;;
+        esac
         ;;
       r:*)
         rid="${id#r:}"
