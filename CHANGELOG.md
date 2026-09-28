@@ -9,6 +9,11 @@ so here.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-09-27
+
+Settings inside the launcher, Ask AI with any model, and the list that
+learns what you use.
+
 ### Added
 
 - **Used recently, and Stats.** The root list starts with the five things
@@ -37,15 +42,6 @@ so here.
   watches that file, so a new hotkey works within a second.
 - **A Homebrew tap.**
 
-### Fixed
-
-- **ollama answers are clean.** `ollama run` wrapped words with cursor
-  moves even through a pipe, and a thinking model's reasoning came out
-  as the answer. The ollama line now runs with `--nowordwrap`,
-  `--hidethinking` and `--think=false`, escape codes are stripped from
-  what any command prints, and with web search on and an ollama model
-  the line under the dots says the model cannot search.
-
 ### Changed
 
 - **Web search is off by default.** claude may search and fetch only when
@@ -54,6 +50,15 @@ so here.
   `brew services start swoop` runs the frame at login. The formula is
   written by `scripts/tap-formula` from a release's checksums, and the
   release workflow pushes it to the tap when it has a token for it.
+
+### Fixed
+
+- **ollama answers are clean.** `ollama run` wrapped words with cursor
+  moves even through a pipe, and a thinking model's reasoning came out
+  as the answer. The ollama line now runs with `--nowordwrap`,
+  `--hidethinking` and `--think=false`, escape codes are stripped from
+  what any command prints, and with web search on and an ollama model
+  the line under the dots says the model cannot search.
 
 ## [0.6.1] - 2026-09-26
 
@@ -292,7 +297,8 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/beatzball/swoop/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/beatzball/swoop/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/beatzball/swoop/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/beatzball/swoop/compare/v0.4.1...v0.5.0
