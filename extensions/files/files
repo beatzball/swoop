@@ -4,7 +4,9 @@
 # you typed, under your home folder, newest change first; with nothing
 # typed, the files you used most recently. The preview shows a picture as
 # a picture (through swoop-img), text as text, a folder as its listing, and
-# anything else as its facts. Enter opens the file in its default app.
+# anything else as its facts. Enter opens the file in its default app;
+# ctrl-k Edit, on a text file, opens it in the editor setting inside the
+# panel, and the view comes back when the editor quits.
 #
 # Written for the bash macOS ships, 3.2: no ${var,,}, no mapfile. Case is
 # handled with nocasematch, and the row loop uses builtins only, because it
@@ -87,11 +89,25 @@ case "${1:-}" in
     printf '\e[2m%-9s\e[22m %s\n' Modified "$(stat -f '%Sm' -t '%Y-%m-%d %H:%M' "$path")"
     printf '\e[2m%-9s\e[22m %s\n' Type "$(file -b "$path" | cut -c1-60)"
     ;;
+  actions)
+    # Edit is kind terminal: the editor gets the whole terminal, and the
+    # launcher stays. Only for text, where an editor makes sense.
+    path="${2:-}"
+    [ -f "$path" ] || exit 0
+    case "$(file -b --mime-type "$path")" in
+      text/*|application/json|application/x-empty|inode/x-empty)
+        row edit terminal '' 'Edit' 'in your editor, here in the panel' ;;
+    esac
+    ;;
   run)
-    open "${2:-}"
+    case "${3:-}" in
+      # swoop-settings knows the editor setting and its fallbacks.
+      edit) exec swoop-settings edit "${2:-}" ;;
+      *) open "${2:-}" ;;
+    esac
     ;;
   *)
-    echo "usage: files list | view files [query] | preview <path> | run <path>" >&2
+    echo "usage: files list | view files [query] | preview <path> | actions <path> | run <path> [edit]" >&2
     exit 2
     ;;
 esac

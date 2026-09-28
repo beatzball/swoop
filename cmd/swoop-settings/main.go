@@ -9,6 +9,8 @@
 //	swoop-settings preview <id>         what the setting does and where it lives
 //	swoop-settings run <id>             <key>=<value> sets it; extension/<name> turns it
 //	                                    on or off; folder opens the config folder
+//	swoop-settings edit <file>          the editor setting, run on file, for a script
+//	                                    extension that has no Go to call it with
 //
 // Every value is one line in ~/.config/swoop/config, the file
 // internal/settings reads and writes. The frame watches that file for the
@@ -128,6 +130,12 @@ var all = []setting{
 		},
 	},
 	{
+		key: settings.EditorKey, title: "Editor", icon: "",
+		explain: "What a note opens in, and the task list, and a text file from Search\nFiles: inside the panel, with the whole terminal, and quitting it brings\nthe list back. Empty means $EDITOR, and with neither, nano. Type a\ncommand to use it: emacs -nw, or anything on your PATH.",
+		value:   editorValue,
+		choices: editorChoices,
+	},
+	{
 		key: settings.Recent, title: "Used recently", icon: "󰔟",
 		explain: "Whether the list starts with the five things you opened most recently,\nmarked \"recent\". Stats, a row at the root, shows the whole log; its\nctrl-k menu clears it.",
 		value:   func() string { return settings.Get(settings.Recent, settings.RecentDefault) },
@@ -206,13 +214,18 @@ func main() {
 	var err error
 	switch os.Args[1] {
 	case "list":
-		err = protocol.Write(os.Stdout, []protocol.Item{{ID: "settings", Kind: "view", Icon: "", Title: "Settings", Subtitle: "hotkey, AI model, preview width, extensions"}})
+		err = protocol.Write(os.Stdout, []protocol.Item{{ID: "settings", Kind: "view", Icon: "", Title: "Settings", Subtitle: "hotkey, AI model, editor, preview width, extensions"}})
 	case "view":
 		err = view(arg(2), strings.TrimSpace(arg(3)))
 	case "preview":
 		err = preview(arg(2))
 	case "run":
 		err = run(arg(2))
+	case "edit":
+		if arg(2) == "" {
+			usage()
+		}
+		err = settings.Edit(arg(2))
 	case "actions":
 	default:
 		usage()
@@ -224,7 +237,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: swoop-settings list | view settings|extensions|<key> [query] | preview <id> | run <id>")
+	fmt.Fprintln(os.Stderr, "usage: swoop-settings list | view settings|extensions|<key> [query] | preview <id> | run <id> | edit <file>")
 	os.Exit(2)
 }
 
@@ -384,6 +397,57 @@ func looksLikeHotkey(spec string) bool {
 		}
 	}
 	return parts[len(parts)-1] != ""
+}
+
+// editors are the Editor row's choices, each shown only when its first
+// word is on PATH: a choice that cannot run is a trap.
+var editors = []choice{
+	{value: "nvim", title: "nvim", note: ""},
+	{value: "vim", title: "vim", note: ""},
+	{value: "nano", title: "nano", note: ""},
+	{value: "pico", title: "pico", note: ""},
+	{value: "hx", title: "hx", note: "Helix"},
+	{value: "micro", title: "micro", note: ""},
+	{value: "emacs -nw", title: "emacs -nw", note: "in the terminal, not its own window"},
+}
+
+// editorValue is the Editor row's subtitle: what will run, and why.
+func editorValue() string {
+	if v := settings.Get(settings.EditorKey, ""); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(os.Getenv("EDITOR")); v != "" {
+		return v + " · from $EDITOR"
+	}
+	return settings.EditorDefault + " · the default"
+}
+
+// editorChoices are Default, the editors found on PATH, and what was
+// typed when its first word is a program on PATH, so "nvim --clean"
+// becomes a row.
+func editorChoices(query string) []choice {
+	cs := []choice{{value: "", title: "Default", note: "$EDITOR, else " + settings.EditorDefault}}
+	onPath := func(line string) bool {
+		f := strings.Fields(line)
+		if len(f) == 0 {
+			return false
+		}
+		_, err := exec.LookPath(f[0])
+		return err == nil
+	}
+	typed := strings.Join(strings.Fields(query), " ")
+	for _, c := range editors {
+		if onPath(c.value) {
+			cs = append(cs, c)
+		}
+		if c.value == typed {
+			typed = ""
+		}
+	}
+	if typed != "" && onPath(typed) {
+		cs = append([]choice{{value: typed, title: typed, note: "what you typed"}}, cs...)
+	}
+	return cs
 }
 
 func aiValue() string { return models.Current() }

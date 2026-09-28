@@ -91,3 +91,21 @@ func TestOffListFromFile(t *testing.T) {
 		t.Fatalf("OffList = %q", got)
 	}
 }
+
+func TestEditorCommand(t *testing.T) {
+	for _, c := range []struct {
+		setting, env string
+		want         []string
+	}{
+		{"nvim", "vim", []string{"nvim"}},
+		{"emacs -nw", "", []string{"emacs", "-nw"}},
+		{"", "hx", []string{"hx"}},
+		{"  ", " code  --wait ", []string{"code", "--wait"}},
+		{"", "", []string{"nano"}},
+	} {
+		got := editorCommand(c.setting, c.env)
+		if strings.Join(got, "|") != strings.Join(c.want, "|") {
+			t.Errorf("editorCommand(%q, %q) = %q, want %q", c.setting, c.env, got, c.want)
+		}
+	}
+}

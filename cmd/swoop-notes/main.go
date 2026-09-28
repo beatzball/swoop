@@ -2,15 +2,17 @@
 // root row, Notes, that opens a view of them. The view lists the notes
 // newest change first; typing searches titles and text. The preview is
 // the note rendered, by the renderer swoop-md uses. Enter opens the file
-// in the app that owns .md files. A New note row leads the view and
-// makes a note whose first line is what was typed. See store.go for the
-// folder and the file.
+// in the editor setting, inside the panel: the rows are kind "terminal",
+// so quitting the editor brings the view back with the preview redrawn.
+// ctrl-k Open in app hands it to the app that owns .md files instead. A
+// New note row leads the view and makes a note whose first line is what
+// was typed, and opens that. See store.go for the folder and the file.
 //
 //	swoop-notes list                    the root row
 //	swoop-notes view notes [query]      New note, then the notes
 //	swoop-notes preview <id>            the note, rendered
-//	swoop-notes actions <id>            Open, Copy, Reveal, Delete
-//	swoop-notes run <id> [action]       open, copy, reveal, or delete
+//	swoop-notes actions <id>            Open in app, Copy, Reveal, Delete
+//	swoop-notes run <id> [action]       edit (no action), open, copy, reveal, or delete
 //
 // An id is the note's file name in the folder, or newID and the text.
 package main
@@ -24,6 +26,7 @@ import (
 	"github.com/beatzball/swoop/internal/markdown"
 	"github.com/beatzball/swoop/internal/paste"
 	"github.com/beatzball/swoop/internal/protocol"
+	"github.com/beatzball/swoop/internal/settings"
 )
 
 // icon is the rows' glyph, a sticky note (nf-fa-sticky_note).
@@ -72,7 +75,9 @@ func usageExit() {
 	os.Exit(2)
 }
 
-// view prints New note, then the notes that match.
+// view prints New note, then the notes that match. Every row is kind
+// "terminal": Enter runs the editor with the terminal, and the view
+// stays (see internal/nav).
 func view(query string) error {
 	notes, err := find(dir(), query)
 	if err != nil {
@@ -81,16 +86,16 @@ func view(query string) error {
 	items := make([]protocol.Item, 0, len(notes)+1)
 	title := strings.TrimSpace(query)
 	if title == "" {
-		items = append(items, protocol.Item{ID: newID, Kind: "note", Icon: "", Title: "New note", Subtitle: "type its first line, then Enter"})
+		items = append(items, protocol.Item{ID: newID, Kind: "terminal", Icon: "", Title: "New note", Subtitle: "type its first line, then Enter"})
 	} else {
-		items = append(items, protocol.Item{ID: newID + "/" + title, Kind: "note", Icon: "", Title: "New note: " + title, Subtitle: "Enter makes it and opens it"})
+		items = append(items, protocol.Item{ID: newID + "/" + title, Kind: "terminal", Icon: "", Title: "New note: " + title, Subtitle: "Enter makes it and opens it"})
 	}
 	for _, n := range notes {
 		sub := n.Mod.Format("2006-01-02 15:04")
 		if n.Line != "" {
 			sub = cut(n.Line, 80)
 		}
-		items = append(items, protocol.Item{ID: n.File, Kind: "note", Icon: icon, Title: n.Title, Subtitle: sub})
+		items = append(items, protocol.Item{ID: n.File, Kind: "terminal", Icon: icon, Title: n.Title, Subtitle: sub})
 	}
 	return protocol.Write(os.Stdout, items)
 }
@@ -118,7 +123,7 @@ func newTitle(id string) (string, bool) {
 func preview(id string) error {
 	if t, ok := newTitle(id); ok {
 		if t == "" {
-			fmt.Printf("Type the new note's first line, then Enter.\n\nIt goes in %s, one markdown file per note,\nand opens in the app that opens .md files.\n", tilde(dir()))
+			fmt.Printf("Type the new note's first line, then Enter.\n\nIt goes in %s, one markdown file per note,\nand opens in %s, here in the panel.\n", tilde(dir()), strings.Join(settings.Editor(), " "))
 			return nil
 		}
 		fmt.Printf("Enter makes a note in %s that starts\n\n  # %s\n\nand opens it.\n", tilde(dir()), t)
@@ -156,8 +161,9 @@ func tilde(p string) string {
 	return p
 }
 
-// actions is the ctrl-k menu. Delete is a refresh: the view comes back
-// without the note.
+// actions is the ctrl-k menu. Enter already edits, so the menu holds the
+// rest: the app that owns .md files, for when a window is wanted, and
+// Delete, a refresh: the view comes back without the note.
 func actions(id string) error {
 	if _, ok := newTitle(id); ok {
 		return nil
@@ -166,7 +172,7 @@ func actions(id string) error {
 		return err
 	}
 	return protocol.Write(os.Stdout, []protocol.Item{
-		{ID: "open", Kind: "action", Icon: icon, Title: "Open", Subtitle: "Enter"},
+		{ID: "open", Kind: "action", Icon: icon, Title: "Open in app", Subtitle: "the app that opens .md files"},
 		{ID: "copy", Kind: "action", Icon: "", Title: "Copy", Subtitle: "the note's text"},
 		{ID: "reveal", Kind: "action", Icon: "", Title: "Reveal", Subtitle: "show the file in its folder"},
 		{ID: "delete", Kind: "refresh", Icon: "", Title: "Delete", Subtitle: "move it to " + deletedDir + "/"},
@@ -179,14 +185,16 @@ func run(id, action string) error {
 		if err != nil {
 			return err
 		}
-		return openFile(p)
+		return settings.Edit(p)
 	}
 	p, err := path(id)
 	if err != nil {
 		return err
 	}
 	switch action {
-	case "", "open":
+	case "":
+		return settings.Edit(p)
+	case "open":
 		return openFile(p)
 	case "copy":
 		text, err := readCapped(p)

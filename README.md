@@ -244,9 +244,14 @@ echo 'Thanks, {clipboard}' | swoop-snippets add 'Thanks' ';ty'
 
 Type `notes`, Enter: your notes, the most recently changed first, each
 previewed as rendered markdown. Typing searches the titles and the text.
-Enter opens the note in the app that opens `.md` files. `New note`, at
-the top, makes a note whose first line is what you typed, and opens it.
-ctrl-k copies the text, shows the file in its folder, or deletes it.
+Enter opens the note in your editor, right in the panel; quit the editor
+and the list is back, the preview showing your change. `New note`, at
+the top, makes a note whose first line is what you typed, and opens it
+the same way. The editor is the Editor setting (`editor = nvim` in the
+config), else `$EDITOR`, else `nano`. ctrl-k opens the note in the app
+that opens `.md` files instead, copies the text, shows the file in its
+folder, or deletes it. An editor wants room: widen the list with the
+divider keys, or drag the panel's edge.
 
 Each note is a markdown file in `~/.local/share/swoop/notes/`, and its
 first line is its title. Any editor works, and so does any sync. Delete
@@ -258,7 +263,8 @@ Type `tasks`, Enter. The list is open tasks first, the ones due soonest
 on top, done ones after. Type a task and press Enter to add it. End it
 with `today`, `tomorrow`, a weekday, or a date like `2026-10-01`, and
 that is its due date: `buy milk tomorrow`. Enter on a task ticks it, and
-you stay in the list. ctrl-k undoes, deletes, or copies.
+you stay in the list. ctrl-k undoes, deletes, or copies, and `Edit the
+list` opens the whole file in your editor, in the panel.
 
 The tasks are one markdown checklist, `~/.local/share/swoop/tasks.md`,
 so any editor can change it too:
@@ -301,7 +307,8 @@ the log; Settings turns the group off.
 Type `settings` and press Enter, or cmd+, in the frame (alt+, in a
 terminal). One row per setting, the current value beside it; Enter on a row
 to change it: the hotkey, the preview width, the AI model, whether the model
-may search the web, what draws the transcript. Extensions lists every
+may search the web, the editor notes and tasks open in, what draws the
+transcript. Extensions lists every
 extension with a box for on or off; Enter turns one off, and its rows leave
 the root until you turn it back on (`off = reminders, tasks` in the file;
 Settings itself cannot be turned off). Every value is one line in
@@ -353,7 +360,10 @@ A row of kind `view` opens a pane instead of running: the launcher asks
 `view` for its rows, again on every keystroke, and shows exactly what comes
 back. `extensions/define/define` is one: Enter on "Define Word" and you are
 typing into the dictionary. Inside a pane, a row of kind `toggle` runs
-on Enter and the pane stays, reloaded: that is how Tasks ticks a task.
+on Enter and the pane stays, reloaded: that is how Tasks ticks a task. A
+row or action of kind `terminal` gets the whole terminal while it runs, and
+the launcher comes back after, reloaded, the preview redrawn: that is how
+Notes opens an editor.
 
 A result line is five fields separated by tabs. Only the last three are shown:
 

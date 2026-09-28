@@ -308,3 +308,43 @@ func TestToggleRowInAViewRunsAndStays(t *testing.T) {
 		t.Fatalf("at the root: %q", got)
 	}
 }
+
+func TestTerminalRowHandsOverTheTerminalAndStays(t *testing.T) {
+	st := &State{Stack: []Frame{{Kind: "view", View: "ext/notes/notes", Title: "Notes", Query: "", Pos: 1}}}
+	got := Enter(st, "ext/notes/fake.md", "terminal", "Fake (draft)", "zuc", 2, run)
+	want := "execute[env SWOOP_KIND='terminal' SWOOP_TITLE='Fake (draft)' swoop-run 'ext/notes/fake.md']" +
+		"+reload-sync(swoop-nav rows {q})+wait+pos(2)+refresh-preview"
+	if got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+	if strings.Contains(got, "cleanup") || strings.Contains(got, "clear-query") {
+		t.Fatalf("a terminal row must not end the launcher or clear the bar: %q", got)
+	}
+	if len(st.Stack) != 1 {
+		t.Fatalf("the pane was popped: %+v", st.Stack)
+	}
+	// At the root too: the launcher stays open.
+	if got := Enter(&State{}, "ext/x/y", "terminal", "y", "", 1, run); !strings.HasPrefix(got, "execute(") {
+		t.Fatalf("at the root: %q", got)
+	}
+}
+
+func TestTerminalActionPopsBackToThePaneBelow(t *testing.T) {
+	st := &State{Stack: []Frame{
+		{Kind: "view", View: "ext/tasks/tasks", Title: "Tasks", Query: "", Pos: 1},
+		{Kind: "actions", View: "ext/tasks/t\x1fmilk", Title: "milk", Query: "mi", Pos: 3},
+	}}
+	got := Enter(st, "edit", "terminal", "Edit the list", "", 1, run)
+	if !strings.HasPrefix(got, "execute(swoop-run 'ext/tasks/t\x1fmilk' 'edit')+enable-search") && !strings.HasPrefix(got, "execute(swoop-run 'ext/tasks/t\x1fmilk' 'edit')+disable-search") {
+		t.Fatalf("runs the action with the terminal: %q", got)
+	}
+	if !strings.HasSuffix(got, "change-query(mi)+reload-sync(swoop-nav rows {q})+wait+pos(3)+refresh-preview") {
+		t.Fatalf("back to the pane below, reloaded, redrawn: %q", got)
+	}
+	if strings.Contains(got, "cleanup") {
+		t.Fatalf("a terminal action must not end the launcher: %q", got)
+	}
+	if len(st.Stack) != 1 {
+		t.Fatalf("the actions pane is still there: %+v", st.Stack)
+	}
+}
