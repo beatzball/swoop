@@ -261,6 +261,16 @@ printf '%s\\n' "$@" > '{opened}'
     with open(fake_note, "w") as f:
         f.write("# Fake Meeting\n\nremember the zucchini\n")
 
+    # A fake editor, set through `editor =` in the config: it appends a
+    # line to the file it is given, and exits, as :q would after an edit.
+    # It runs with the terminal, under fzf's execute, so it also prints.
+    write_exe(os.path.join(fakebin, "fake-editor"), """#!/usr/bin/env bash
+echo "fake-editor on ${@: -1}"
+printf 'edited by the fake editor\\n' >> "${@: -1}"
+""")
+    with open(os.path.join(home, ".config", "swoop", "config"), "w") as f:
+        f.write("editor = fake-editor --flag\n")
+
     # A fake clipboard, pbcopy on a Mac and wl-copy on Linux, that
     # records what it was given.
     copied = os.path.join(tmp, "copied")
@@ -696,8 +706,11 @@ esac
                 sixth.kill()
         check("snippet", snippet)
         # 12. notes: the root row opens the view, the note is in it, a
-        # word from inside it still finds it, Enter opens the file; then
-        # New note makes a file from what was typed and opens that
+        # word from inside it still finds it, Enter hands the terminal to
+        # the editor (kind "terminal") and the launcher is still there
+        # after, same query, the preview showing the edit; New note makes
+        # a file from what was typed and edits that; ctrl-k Open in app
+        # still hands the file to `open` and ends the launcher
         def notes():
             def open_view(ln):
                 ln.wait_state(lambda s: s["totalCount"] > 3, what="the launcher's list")
@@ -733,10 +746,28 @@ esac
                 st = eighth.wait_state(lambda s: "Fake Meeting" in s["current"]["text"], what="the cursor on the note")
                 if "remember the zucchini" not in st["current"]["text"]:
                     fail(f"the matching line should be the subtitle: {st['current']}", eighth.buf)
+                eighth.clear()
+                eighth.send("\r")
+                eighth.expect(r"fake-editor on .*fake-meeting\.md", what="the editor, run on the note")
+                eighth.expect(r"edited by the fake editor", what="the preview redrawn with the edit")
+                st = eighth.wait_state(lambda s: s["query"] == "zucchini" and "Fake Meeting" in s["current"]["text"], what="the launcher still open, same query, same row")
+                eighth.expect(r"Notes > ", what="still in the notes view")
+                if eighth.eof:
+                    fail("the launcher ended after the editor", eighth.buf)
+                with open(fake_note) as f:
+                    body = f.read()
+                if body != "# Fake Meeting\n\nremember the zucchini\nedited by the fake editor\n":
+                    fail(f"the note holds {body!r}", eighth.buf)
+                if os.path.exists(opened):
+                    fail("Enter handed the note to open, not the editor", eighth.buf)
+                # ctrl-k, Open in app: the old way, for a window, still
+                # there, and it ends the launcher like any action.
+                eighth.send("\x0b")
+                eighth.wait_state(lambda s: "Open in app" in s["current"]["text"], what="Open in app in the menu")
                 eighth.send("\r")
                 code = eighth.wait_exit()
                 if not os.path.exists(opened):
-                    fail(f"the note was not opened (exit {code})", eighth.buf)
+                    fail(f"the note was not opened in the app (exit {code})", eighth.buf)
                 with open(opened) as f:
                     got = f.read().splitlines()
                 if [os.path.realpath(g) for g in got] != [os.path.realpath(fake_note)]:
@@ -744,25 +775,20 @@ esac
             finally:
                 eighth.kill()
 
-            os.remove(opened)
             ninth = Launcher(env)
             ninth.key = key
             try:
                 open_view(ninth)
                 ninth.send("Fake Idea")
                 st = ninth.wait_state(lambda s: s["query"] == "Fake Idea" and "New note: Fake Idea" in s["current"]["text"], what="the New note row")
+                ninth.clear()
                 ninth.send("\r")
-                code = ninth.wait_exit()
                 made = os.path.join(notes_dir, "fake-idea.md")
-                if not os.path.exists(opened):
-                    fail(f"the new note was not opened (exit {code})", ninth.buf)
-                with open(opened) as f:
-                    got = f.read().splitlines()
-                if [os.path.realpath(g) for g in got] != [os.path.realpath(made)]:
-                    fail(f"open got the wrong arguments: {got}", ninth.buf)
+                ninth.expect(r"fake-editor on .*fake-idea\.md", what="the editor, run on the new note")
+                ninth.wait_state(lambda s: s["query"] == "Fake Idea" and s["matchCount"] == 2, what="the launcher still open, the new note in the view")
                 with open(made) as f:
                     body = f.read()
-                if body != "# Fake Idea\n\n":
+                if body != "# Fake Idea\n\nedited by the fake editor\n":
                     fail(f"the new note holds {body!r}", ninth.buf)
             finally:
                 ninth.kill()

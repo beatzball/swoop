@@ -8,8 +8,8 @@
 //	swoop-tasks list                 the root row
 //	swoop-tasks view tasks [text]    the view: an Add row for text, the tasks
 //	swoop-tasks preview <id>         the task's facts
-//	swoop-tasks actions <id>         Done or Undo, Delete, Copy
-//	swoop-tasks run <id> [action]    tick, untick, delete, copy, or add
+//	swoop-tasks actions <id>         Done or Undo, Delete, Copy, Edit the list
+//	swoop-tasks run <id> [action]    tick, untick, delete, copy, edit, or add
 //	swoop-tasks add <text>           a task from the shell, date words and all
 //	swoop-tasks parse <text>         the text and its due day, tab-separated
 //
@@ -26,12 +26,14 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/beatzball/swoop/internal/paste"
 	"github.com/beatzball/swoop/internal/protocol"
+	"github.com/beatzball/swoop/internal/settings"
 )
 
 // sep joins an id's kind and its text. A control character, so no task
@@ -83,7 +85,7 @@ func main() {
 }
 
 func usageExit() {
-	fmt.Fprintln(os.Stderr, "usage: swoop-tasks list | view tasks [text] | preview <id> | actions <id> | run <id> [done|undo|delete|copy] | add <text> | parse <text>")
+	fmt.Fprintln(os.Stderr, "usage: swoop-tasks list | view tasks [text] | preview <id> | actions <id> | run <id> [done|undo|delete|copy|edit] | add <text> | parse <text>")
 	os.Exit(2)
 }
 
@@ -283,15 +285,22 @@ func tilde(p string) string {
 
 // actions is the ctrl-k menu of a task. Done or Undo and Delete are
 // refreshes: they change the file and go back to the view, reloaded.
-// Copy ends the launcher, like a copy anywhere else. The Add row and the
-// hint have no menu: there is nothing yet to act on.
+// Copy ends the launcher, like a copy anywhere else. Edit the list opens
+// the whole file in the editor setting, inside the panel, and comes back
+// to the view (kind "terminal"); it is also the Tasks row's one action,
+// at the root. The Add row and the hint have no menu: there is nothing
+// yet to act on.
 func actions(id string) error {
+	edit := protocol.Item{ID: "edit", Kind: "terminal", Icon: iconOpen, Title: "Edit the list", Subtitle: "the whole file, in " + strings.Join(settings.Editor(), " ")}
+	if id == viewID {
+		return protocol.Write(os.Stdout, []protocol.Item{edit})
+	}
 	f, err := load(path())
 	if err != nil {
 		return err
 	}
 	_, t, isAdd, err := resolve(f, id)
-	if err != nil || isAdd || id == viewID {
+	if err != nil || isAdd {
 		return err
 	}
 	tick := protocol.Item{ID: "done", Kind: "refresh", Icon: iconDone, Title: "Mark as Done", Subtitle: "Enter"}
@@ -302,6 +311,7 @@ func actions(id string) error {
 		tick,
 		{ID: "delete", Kind: "refresh", Icon: "", Title: "Delete", Subtitle: "Remove the task from the file"},
 		{ID: "copy", Kind: "action", Icon: "", Title: "Copy", Subtitle: "The task's text"},
+		edit,
 	})
 }
 
@@ -309,6 +319,15 @@ func actions(id string) error {
 // Enter on a done one opens it again: the view is a checklist, and a
 // box that only ticks one way would be a trap.
 func run(id, action string, now time.Time) error {
+	if action == "edit" {
+		// The file as it is, whichever row asked: the list is one file.
+		// Its folder first, or an editor on a list not yet written could
+		// not save it.
+		if err := os.MkdirAll(filepath.Dir(path()), 0o700); err != nil {
+			return err
+		}
+		return settings.Edit(path())
+	}
 	f, err := load(path())
 	if err != nil {
 		return err

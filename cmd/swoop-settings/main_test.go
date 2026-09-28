@@ -129,3 +129,29 @@ func TestExtensionsTurnOnAndOff(t *testing.T) {
 		t.Fatalf("off = %q", got)
 	}
 }
+
+func TestEditorChoicesAreWhatIsOnPath(t *testing.T) {
+	bin := t.TempDir()
+	for _, name := range []string{"nvim", "emacs"} {
+		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("PATH", bin)
+	var got []string
+	for _, c := range editorChoices("") {
+		got = append(got, c.value)
+	}
+	if strings.Join(got, "|") != "|nvim|emacs -nw" {
+		t.Fatalf("Default and the editors on PATH: %q", got)
+	}
+	if cs := editorChoices("nvim  --clean"); cs[0].value != "nvim --clean" || cs[0].note != "what you typed" {
+		t.Fatalf("a typed command on PATH comes first: %+v", cs[0])
+	}
+	if cs := editorChoices("emacs -nw"); len(cs) != 3 {
+		t.Fatalf("a typed command already listed is not added again: %+v", cs)
+	}
+	if cs := editorChoices("notthere"); len(cs) != 3 {
+		t.Fatalf("a typed command not on PATH is not offered: %+v", cs)
+	}
+}

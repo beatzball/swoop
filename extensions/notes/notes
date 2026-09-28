@@ -2,7 +2,8 @@
 # notes: markdown notes, one file each in ~/.local/share/swoop/notes/.
 # One root row, Notes, opens a view: the notes newest change first,
 # searched by title and text as you type, previewed rendered. Enter opens
-# the file; New note, at the top, makes one from what was typed. The work
+# the file in the editor setting, inside the panel; New note, at the top,
+# makes one from what was typed and opens that. The work
 # is in swoop-notes, a Go tool in bin/. This shim is here so the rows are
 # routed like every other extension. See cmd/swoop-notes.
 exec swoop-notes "$@"

@@ -31,8 +31,10 @@ func main() {
 		os.Exit(1)
 	}
 	// An open, counted: Enter's default, or Open from the action menu.
-	// A refresh action (delete, a setting's choice, a model pick) is not
-	// an open and is not counted. bin/swoop hands the row's kind and
+	// Enter on a terminal row counts too, with its kind and title: an
+	// edit of a note is an open of it. A refresh or terminal action
+	// (delete, a setting's choice, Edit the list) is not an open and is
+	// not counted. bin/swoop hands the row's kind and
 	// title over in the environment; swoop-run by hand has neither.
 	if action == "" || action == "open" {
 		_ = usage.Record(os.Args[1], os.Getenv("SWOOP_KIND"), os.Getenv("SWOOP_TITLE"))

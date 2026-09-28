@@ -11,6 +11,13 @@ so here.
 
 ### Added
 
+- **Edit inside the panel.** Enter on a note, or on `New note`, opens it
+  in your editor right in the panel, and quitting brings the list back
+  with the preview redrawn; ctrl-k `Open in app` keeps the old way. The
+  editor is a new Settings row, `editor = nvim` in the config, else
+  `$EDITOR`, else `nano`. Tasks gets ctrl-k `Edit the list`, Search Files
+  gets ctrl-k `Edit` on a text file. Extensions can use it too: a row of
+  kind `terminal` gets the whole terminal and the launcher stays open.
 - **Notes.** Type `notes`, Enter: markdown files in
   `~/.local/share/swoop/notes/`, newest change first, searched by title
   and text, previewed rendered. Enter opens the file; `New note` makes

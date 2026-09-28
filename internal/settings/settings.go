@@ -8,6 +8,7 @@ package settings
 import (
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -80,6 +81,16 @@ const (
 const (
 	Skin        = "skin"
 	SkinDefault = "0"
+)
+
+// EditorKey is the key for the program a note, the task list or a text
+// file opens in, inside the panel: `editor = nvim`, `editor = emacs -nw`.
+// Empty means $EDITOR, and with neither, EditorDefault, which every Mac
+// and most Linux systems have. The name leaves Editor for the function
+// that answers what to run, which is what every caller wants.
+const (
+	EditorKey     = "editor"
+	EditorDefault = "nano"
 )
 
 // Off is the key for the extensions turned off, by name, comma-separated:
@@ -219,4 +230,30 @@ func atoi(s string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+// Editor is the editor to run, split on spaces so a line with
+// flags works: the setting, else $EDITOR, else nano. The file to edit
+// goes after it.
+func Editor() []string {
+	return editorCommand(Get(EditorKey, ""), os.Getenv("EDITOR"))
+}
+
+func editorCommand(setting, env string) []string {
+	for _, line := range []string{setting, env} {
+		if argv := strings.Fields(line); len(argv) > 0 {
+			return argv
+		}
+	}
+	return []string{EditorDefault}
+}
+
+// Edit runs the editor on file with the terminal attached, and returns
+// when it exits. The caller runs under fzf's execute, which has handed
+// over the whole terminal for the length of the run.
+func Edit(file string) error {
+	argv := append(Editor(), file)
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	return cmd.Run()
 }

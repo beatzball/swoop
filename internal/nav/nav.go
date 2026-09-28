@@ -16,6 +16,13 @@
 //     same pane, the bar cleared, reloaded, the cursor on the same row
 //     number. A checklist is ticked off one row after another; "refresh"
 //     would leave the pane after each one.
+//   - Enter on a row of kind "terminal" hands the whole terminal to its
+//     run, an editor on a note, and takes it back when the run exits:
+//     the same pane, the bar as it was, reloaded, the cursor on the same
+//     row number, the preview redrawn. fzf's preview is read-only; this
+//     is how anything that needs a cursor happens inside the panel. An
+//     action of kind "terminal" does the same from the actions pane,
+//     then returns to the pane below, like "refresh".
 //   - Popping restores the text and the cursor row the user left.
 //   - Tab opens the Ask AI pane from anywhere, and keeps the bar's text.
 //     The bar there is a prompt, not a filter: Enter sends it to the
@@ -125,6 +132,13 @@ func Enter(st *State, id, kind, title, query string, pos int, runCmd func(target
 		// match; the row number stays, so the next row is under the cursor.
 		return Wrap("execute-silent", "swoop-run "+ShellQuote(id)) + "+" + stay(pos)
 	}
+	if kind == "terminal" {
+		// fzf's execute, not execute-silent: the run gets the terminal,
+		// keys and screen, until it exits. The kind and title ride along
+		// for the usage log, as runCmd sends them: an edit of a note
+		// counts as an open of it.
+		return Wrap("execute", "env SWOOP_KIND="+ShellQuote(kind)+" SWOOP_TITLE="+ShellQuote(title)+" swoop-run "+ShellQuote(id)) + "+" + back(pos)
+	}
 	if kind != "view" {
 		return runCmd(id, "")
 	}
@@ -158,8 +172,16 @@ func Settings(st *State, query string, pos int) string {
 // The refresh path runs the bare runner, not runCmd: runCmd is the exit
 // command, and it removes the run's files and tells a frame the launcher
 // is leaving. Doing that for a delete lost the stack and closed the frame.
+//
+// Kind "terminal" is refresh with the terminal handed over: execute
+// rather than execute-silent, and the preview redrawn after, since the
+// run has likely changed what it shows.
 func enterAction(st *State, top *Frame, action, kind string, runCmd func(target, action string) string) string {
 	target := top.View
+	if kind == "terminal" {
+		pop := popActions(st)
+		return Wrap("execute", "swoop-run "+ShellQuote(target)+" "+ShellQuote(action)) + "+" + pop + "+refresh-preview"
+	}
 	if kind != "refresh" {
 		return runCmd(target, action)
 	}
@@ -285,6 +307,20 @@ func stay(pos int) string {
 		"reload-sync(swoop-nav rows {q})",
 		"wait",
 		fmt.Sprintf("pos(%d)", pos),
+	}, "+")
+}
+
+// back reloads the pane the user is in after a terminal run, keeping the
+// bar's text, and puts the cursor back on row pos. The text stays because
+// nothing was typed into the list: the run had the keys. The preview is
+// redrawn last, because the file under the cursor has likely changed and
+// fzf would otherwise show what it drew before the run.
+func back(pos int) string {
+	return strings.Join([]string{
+		"reload-sync(swoop-nav rows {q})",
+		"wait",
+		fmt.Sprintf("pos(%d)", pos),
+		"refresh-preview",
 	}, "+")
 }
 
