@@ -9,6 +9,12 @@ so here.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-09-28
+
+What a launcher has: quicklinks, emoji, snippets, window management,
+notes, tasks and reminders, all in the panel, with an editor inside it,
+a paste that lands where you were typing, and a switch for each.
+
 ### Added
 
 - **Edit inside the panel.** Enter on a note, or on `New note`, opens it
@@ -373,7 +379,8 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.8.0...HEAD
+[0.8.0]: https://github.com/beatzball/swoop/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/beatzball/swoop/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/beatzball/swoop/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/beatzball/swoop/compare/v0.5.0...v0.6.0
