@@ -15,6 +15,7 @@ case "${1:-}" in
     row lock  ''  'Lock Screen'      'Turn the display off; the lock follows your settings'
     row dark  ''  'Toggle Dark Mode' 'Switch between light and dark appearance'
     row trash ''  'Empty Trash'      'Empty the Trash, with the Finder confirmation'
+    row saver ''  'Start Screensaver' 'Start the screen saver now'
     ;;
   preview)
     case "${2:-}" in
@@ -26,6 +27,10 @@ case "${1:-}" in
       dark)  echo 'Tells System Events to flip dark mode.' ;;
       trash) echo 'Tells Finder to empty the Trash.'
              echo 'Finder still asks you to confirm.' ;;
+      saver) echo 'Runs: open -a ScreenSaverEngine'
+             echo
+             echo 'The screen saver you chose in System Settings, now. Locks'
+             echo 'on the same setting as Lock Screen.' ;;
       *) echo "unknown id: ${2:-}" >&2; exit 2 ;;
     esac
     ;;
@@ -35,6 +40,7 @@ case "${1:-}" in
       lock)  pmset displaysleepnow ;;
       dark)  osascript -e 'tell application "System Events" to tell appearance preferences to set dark mode to not dark mode' ;;
       trash) osascript -e 'tell application "Finder" to empty trash' ;;
+      saver) open -a ScreenSaverEngine ;;
       *) echo "unknown id: ${2:-}" >&2; exit 2 ;;
     esac
     ;;
