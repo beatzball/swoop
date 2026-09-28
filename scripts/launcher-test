@@ -693,6 +693,47 @@ cat > '{copied}'
             finally:
                 seventh.kill()
         check("window rows at the root", window)
+
+        # 13. tasks: the view, a task added with a date word, and Enter
+        # on it ticks it while the view stays, reloaded (kind "toggle")
+        def tasks():
+            tasks_md = os.path.join(home, ".data", "swoop", "tasks.md")
+            eighth = Launcher(env)
+            eighth.key = key
+            try:
+                eighth.wait_state(lambda s: s["totalCount"] > 3, what="the eighth launcher's list")
+                eighth.send("tasks")
+                eighth.wait_state(lambda s: s["query"] == "tasks" and "ext/tasks/tasks" in s["current"]["text"], what="the Tasks row")
+                eighth.clear()
+                eighth.send("\r")
+                eighth.expect(r"Tasks > ", what="the tasks view")
+                eighth.wait_state(lambda s: "Type a task" in s["current"]["text"], what="the hint row of an empty list")
+                eighth.send("buy milk tomorrow")
+                eighth.wait_state(lambda s: s["query"] == "buy milk tomorrow" and "Add task: buy milk" in s["current"]["text"], what="the Add task row")
+                # Tomorrow from either side of the Enter, in case it
+                # falls across midnight: the file's date and the label.
+                before = datetime.date.today()
+                eighth.send("\r")
+                after = datetime.date.today()
+                days = set()
+                for d in (before, after):
+                    t = d + datetime.timedelta(days=1)
+                    days.add((t.isoformat(), f"tomorrow, {t.strftime('%a')} {t.day} {t.strftime('%b')}"))
+                eighth.wait_state(lambda s: s["query"] == "" and any(label in s["current"]["text"] for _, label in days) and "buy milk" in s["current"]["text"], what="the new task with tomorrow's date, the view still open")
+                with open(tasks_md) as f:
+                    got = f.read()
+                if not any(f"- [ ] buy milk due: {iso}\n" in got for iso, _ in days):
+                    fail(f"the file did not get the task: {got!r}", eighth.buf)
+                eighth.send("\r")
+                eighth.wait_state(lambda s: "buy milk" in s["current"]["text"] and "done" in s["current"]["text"], what="the task marked done, the view still open")
+                with open(tasks_md) as f:
+                    got = f.read()
+                if "- [x] buy milk due: " not in got:
+                    fail(f"Enter did not tick the task in the file: {got!r}", eighth.buf)
+                eighth.expect(r"Tasks > ", what="still in the tasks view")
+            finally:
+                eighth.kill()
+        check("tasks", tasks)
     finally:
         L.kill()
         # The worker may still be around on a fast failure.

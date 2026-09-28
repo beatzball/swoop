@@ -290,3 +290,21 @@ func TestSettingsKeyOpensThePaneOnce(t *testing.T) {
 		t.Fatalf("inside the pane: %q", got)
 	}
 }
+
+func TestToggleRowInAViewRunsAndStays(t *testing.T) {
+	st := &State{Stack: []Frame{{Kind: "view", View: "ext/tasks/tasks", Title: "Tasks", Query: "", Pos: 1}}}
+	got := Enter(st, "ext/tasks/t\x1fbuy milk", "toggle", "buy milk", "milk", 3, run)
+	if !strings.HasPrefix(got, "execute-silent(swoop-run 'ext/tasks/t\x1fbuy milk')+") {
+		t.Fatalf("runs the row quietly: %q", got)
+	}
+	if !strings.HasSuffix(got, "+clear-query+reload-sync(swoop-nav rows {q})+wait+pos(3)") {
+		t.Fatalf("stays in the pane, reloaded, same row: %q", got)
+	}
+	if len(st.Stack) != 1 {
+		t.Fatalf("the pane was popped: %+v", st.Stack)
+	}
+	// At the root a toggle row is just a row: it runs and the launcher ends.
+	if got := Enter(&State{}, "ext/x/y", "toggle", "y", "", 1, run); !strings.HasPrefix(got, "become:") {
+		t.Fatalf("at the root: %q", got)
+	}
+}

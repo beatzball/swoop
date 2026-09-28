@@ -46,6 +46,7 @@ bench: build
 	hyperfine --warmup 5 -N 'bin/swoop-emoji list' 'bin/swoop-emoji view emoji rocket'
 	hyperfine --warmup 5 -N 'bin/swoop-snippets list'
 	hyperfine --warmup 5 -N 'bin/swoop-notes view notes' 'bin/swoop-notes view notes word'
+	hyperfine --warmup 5 -N 'bin/swoop-tasks list'
 
 clean:
 	find bin -type f ! -name swoop -delete

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# tasks: a checklist in ~/.local/share/swoop/tasks.md. The work is in
+# swoop-tasks, a Go tool in bin/, which reads the date words at the end
+# of a new task and keeps the file's other lines as they are. This shim
+# is here so the rows are routed like every other extension. See
+# cmd/swoop-tasks.
+exec swoop-tasks "$@"

@@ -12,6 +12,10 @@
 //   - ctrl-k on a row pushes an actions pane for it. Enter on an action of
 //     kind "action" runs it and ends the launcher; kind "refresh" runs it
 //     and returns to the pane it came from, reloaded.
+//   - Enter on a row of kind "toggle" inside a view runs it and stays: the
+//     same pane, the bar cleared, reloaded, the cursor on the same row
+//     number. A checklist is ticked off one row after another; "refresh"
+//     would leave the pane after each one.
 //   - Popping restores the text and the cursor row the user left.
 //   - Tab opens the Ask AI pane from anywhere, and keeps the bar's text.
 //     The bar there is a prompt, not a filter: Enter sends it to the
@@ -113,6 +117,13 @@ func Enter(st *State, id, kind, title, query string, pos int, runCmd func(target
 		// Run it quietly, then back to the pane below, reloaded, so it
 		// shows the change. The same shape as a refresh action.
 		return Wrap("execute-silent", "swoop-run "+ShellQuote(id)) + "+" + popActions(st)
+	}
+	if kind == "toggle" && st.Top() != nil {
+		// A row that changes something in its own pane: a task ticked off,
+		// a task added from the text in the bar. The bar is cleared, since
+		// the text was either the new task or a filter that may no longer
+		// match; the row number stays, so the next row is under the cursor.
+		return Wrap("execute-silent", "swoop-run "+ShellQuote(id)) + "+" + stay(pos)
 	}
 	if kind != "view" {
 		return runCmd(id, "")
@@ -262,6 +273,18 @@ func push(prompt string) string {
 		Wrap("change-prompt", prompt),
 		"reload-sync(swoop-nav rows {q})",
 		"first",
+	}, "+")
+}
+
+// stay reloads the pane the user is in, from an empty bar, and puts the
+// cursor back on row pos. The wait lets the reload land first, or pos
+// would move in the old list.
+func stay(pos int) string {
+	return strings.Join([]string{
+		"clear-query",
+		"reload-sync(swoop-nav rows {q})",
+		"wait",
+		fmt.Sprintf("pos(%d)", pos),
 	}, "+")
 }
 
