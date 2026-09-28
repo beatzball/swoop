@@ -1,7 +1,7 @@
 # The three things you run by hand. CI runs the same ones.
 #
 #   make build   compile every tool into bin/, beside the swoop script
-#   make test    gofmt, vet, and the unit tests
+#   make test    gofmt, vet, the unit tests, and the script tests
 #   make bench   startup and list time of the hot-path tools (needs hyperfine)
 #   make e2e     the launcher driven through a pseudo-terminal (needs fzf)
 
@@ -28,6 +28,7 @@ test:
 	go vet ./...
 	go test ./...
 	scripts/launchd-test
+	scripts/reminders-test
 
 # The launcher end to end: bin/swoop driven through a pseudo-terminal with
 # a fake extension and a fake AI command. Needs fzf and python3.

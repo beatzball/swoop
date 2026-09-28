@@ -267,6 +267,18 @@ printf '%s\\n' "$@" > '{opened}'
 cat > '{copied}'
 """)
 
+    # A fake osascript for Reminders on a Mac: the list after a pause, from
+    # made-up reminders. Any other script goes to the real one.
+    write_exe(os.path.join(fakebin, "osascript"), """#!/usr/bin/env bash
+case "$*" in
+  *EKEventStore*)
+    sleep 2
+    printf 'x-apple-reminder://A\\t\\t\\tHome\\tFake water the plants\\n' ;;
+  *Reminders*) exit 1 ;;
+  *) exec /usr/bin/osascript "$@" ;;
+esac
+""")
+
     # The fake AI command: a status line on stderr, a pause, an answer.
     with open(os.path.join(home, ".config", "swoop", "ai"), "w") as f:
         f.write("sh -c 'echo \"using Fake\" >&2; sleep 1.2; echo \"The answer is 42\"'\n")
@@ -734,6 +746,36 @@ cat > '{copied}'
             finally:
                 eighth.kill()
         check("tasks", tasks)
+
+        # 14. Reminders, on a Mac: the view answers at once with Loading,
+        # and the rows follow without a keystroke, when the fetch behind
+        # it asks fzf to reload. The fake osascript takes two seconds.
+        def reminders():
+            # Mid-reload fzf can hold no rows, and then no current one.
+            def current(s):
+                return (s.get("current") or {}).get("text", "")
+            ninth = Launcher(env)
+            ninth.key = key
+            try:
+                ninth.wait_state(lambda s: s["totalCount"] > 3, what="the launcher's list")
+                ninth.send("reminders")
+                ninth.wait_state(lambda s: s["query"] == "reminders" and s["matchCount"] >= 1, what="rows for 'reminders'")
+                # The Reminders app matches too: move to the extension's row.
+                for _ in range(10):
+                    st = ninth.state()
+                    if st and "Apple Reminders: overdue" in current(st):
+                        break
+                    ninth.send("\x1b[B")
+                    ninth.read(0.2)
+                else:
+                    fail(f"no Reminders row: {ninth.state()}", ninth.buf)
+                ninth.send("\r")
+                ninth.wait_state(lambda s: "Loading reminders" in current(s), timeout=3, what="the Loading row")
+                ninth.wait_state(lambda s: "Fake water the plants" in current(s), timeout=8, what="the rows, with no keystroke")
+            finally:
+                ninth.kill()
+        if sys.platform == "darwin":
+            check("reminders", reminders)
     finally:
         L.kill()
         # The worker may still be around on a fast failure.
