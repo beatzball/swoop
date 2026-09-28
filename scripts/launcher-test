@@ -207,6 +207,19 @@ case "$1" in
   run) echo "$2 ${{3:-}}" > '{marker}' ;;
 esac
 """)
+    # A quicklink with an argument, and a fake `open` (and xdg-open, for
+    # Linux) ahead of the real one on PATH that records what it was asked
+    # to open instead of opening it.
+    with open(os.path.join(home, ".config", "swoop", "quicklinks.tsv"), "w") as f:
+        f.write("Fake Search\thttps://example.test/find?q={argument}\n")
+    fakebin = os.path.join(tmp, "fakebin")
+    os.makedirs(fakebin)
+    opened = os.path.join(tmp, "opened")
+    for name in ("open", "xdg-open"):
+        write_exe(os.path.join(fakebin, name), f"""#!/usr/bin/env bash
+printf '%s\\n' "$@" > '{opened}'
+""")
+
     # The fake AI command: a status line on stderr, a pause, an answer.
     with open(os.path.join(home, ".config", "swoop", "ai"), "w") as f:
         f.write("sh -c 'echo \"using Fake\" >&2; sleep 1.2; echo \"The answer is 42\"'\n")
@@ -225,7 +238,7 @@ esac
         "SWOOP_PICTURES": "0",
         "SWOOP_NO_CLIPD": "1",
         "SWOOP_EXTENSIONS": os.path.join(tmp, "ext"),
-        "PATH": os.path.join(ROOT, "bin") + os.pathsep + env.get("PATH", ""),
+        "PATH": fakebin + os.pathsep + os.path.join(ROOT, "bin") + os.pathsep + env.get("PATH", ""),
     })
     config = os.path.join(home, ".config", "swoop", "config")
 
@@ -318,13 +331,18 @@ esac
             with open(config) as f:
                 if "ai = claude" not in f.read():
                     fail("ctrl-k on New did not set ai = claude", L.buf)
-            # and back to the custom line, so the fake model answers again
+            # and back to the custom line, so the fake model answers again.
+            # The mark moves first: "Ask AI > " is already in the buffer
+            # from the pick above, and the expect below must wait for the
+            # pane to come back a second time, not find the first.
+            L.clear()
             L.send("\x0b")
             L.expect(r"New conversation actions > ", what="the model menu again")
             L.send("The line")
             L.wait_state(lambda s: s["query"] == "The line" and s["matchCount"] == 1, what="the custom-line row")
             L.send("\r")
             L.expect(r"Ask AI > ", what="back in the pane again")
+            L.wait_state(lambda s: "ext/ai/new" in s["current"]["text"], what="the pane back with New under the cursor")
             L.clear()
             L.send("\x1b")
             # Back at the root: the whole list, an empty bar (it was empty
@@ -417,6 +435,36 @@ esac
             finally:
                 again.kill()
         check("Used recently and Stats", recent)
+
+        # 9. a quicklink with an argument: Enter opens its pane, the text
+        # typed becomes the row, Enter opens the link with the text in it
+        def quicklink():
+            third = Launcher(env)
+            third.key = key
+            try:
+                third.wait_state(lambda s: s["totalCount"] > 3, what="the third launcher's list")
+                third.send("fake search")
+                st = third.wait_state(lambda s: s["query"] == "fake search" and s["matchCount"] == 1, what="the quicklink row")
+                if "Fake Search" not in st["current"]["text"]:
+                    fail(f"the match should be the quicklink: {st['current']}", third.buf)
+                third.clear()
+                third.send("\r")
+                third.expect(r"Fake Search > ", what="the quicklink's pane")
+                third.expect(r"Type, then Enter", what="the pane's hint row")
+                third.clear()
+                third.send("hello world")
+                st = third.wait_state(lambda s: s["query"] == "hello world" and "hello+world" in s["current"]["text"], what="the row carrying the text, link filled in")
+                third.send("\r")
+                code = third.wait_exit()
+                if not os.path.exists(opened):
+                    fail(f"the link was not opened (exit {code})", third.buf)
+                with open(opened) as f:
+                    got = f.read().split()
+                if got != ["https://example.test/find?q=hello+world"]:
+                    fail(f"open got the wrong arguments: {got}", third.buf)
+            finally:
+                third.kill()
+        check("quicklink with an argument", quicklink)
     finally:
         L.kill()
         # The worker may still be around on a fast failure.

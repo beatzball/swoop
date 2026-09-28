@@ -11,6 +11,13 @@ so here.
 
 ### Added
 
+- **Quicklinks.** Named links as rows at the root, from
+  `~/.config/swoop/quicklinks.tsv`: name, link, app to open it with. A
+  link holding `{argument}` is a pane: Enter, type, Enter opens the link
+  with the text in it, encoded. Google, DuckDuckGo, Wikipedia, YouTube,
+  and GitHub ship until the file exists. `swoop-links add` and
+  `swoop-links import` (a JSON export) write the file; ctrl-k copies
+  the link or deletes it.
 - **Apps on Linux.** swoop lists the applications in `.desktop` files, in
   XDG order, so a copy in `~/.local/share/applications` overrides or hides
   the system's. Enter launches with `gio launch`, or runs the Exec line

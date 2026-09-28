@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# links: quicklinks, named links that open on Enter, or ask for text
+# first when the link holds {argument}. The work is in swoop-links, a Go
+# tool in bin/, which reads ~/.config/swoop/quicklinks.tsv and also adds
+# to it and imports a JSON export. This shim is here so the rows are
+# routed like every other extension. See cmd/swoop-links.
+exec swoop-links "$@"
