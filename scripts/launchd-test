@@ -194,7 +194,7 @@ line() { grep -n "^$1" "$log" | head -1 | cut -d: -f1; }
 verb 0 restart
 k_clipd="$(line 'launchctl kickstart -k gui/501/dev.swoop.clipd')"
 k_shell="$(line 'launchctl kickstart -k gui/501/dev.swoop.shell')"
-[ -n "$k_clipd" ] && [ -n "$k_shell" ] || fail "restart did not kickstart both"
+if [ -z "$k_clipd" ] || [ -z "$k_shell" ]; then fail "restart did not kickstart both"; fi
 [ "$k_clipd" -lt "$k_shell" ] || fail "restart kicked the frame before the watcher"
 if grep -q '^brew services restart' "$log"; then fail "a launchd install was restarted with brew"; fi
 
@@ -202,7 +202,7 @@ if grep -q '^brew services restart' "$log"; then fail "a launchd install was res
 verb 0 stop
 b_shell="$(line 'launchctl bootout gui/501/dev.swoop.shell')"
 b_clipd="$(line 'launchctl bootout gui/501/dev.swoop.clipd')"
-[ -n "$b_shell" ] && [ -n "$b_clipd" ] || fail "stop did not boot out both"
+if [ -z "$b_shell" ] || [ -z "$b_clipd" ]; then fail "stop did not boot out both"; fi
 [ "$b_shell" -lt "$b_clipd" ] || fail "stop took the watcher down before the frame"
 [ ! -s "$state" ] || fail "stop left services loaded: $(cat "$state")"
 grep -v swoop-shell-mac "$procs" > "$procs.new" || true; mv "$procs.new" "$procs"
@@ -215,7 +215,7 @@ case "$out" in *"$tmp/frame"*) ;; *) fail "status does not say where the frame i
 verb 0 start
 s_clipd="$(line 'launchctl bootstrap gui/501 .*dev.swoop.clipd.plist')"
 s_shell="$(line 'launchctl bootstrap gui/501 .*dev.swoop.shell.plist')"
-[ -n "$s_clipd" ] && [ -n "$s_shell" ] || fail "start did not bootstrap both"
+if [ -z "$s_clipd" ] || [ -z "$s_shell" ]; then fail "start did not bootstrap both"; fi
 [ "$s_clipd" -lt "$s_shell" ] || fail "start started the frame before the watcher"
 [ "$(grep -c running "$state")" = 2 ] || fail "start: services $(cat "$state")"
 verb 0 start
