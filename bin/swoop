@@ -38,7 +38,9 @@ export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIO
 #   --tabstop 1  the one tab left in the row is a 1-column gap, not a jump to
 #                the next 8-column stop, so subtitles line up after the title
 #   --tiebreak   prefer matches at the start, then shorter titles, so typing
-#                "saf" puts Safari above "Safari Technology Preview"
+#                "saf" puts Safari above "Safari Technology Preview"; then
+#                the row's place, so a recent row stays ahead of an equal
+#                match below it
 #   left-click:  a click on a row is Enter on that row. fzf moves the
 #                cursor to the clicked row before it runs the binding, so
 #                {1} is the row under the mouse
@@ -109,7 +111,7 @@ fzf < "$rows" \
   --with-nth $'{3} {4}  \t{5}' \
   --nth 1 \
   --tabstop 1 \
-  --tiebreak 'begin,length' \
+  --tiebreak 'begin,length,index' \
   --layout reverse \
   --no-info \
   --prompt '  ' \

@@ -163,6 +163,15 @@ And the transcript can be drawn by any command instead. One line in
 render = glow -s dark
 ```
 
+## Used recently, and Stats
+
+The list starts with the five things you opened most recently, marked
+"recent", then everything else in its usual order. Every Enter that opens
+something is one line in `~/.local/state/swoop/usage.jsonl`, yours alone
+and never sent anywhere. Type `stats` for the whole picture: what you open
+most, how often, when last, and a fortnight by day. ctrl-k there clears
+the log; Settings turns the group off.
+
 ## Settings
 
 Type `settings` and press Enter, or cmd+, in the frame (alt+, in a
