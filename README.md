@@ -166,6 +166,27 @@ And the transcript can be drawn by any command instead. One line in
 render = glow -s dark
 ```
 
+## Quicklinks
+
+A quicklink is a name, a link, and what opens it. Type the name, press
+Enter, and the link opens: a URL, a folder, a file, a deeplink another app
+owns. A link that holds `{argument}` asks first: Enter opens a pane, what
+you type goes into the link, encoded, and Enter again opens it. Five ship
+ready to use: Google, DuckDuckGo, Wikipedia, YouTube, GitHub. Type `wiki`,
+Enter, a term, Enter.
+
+They are one file, `~/.config/swoop/quicklinks.tsv`: name, link, app,
+tab-separated, one per line. Edit it, or let the tool:
+
+```sh
+swoop-links add 'Home' ~ Finder
+swoop-links add 'npm' 'https://www.npmjs.com/search?q={argument}'
+swoop-links import ~/Downloads/quicklinks.json   # a Raycast export
+swoop-links defaults > ~/.config/swoop/quicklinks.tsv   # start from the five
+```
+
+ctrl-k on a quicklink copies the link, filled in, or deletes it.
+
 ## Used recently, and Stats
 
 The list starts with the five things you opened most recently, marked
