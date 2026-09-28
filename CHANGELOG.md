@@ -9,6 +9,14 @@ so here.
 
 ## [Unreleased]
 
+### Changed
+
+- **Lighter tools.** The twelve tools together are 30 MB stripped, from
+  35. swoop-settings no longer carries an HTTP stack for one request to
+  LM Studio on localhost; the Kitty placeholder table and a small width
+  function replace a Charm package that brought four modules along for
+  two constants and one measurement.
+
 ## [0.7.0] - 2026-09-27
 
 Settings inside the launcher, Ask AI with any model, and the list that

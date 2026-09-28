@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/x/ansi"
+	"github.com/beatzball/swoop/internal/width"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
@@ -104,7 +104,7 @@ func (r *renderer) block(n ast.Node, first, rest string) {
 	case *ast.List:
 		r.list(n, first, rest)
 	case *ast.ThematicBreak:
-		w := r.width - ansi.StringWidth(first)
+		w := r.width - width.String(first)
 		if w < 4 {
 			w = 4
 		}
@@ -140,7 +140,7 @@ func (r *renderer) list(n *ast.List, first, rest string) {
 		if i == 0 {
 			p = first
 		}
-		indent := strings.Repeat(" ", ansi.StringWidth(marker))
+		indent := strings.Repeat(" ", width.String(marker))
 		if n.IsTight {
 			r.tightItem(item, p+marker, rest+indent)
 		} else {
@@ -191,7 +191,7 @@ func (r *renderer) table(t *east.Table, first, rest string) {
 	widths := make([]int, cols)
 	for _, row := range rows {
 		for i, c := range row {
-			if w := ansi.StringWidth(c); w > widths[i] {
+			if w := width.String(c); w > widths[i] {
 				widths[i] = w
 			}
 		}
@@ -206,7 +206,7 @@ func (r *renderer) table(t *east.Table, first, rest string) {
 			if i > 0 {
 				b.WriteString(" " + quoteFg + "│" + reset + " ")
 			}
-			b.WriteString(style + c + strings.Repeat(" ", widths[i]-ansi.StringWidth(c)))
+			b.WriteString(style + c + strings.Repeat(" ", widths[i]-width.String(c)))
 			if style != "" {
 				b.WriteString(unbold)
 			}
@@ -323,14 +323,14 @@ func (r *renderer) wrap(s string, first, rest string) {
 		if pi == 0 {
 			prefix = first
 		}
-		avail := r.width - ansi.StringWidth(prefix)
+		avail := r.width - width.String(prefix)
 		if avail < 10 {
 			avail = 10
 		}
 		var line bytes.Buffer
 		lineW := 0
 		for _, word := range strings.Fields(para) {
-			w := ansi.StringWidth(word)
+			w := width.String(word)
 			if lineW > 0 && lineW+1+w > avail {
 				r.out.WriteString(prefix + line.String() + "\n")
 				prefix = rest

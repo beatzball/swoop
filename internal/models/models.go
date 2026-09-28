@@ -4,9 +4,11 @@
 package models
 
 import (
-	"context"
+	"bytes"
 	"encoding/json"
-	"net/http"
+	"fmt"
+	"io"
+	"net"
 	"os/exec"
 	"strings"
 	"time"
@@ -74,28 +76,28 @@ func Current() string {
 // LMStudio asks LM Studio's local server, when it is up, what models it
 // has, embeddings left out. A server that does not answer within a
 // moment has nothing to offer.
+//
+// A plain socket and a hand-written request rather than net/http: this
+// is one GET to localhost, no TLS, and net/http brings the TLS stack
+// with it, two megabytes in every tool that lists models. swoop-ai keeps
+// net/http, since it talks to the API over TLS; this package is also in
+// swoop-settings, which should not.
 func LMStudio() []string {
 	base := settings.Get(settings.AIURL, "http://localhost:1234/v1")
 	if !strings.Contains(base, "localhost") && !strings.Contains(base, "127.0.0.1") {
 		base = "http://localhost:1234/v1"
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 800*time.Millisecond)
-	defer cancel()
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(base, "/")+"/models", nil)
-	if err != nil {
+	host, path := splitURL(base)
+	body, ok := get(host, path+"/models", 800*time.Millisecond)
+	if !ok {
 		return nil
 	}
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil
-	}
-	defer resp.Body.Close()
 	var out struct {
 		Data []struct {
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	if json.NewDecoder(resp.Body).Decode(&out) != nil {
+	if json.Unmarshal(body, &out) != nil {
 		return nil
 	}
 	var ids []string
@@ -105,4 +107,38 @@ func LMStudio() []string {
 		}
 	}
 	return ids
+}
+
+// splitURL takes "http://host:port/v1" apart into "host:port" and "/v1".
+func splitURL(base string) (host, path string) {
+	rest := strings.TrimPrefix(strings.TrimPrefix(base, "http://"), "https://")
+	rest = strings.TrimRight(rest, "/")
+	if i := strings.Index(rest, "/"); i >= 0 {
+		return rest[:i], rest[i:]
+	}
+	return rest, ""
+}
+
+// get is an HTTP/1.0 GET over a plain socket: the request written, the
+// headers skipped, the body returned. Only for a server on this machine
+// that answers in one piece, which LM Studio's model list is.
+func get(host, path string, timeout time.Duration) ([]byte, bool) {
+	conn, err := net.DialTimeout("tcp", host, timeout)
+	if err != nil {
+		return nil, false
+	}
+	defer conn.Close()
+	_ = conn.SetDeadline(time.Now().Add(timeout))
+	if _, err := fmt.Fprintf(conn, "GET %s HTTP/1.0\r\nHost: %s\r\nAccept: application/json\r\n\r\n", path, host); err != nil {
+		return nil, false
+	}
+	resp, err := io.ReadAll(io.LimitReader(conn, 1<<20))
+	if err != nil {
+		return nil, false
+	}
+	head, body, found := bytes.Cut(resp, []byte("\r\n\r\n"))
+	if !found || !bytes.HasPrefix(head, []byte("HTTP/1.")) || !bytes.Contains(head[:min(len(head), 16)], []byte(" 200")) {
+		return nil, false
+	}
+	return body, true
 }

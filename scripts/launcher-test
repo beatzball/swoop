@@ -322,7 +322,7 @@ esac
             L.send("\x0b")
             L.expect(r"New conversation actions > ", what="the model menu again")
             L.send("The line")
-            L.wait_state(lambda s: s["matchCount"] == 1, what="the custom-line row")
+            L.wait_state(lambda s: s["query"] == "The line" and s["matchCount"] == 1, what="the custom-line row")
             L.send("\r")
             L.expect(r"Ask AI > ", what="back in the pane again")
             L.clear()
