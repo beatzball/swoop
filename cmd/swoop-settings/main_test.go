@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/beatzball/swoop/internal/settings"
@@ -45,5 +46,22 @@ func TestRunSetsAndClamps(t *testing.T) {
 	}
 	if err := run("settings"); err != nil {
 		t.Fatalf("a row with nothing to run is fine: %v", err)
+	}
+}
+
+func TestSkinTone(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	s := find(settings.Skin)
+	if s == nil || len(s.choices("")) != 6 {
+		t.Fatal("six skin tones")
+	}
+	if !strings.Contains(s.value(), "None") {
+		t.Errorf("unset: %q", s.value())
+	}
+	if err := run("skin=3"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(s.value(), "Medium") {
+		t.Errorf("after skin=3: %q", s.value())
 	}
 }
