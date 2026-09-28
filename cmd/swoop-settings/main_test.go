@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -133,6 +134,11 @@ func TestExtensionsTurnOnAndOff(t *testing.T) {
 func TestEditorChoicesAreWhatIsOnPath(t *testing.T) {
 	bin := t.TempDir()
 	for _, name := range []string{"nvim", "emacs"} {
+		if runtime.GOOS == "windows" {
+			// LookPath on Windows finds a program only by an extension
+			// from PATHEXT.
+			name += ".exe"
+		}
 		if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
 			t.Fatal(err)
 		}

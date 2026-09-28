@@ -534,22 +534,38 @@ esac
                 L.read(0.3)
                 L.wait_state(lambda s: s["query"] == "" and s["totalCount"] > 3, what="the root list after Settings")
 
+            def type_fake():
+                # Typed straight after an Esc whose transform is still
+                # running, the letters can be swallowed by its clear-query
+                # when it lands (seen on a slow runner). Type, and if the
+                # bar is still empty after a moment, type once more.
+                L.send("fake")
+                end = time.time() + 1.5
+                while time.time() < end:
+                    st = L.state()
+                    if st and st["query"] == "fake":
+                        return
+                    L.read(0.1)
+                st = L.state()
+                if st and st["query"] == "":
+                    L.send("fake")
+
             L.read(0.3)
-            L.send("fake")
+            type_fake()
             if not root_has_fake_rows():
                 fail("the fake rows should be at the root before turning it off", L.buf)
             L.send("\x1b")  # clear the bar
             L.read(0.3)
             L.wait_state(lambda s: s["query"] == "", what="an empty bar at the root")
             flip(want_off=True)
-            L.send("fake")
+            type_fake()
             if root_has_fake_rows():
                 fail("the fake rows are still at the root with fake turned off", L.buf)
             L.send("\x1b")
             L.read(0.3)
             L.wait_state(lambda s: s["query"] == "", what="an empty bar at the root")
             flip(want_off=False)
-            L.send("fake")
+            type_fake()
             if not root_has_fake_rows():
                 fail("the fake rows did not come back with fake turned on", L.buf)
             L.send("\x1b")
