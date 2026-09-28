@@ -32,6 +32,7 @@ func TestPasteOutsideTheFrameCopies(t *testing.T) {
 	}
 	out := fakeClipboard(t)
 	t.Setenv("SWOOP_SHELL", "")
+	t.Setenv(envRequest, "")
 	note, err := Paste("🚀")
 	if err != nil {
 		t.Fatal(err)

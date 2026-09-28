@@ -1,22 +1,24 @@
 // Package paste puts text where the user was typing: on the clipboard,
 // then into the app in front with the paste keystroke. The emoji and
-// snippets extensions use it for Enter. The keystroke is the
-// per-OS part, one file each behind a build tag:
+// snippets extensions use it for Enter.
 //
-//   - macOS: cmd+V through System Events, which needs Accessibility for
-//     the app swoop runs in. Without it, the text is copied and the user
-//     is told where to turn it on
-//   - Linux: copy only, with wl-copy or xclip, and a note. Pasting for
-//     the user is a later step there
+// The keystroke is not sent from here. Inside swoop's own frame
+// (SWOOP_SHELL is set, and the frame names a request file in
+// SWOOP_PASTE), Paste copies, writes the text to that file, and returns;
+// the frame, as the launcher exits, hides its panel and pastes, but only
+// into a text field. The frame owns the moment the panel is gone and the
+// Accessibility grant, so the keystroke is its job; the file format is in
+// request.go.
+//
+// Everywhere else the text is only copied, and the note says to paste by
+// hand: in a plain terminal the app in front is that terminal, and cmd+V
+// would land in the shell that follows the launcher. The clipboard is the
+// per-OS part, one file each behind a build tag: pbcopy on macOS, wl-copy
+// or xclip on Linux.
 //
 // After the paste, the caret can be moved back with left-arrow presses,
-// for a snippet with {cursor} in it. That rides on the same keystroke
-// and the same fallback: where there is no paste, there are no arrows.
-//
-// A paste is sent only inside swoop's own frame (SWOOP_SHELL is set).
-// In a plain terminal the app in front is that terminal, and cmd+V would
-// land in the shell that follows the launcher, so there Paste copies and
-// says so.
+// for a snippet with {cursor} in it. The count rides in the same request;
+// where there is no paste, there are no arrows.
 package paste
 
 import (
@@ -25,10 +27,11 @@ import (
 	"strings"
 )
 
-// Paste copies text and, where it can, pastes it into the app in front.
-// note is empty when the paste was sent. When only the copy happened, note
-// says so and why, in words for the user; see Tell. err is for a copy
-// that failed: nothing reached the clipboard.
+// Paste copies text and, inside the frame, asks the frame to paste it
+// into the app in front. note is empty when the frame was asked: the
+// frame tells the user if it only copied. Otherwise note says the text
+// was copied, in words for the user; see Tell. err is for a copy that
+// failed, or a request that could not be written.
 func Paste(text string) (note string, err error) { return PasteBack(text, 0) }
 
 // PasteBack is Paste, then left presses of the left arrow key, which
@@ -37,10 +40,10 @@ func PasteBack(text string, left int) (note string, err error) {
 	if err := Copy(text); err != nil {
 		return "", err
 	}
-	if !inFrame() {
-		return "Copied " + Short(text) + ". Paste it with " + pasteKey + ".", nil
+	if path := os.Getenv(envRequest); inFrame() && path != "" {
+		return "", WriteRequest(path, Request{Text: text, Left: max(left, 0)})
 	}
-	return keystroke(text, max(left, 0))
+	return "Copied " + Short(text) + ". Paste it with " + pasteKey + ".", nil
 }
 
 // Short is text cut to fit in a note: the first line, 40 characters at

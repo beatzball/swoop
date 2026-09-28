@@ -39,13 +39,6 @@ func Clipboard() (string, error) {
 	return "", errors.New("no clipboard tool: install wl-clipboard or xclip")
 }
 
-// keystroke is not there yet on Linux: which tool can type into the
-// window in front differs between X and each Wayland compositor. The
-// text is on the clipboard.
-func keystroke(text string, left int) (string, error) {
-	return "Copied " + Short(text) + ". Paste it with " + pasteKey + "; swoop cannot paste for you on Linux yet.", nil
-}
-
 // notify uses notify-send when it is installed, and is quiet otherwise.
 func notify(note string) error {
 	if _, err := exec.LookPath("notify-send"); err != nil {
