@@ -181,7 +181,7 @@ tab-separated, one per line. Edit it, or let the tool:
 ```sh
 swoop-links add 'Home' ~ Finder
 swoop-links add 'npm' 'https://www.npmjs.com/search?q={argument}'
-swoop-links import ~/Downloads/quicklinks.json   # a Raycast export
+swoop-links import ~/Downloads/quicklinks.json   # a JSON export: name, link, openWith
 swoop-links defaults > ~/.config/swoop/quicklinks.tsv   # start from the five
 ```
 

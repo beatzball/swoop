@@ -26,9 +26,9 @@ type Link struct {
 }
 
 // argument is the placeholder that makes a link a pane: it is replaced
-// with what the user typed. Raycast's form is `{argument}`, with options
-// inside the braces in newer exports; anything inside the braces after
-// the word is accepted and ignored, so an export still imports.
+// with what the user typed. The exports other launchers write put
+// options inside the braces too; anything after the word is accepted
+// and ignored, so an export still imports.
 var argument = regexp.MustCompile(`\{argument[^}]*\}`)
 
 // HasArgument says whether Enter on the link asks for text first.

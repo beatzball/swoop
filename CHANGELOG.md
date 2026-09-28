@@ -16,7 +16,7 @@ so here.
   link holding `{argument}` is a pane: Enter, type, Enter opens the link
   with the text in it, encoded. Google, DuckDuckGo, Wikipedia, YouTube,
   and GitHub ship until the file exists. `swoop-links add` and
-  `swoop-links import` (a Raycast export) write the file; ctrl-k copies
+  `swoop-links import` (a JSON export) write the file; ctrl-k copies
   the link or deletes it.
 - **Apps on Linux.** swoop lists the applications in `.desktop` files, in
   XDG order, so a copy in `~/.local/share/applications` overrides or hides

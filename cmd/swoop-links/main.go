@@ -3,7 +3,7 @@
 // it with if the default is not wanted. A link that holds {argument} is
 // a pane: Enter asks for text, and Enter again opens the link with the
 // text in its place. The links are one file, ~/.config/swoop/quicklinks.tsv,
-// edited by hand, by `add`, or by `import` of a Raycast export.
+// edited by hand, by `add`, or by `import` of a JSON export.
 //
 //	swoop-links list [query]         the root rows, one per link
 //	swoop-links view <name> [text]   the pane of a link with {argument}
@@ -11,7 +11,7 @@
 //	swoop-links actions <id>         Copy Link, Delete
 //	swoop-links run <id> [action]    open, copy, or delete
 //	swoop-links add <name> <link> [app]
-//	swoop-links import <raycast.json>
+//	swoop-links import <export.json>
 //	swoop-links defaults             print the links that ship
 //
 // An id is the link's name; inside a pane it is the name, a unit
@@ -64,7 +64,7 @@ func main() {
 		if arg(2) == "" {
 			usageExit()
 		}
-		err = importRaycast(arg(2))
+		err = importJSON(arg(2))
 	case "defaults":
 		_, err = os.Stdout.WriteString(defaults)
 	default:
@@ -77,7 +77,7 @@ func main() {
 }
 
 func usageExit() {
-	fmt.Fprintln(os.Stderr, "usage: swoop-links list | view <name> [text] | preview <id> | actions <id> | run <id> [action] | add <name> <link> [app] | import <raycast.json> | defaults")
+	fmt.Fprintln(os.Stderr, "usage: swoop-links list | view <name> [text] | preview <id> | actions <id> | run <id> [action] | add <name> <link> [app] | import <export.json> | defaults")
 	os.Exit(2)
 }
 
@@ -243,25 +243,26 @@ func remove(name string) error {
 	return save(kept)
 }
 
-// raycastLink is one entry of a Raycast quicklinks export: a JSON array
-// of objects with name, link, openWith, and iconName. Only the first
-// three mean anything here; the icon is a glyph by scheme.
-type raycastLink struct {
+// exportedLink is one entry of a quicklinks export, the JSON array of
+// objects with name, link, openWith, and iconName that other launchers
+// write. Only the first three mean anything here; the icon is a glyph
+// by scheme.
+type exportedLink struct {
 	Name     string `json:"name"`
 	Link     string `json:"link"`
 	OpenWith string `json:"openWith"`
 }
 
-// importRaycast reads an export and adds every link in it, replacing a
+// importJSON reads an export and adds every link in it, replacing a
 // link of the same name. It prints how many it took.
-func importRaycast(file string) error {
+func importJSON(file string) error {
 	data, err := os.ReadFile(file)
 	if err != nil {
 		return err
 	}
-	var entries []raycastLink
+	var entries []exportedLink
 	if err := json.Unmarshal(data, &entries); err != nil {
-		return fmt.Errorf("%s: not a Raycast quicklinks export: %w", file, err)
+		return fmt.Errorf("%s: not a quicklinks export: %w", file, err)
 	}
 	links, err := load()
 	if err != nil {

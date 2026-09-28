@@ -7,14 +7,14 @@ import (
 )
 
 func TestParseSkipsCommentsAndBadLines(t *testing.T) {
-	links := parse([]byte("# header\n\nGoogle\thttps://g/?q={argument}\nbad line\n Docs \t /Users/me/Docs \tFinder\n"))
+	links := parse([]byte("# header\n\nGoogle\thttps://g/?q={argument}\nbad line\n Docs \t /tmp/Docs \tFinder\n"))
 	if len(links) != 2 {
 		t.Fatalf("want 2 links, got %d: %+v", len(links), links)
 	}
 	if links[0].Name != "Google" || !links[0].HasArgument() {
 		t.Errorf("first link wrong: %+v", links[0])
 	}
-	if links[1].Name != "Docs" || links[1].Link != "/Users/me/Docs" || links[1].App != "Finder" {
+	if links[1].Name != "Docs" || links[1].Link != "/tmp/Docs" || links[1].App != "Finder" {
 		t.Errorf("fields not trimmed: %+v", links[1])
 	}
 }
@@ -94,14 +94,14 @@ func TestAddRemoveRoundTrip(t *testing.T) {
 	}
 }
 
-func TestImportRaycast(t *testing.T) {
+func TestImportJSON(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	file := filepath.Join(t.TempDir(), "export.json")
 	body := `[{"name":"Maps","link":"https://maps.test/?q={argument}","iconName":"map","openWith":"/Applications/Safari.app"},{"name":"","link":"x"}]`
 	if err := os.WriteFile(file, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := importRaycast(file); err != nil {
+	if err := importJSON(file); err != nil {
 		t.Fatal(err)
 	}
 	links, _ := load()
@@ -112,7 +112,7 @@ func TestImportRaycast(t *testing.T) {
 	if err := os.WriteFile(file, []byte(`{"not":"an array"}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := importRaycast(file); err == nil {
+	if err := importJSON(file); err == nil {
 		t.Error("an object, not an array, should be an error")
 	}
 }

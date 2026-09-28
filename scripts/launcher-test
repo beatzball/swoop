@@ -331,13 +331,18 @@ printf '%s\\n' "$@" > '{opened}'
             with open(config) as f:
                 if "ai = claude" not in f.read():
                     fail("ctrl-k on New did not set ai = claude", L.buf)
-            # and back to the custom line, so the fake model answers again
+            # and back to the custom line, so the fake model answers again.
+            # The mark moves first: "Ask AI > " is already in the buffer
+            # from the pick above, and the expect below must wait for the
+            # pane to come back a second time, not find the first.
+            L.clear()
             L.send("\x0b")
             L.expect(r"New conversation actions > ", what="the model menu again")
             L.send("The line")
             L.wait_state(lambda s: s["query"] == "The line" and s["matchCount"] == 1, what="the custom-line row")
             L.send("\r")
             L.expect(r"Ask AI > ", what="back in the pane again")
+            L.wait_state(lambda s: "ext/ai/new" in s["current"]["text"], what="the pane back with New under the cursor")
             L.clear()
             L.send("\x1b")
             # Back at the root: the whole list, an empty bar (it was empty
