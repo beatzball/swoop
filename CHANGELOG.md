@@ -16,6 +16,11 @@ so here.
   and text, previewed rendered. Enter opens the file; `New note` makes
   one from what you typed; ctrl-k copies, reveals, or deletes to
   `deleted/`.
+- **Tasks.** Type `tasks`, Enter: a checklist in
+  `~/.local/share/swoop/tasks.md`. Typed text adds a task, and
+  `today`, `tomorrow`, a weekday or a date at its end is the due date.
+  Enter ticks a task and the list stays open; ctrl-k undoes, deletes,
+  copies. On a Mac, `reminders` is the same view over Apple Reminders.
 - **Snippets.** Named text as rows at the root, one markdown file each in
   `~/.config/swoop/snippets/`: name, an optional `keyword:` line, text.
   Enter pastes into the app in front with `{date}`, `{time}`,

@@ -1,0 +1,222 @@
+#!/usr/bin/env bash
+# reminders: Apple Reminders as a view, on a Mac. One root row opens it:
+# every open reminder in every list, overdue and today first, then by
+# due day, then the ones without one. Enter completes a reminder and the
+# view stays, reloaded. Text typed becomes an Add reminder row, and the
+# date words at its end ("tomorrow", "friday", "2026-10-01") become its
+# due day, read by swoop-tasks so both checklists read them alike.
+#
+# Everything goes through osascript, in JavaScript for Automation, and
+# Reminders answers in a second or two. The view runs on every keystroke,
+# so the list is kept in a temp file for a few seconds. The first call
+# asks for permission to Reminders; until it is given, the view says so.
+#
+# On other systems there is no Reminders, and `list` prints nothing.
+set -euo pipefail
+
+[ "$(uname)" = Darwin ] || exit 0
+
+cache="${TMPDIR:-/tmp}/swoop-reminders.$(id -u).tsv"
+ttl=5
+settings='x-apple.systempreferences:com.apple.preference.security?Privacy_Reminders'
+
+row() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5"; }
+clean() { printf '%s' "$1" | tr '\t\r\n' '   '; }
+
+# fetch prints every open reminder, one per line: id, due day, due time
+# (empty for none or midnight), list, name. The properties are read a
+# list at a time, one Apple event each, not one per reminder: that is
+# the difference between a second and a minute on a long list.
+fetch() {
+  osascript -l JavaScript -e '
+function run() {
+  const R = Application("Reminders");
+  const pad = n => (n < 10 ? "0" : "") + n;
+  const clean = s => String(s === null || s === undefined ? "" : s).replace(/[\t\r\n]+/g, " ");
+  const out = [];
+  R.lists().forEach(l => {
+    const rs = l.reminders.whose({completed: false});
+    const ids = rs.id(), names = rs.name(), dues = rs.dueDate();
+    const list = clean(l.name());
+    for (let i = 0; i < ids.length; i++) {
+      const d = dues[i];
+      let day = "", hm = "";
+      if (d) {
+        day = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
+        if (d.getHours() || d.getMinutes()) hm = pad(d.getHours()) + ":" + pad(d.getMinutes());
+      }
+      out.push([ids[i], day, hm, list, clean(names[i])].join("\t"));
+    }
+  });
+  return out.join("\n");
+}'
+}
+
+# fresh says whether the cache is younger than ttl seconds.
+fresh() {
+  [ -f "$cache" ] || return 1
+  local age=$(( $(date +%s) - $(stat -f %m "$cache") ))
+  [ "$age" -lt "$ttl" ]
+}
+
+# load prints the list, from the cache when it is fresh. A fetch that
+# fails (no permission yet) leaves no cache, so the next call asks again.
+load() {
+  if ! fresh; then
+    local tmp="$cache.$$"
+    if ! fetch > "$tmp" 2>/dev/null; then
+      rm -f "$tmp"
+      return 1
+    fi
+    mv "$tmp" "$cache"
+  fi
+  cat "$cache"
+}
+
+# forget takes one reminder out of the cache, so the view reloads without
+# it at once instead of asking Reminders again.
+forget() {
+  [ -f "$cache" ] || return 0
+  awk -F '\t' -v id="$1" '$1 != id' "$cache" > "$cache.$$" && mv "$cache.$$" "$cache"
+}
+
+# field prints field $2 of reminder $1's cached line: 2 the due day, 3
+# the time, 4 the list, 5 the name. awk, not read: a tab is whitespace to
+# read, so an empty field in the middle would shift the rest left.
+field() {
+  load | awk -F '\t' -v id="$1" -v n="$2" '$1 == id { print $n; exit }'
+}
+
+# rows prints the view's reminder rows, filtered by every word of $1:
+# overdue and today first, then by due day, then the ones without one.
+rows() {
+  local today tomorrow
+  today=$(date +%F)
+  tomorrow=$(date -v+1d +%F)
+  load | Q="$1" awk -F '\t' -v today="$today" -v tomorrow="$tomorrow" '
+    BEGIN { n = split(tolower(ENVIRON["Q"]), words, " ") }
+    {
+      name = tolower($5)
+      for (i = 1; i <= n; i++) if (index(name, words[i]) == 0) next
+      if ($2 == "") { rank = 2; when = "" }
+      else if ($2 <= today) { rank = 0; when = ($2 < today ? "overdue, " $2 : "today") }
+      else { rank = 1; when = ($2 == tomorrow ? "tomorrow" : $2) }
+      if ($3 != "") when = when " " $3
+      note = (when == "" ? $4 : when " · " $4)
+      printf "%d\t%s\t%s\tr:%s\ttoggle\t󰄱\t%s\t%s\n", rank, $2, $3, $1, $5, note
+    }' | sort -t "$(printf '\t')" -k1,1n -k2,2 -k3,3 -s | cut -f 4-
+}
+
+case "${1:-}" in
+  list)
+    row reminders view '' 'Reminders' 'Apple Reminders: overdue and today first'
+    ;;
+  view)
+    query="${3:-}"
+    text=''
+    if [ -n "$(printf '%s' "$query" | tr -d ' ')" ]; then
+      parsed=$(swoop-tasks parse "$query")
+      text="${parsed%%$'\t'*}"
+      due="${parsed#*$'\t'}"
+      row "add:$(clean "$query")" toggle '󰐕' "Add reminder: $text" "${due:+due $due}"
+    fi
+    # The filter is the text without its date words: "milk friday" is
+    # about to add a reminder, and still finds the milk one already there.
+    if ! rows "$text"; then
+      row perm command '' 'Reminders is not allowed yet' 'Enter opens Privacy & Security to allow it'
+    fi
+    ;;
+  preview)
+    id="${2:-}"
+    case "$id" in
+      reminders)
+        echo 'Your open reminders, every list, overdue and today first.'
+        echo
+        echo 'Enter completes one. Type to filter, or to add: end the text'
+        echo 'with today, tomorrow, a weekday or 2026-10-01 to give it a day.'
+        ;;
+      perm)
+        echo 'swoop asks Reminders through osascript. Turn on Reminders'
+        echo 'for the app swoop runs in, under Privacy & Security.'
+        ;;
+      add:*)
+        parsed=$(swoop-tasks parse "${id#add:}")
+        echo 'Enter adds to your default list:'
+        echo
+        echo "${parsed%%$'\t'*}"
+        due="${parsed#*$'\t'}"
+        echo
+        if [ -n "$due" ]; then echo "due $due"; else echo 'no due date'; fi
+        ;;
+      r:*)
+        rid="${id#r:}"
+        day=$(field "$rid" 2) hm=$(field "$rid" 3) list=$(field "$rid" 4)
+        field "$rid" 5
+        echo
+        if [ -n "$day" ]; then echo "due $day${hm:+ $hm}"; else echo 'no due date'; fi
+        echo "in $list"
+        echo
+        echo 'Enter completes it.'
+        ;;
+    esac
+    ;;
+  actions)
+    case "${2:-}" in
+      r:*)
+        row complete refresh '󰄲' 'Complete' 'Enter'
+        row delete refresh '' 'Delete' 'Remove it from Reminders'
+        row copy action '' 'Copy' "The reminder's text"
+        ;;
+    esac
+    ;;
+  run)
+    id="${2:-}"
+    action="${3:-complete}"
+    case "$id" in
+      perm) open "$settings" ;;
+      add:*)
+        parsed=$(swoop-tasks parse "${id#add:}")
+        text="${parsed%%$'\t'*}"
+        due="${parsed#*$'\t'}"
+        [ -n "$text" ] || exit 0
+        # An all-day due date: the date words name a day, not an hour.
+        osascript -l JavaScript -e '
+function run(a) {
+  const R = Application("Reminders");
+  const p = {name: a[0]};
+  if (a[1]) {
+    const d = a[1].split("-").map(Number);
+    p.alldayDueDate = new Date(d[0], d[1] - 1, d[2]);
+  }
+  R.defaultList.reminders.push(R.Reminder(p));
+}' "$text" "$due" > /dev/null
+        # The new one's id is Reminders', so the list is asked again.
+        rm -f "$cache"
+        ;;
+      r:*)
+        rid="${id#r:}"
+        case "$action" in
+          complete)
+            osascript -l JavaScript -e 'function run(a) { Application("Reminders").reminders.byId(a[0]).completed = true; }' "$rid" > /dev/null
+            forget "$rid"
+            ;;
+          delete)
+            osascript -l JavaScript -e 'function run(a) { Application("Reminders").reminders.byId(a[0]).delete(); }' "$rid" > /dev/null
+            forget "$rid"
+            ;;
+          copy)
+            name=$(field "$rid" 5)
+            printf '%s' "$name" | pbcopy
+            echo "Copied $name" >&2
+            ;;
+          *) echo "no action $action for a reminder" >&2; exit 2 ;;
+        esac
+        ;;
+      *) echo "unknown id: $id" >&2; exit 2 ;;
+    esac
+    ;;
+  *)
+    echo "usage: reminders list | view reminders [text] | preview <id> | actions <id> | run <id> [complete|delete|copy]" >&2
+    exit 2
+    ;;
+esac

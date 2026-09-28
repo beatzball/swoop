@@ -245,6 +245,27 @@ Each note is a markdown file in `~/.local/share/swoop/notes/`, and its
 first line is its title. Any editor works, and so does any sync. Delete
 moves the file to `deleted/` in that folder, so you can get it back.
 
+## Tasks
+
+Type `tasks`, Enter. The list is open tasks first, the ones due soonest
+on top, done ones after. Type a task and press Enter to add it. End it
+with `today`, `tomorrow`, a weekday, or a date like `2026-10-01`, and
+that is its due date: `buy milk tomorrow`. Enter on a task ticks it, and
+you stay in the list. ctrl-k undoes, deletes, or copies.
+
+The tasks are one markdown checklist, `~/.local/share/swoop/tasks.md`,
+so any editor can change it too:
+
+```text
+- [ ] buy milk due: 2026-09-29
+- [x] call the bank
+```
+
+On a Mac, `reminders` is the same view over Apple Reminders: every list,
+overdue and today first. Enter completes a reminder; typed text adds one
+to your default list, with the same date words. The first time, macOS
+asks to let swoop use Reminders.
+
 ## Window management
 
 Rows that move the window you were in: Left, Right, Top, and Bottom Half;
@@ -321,7 +342,8 @@ the list, reloaded. Clipboard History's Delete is a `refresh`.
 A row of kind `view` opens a pane instead of running: the launcher asks
 `view` for its rows, again on every keystroke, and shows exactly what comes
 back. `extensions/define/define` is one: Enter on "Define Word" and you are
-typing into the dictionary.
+typing into the dictionary. Inside a pane, a row of kind `toggle` runs
+on Enter and the pane stays, reloaded: that is how Tasks ticks a task.
 
 A result line is five fields separated by tabs. Only the last three are shown:
 
