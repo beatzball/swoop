@@ -128,7 +128,8 @@ it comes. Name the command in `~/.config/swoop/ai`, one line:
 ollama run llama3.2
 ```
 
-Or pick one in Settings, under AI model:
+Or pick one in Settings, under AI model, or with ctrl-k on the New
+conversation row in the pane:
 
 | you have | pick | streams | searches the web |
 |---|---|---|---|
