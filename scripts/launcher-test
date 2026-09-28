@@ -113,11 +113,12 @@ class Launcher:
     sock = None
     key = None
 
-    def state(self):
+    def state(self, limit=0):
         """fzf's own account of itself, through its socket: the query, the
-        match count, the row under the cursor. Exact where the screen
-        stream is not: a redraw in flight can show the old list under the
-        new prompt, but fzf knows what it holds."""
+        match count, the row under the cursor, and with a limit the first
+        that many matches. Exact where the screen stream is not: a redraw
+        in flight can show the old list under the new prompt, but fzf
+        knows what it holds."""
         if self.sock is None:
             socks = glob.glob(os.path.join(os.environ["SWOOP_TEST_TMP"], "swoop-state.*.sock"))
             if not socks:
@@ -127,7 +128,8 @@ class Launcher:
             c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
             c.settimeout(2)
             c.connect(self.sock)
-            c.sendall(f"GET / HTTP/1.0\r\nx-api-key: {self.key}\r\n\r\n".encode())
+            path = f"/?limit={limit}" if limit else "/"
+            c.sendall(f"GET {path} HTTP/1.0\r\nx-api-key: {self.key}\r\n\r\n".encode())
             data = b""
             while True:
                 chunk = c.recv(65536)
@@ -469,6 +471,82 @@ esac
             L.wait_state(lambda s: s["query"] == "", what="an empty bar at the root")
         check("Settings pane", settings_pane)
 
+        # 6b. Settings, Extensions: Enter turns the fake extension off, and
+        # its rows leave the root; Enter again brings them back.
+        def extensions_toggle():
+            def root_has_fake_rows():
+                # "Fake Search", the quicklink, answers "fake" whether the
+                # fake extension is on or off: once it is in, the reload
+                # for the text has landed, and the list can be read.
+                end = time.time() + 5
+                while time.time() < end:
+                    st = L.state(limit=500)
+                    texts = [m["text"] for m in (st or {}).get("matches", [])]
+                    if st and st["query"] == "fake" and any("Fake Search" in t for t in texts):
+                        return any("Fake Things" in t for t in texts)
+                    L.read(0.1)
+                fail(f"the root list for 'fake' never came; last state {L.state()}", L.buf)
+
+            def flip(want_off):
+                L.clear()
+                L.send("\x1b,")  # alt-,
+                L.expect(r"Settings > ", what="the Settings prompt")
+                L.send("ext")
+                L.wait_state(lambda s: s["query"] == "ext" and s["matchCount"] == 1 and "Extensions" in s["current"]["text"], what="the Extensions row")
+                L.clear()
+                L.send("\r")
+                L.expect(r"Extensions > ", what="the Extensions prompt")
+                L.send("fake")
+                L.wait_state(lambda s: s["query"] == "fake" and s["matchCount"] == 1 and "extension/fake" in s["current"]["text"], what="the fake extension's row")
+                L.send("\r")
+                # A toggle stays: the same pane, the bar cleared, the mark
+                # flipped on the row.
+                mark = "off" if want_off else "on"
+                end = time.time() + 5
+                while True:
+                    st = L.state(limit=100)
+                    rows = [m["text"] for m in (st or {}).get("matches", []) if "extension/fake" in m["text"]]
+                    if st and st["query"] == "" and rows and (("\toff" in rows[0]) == want_off):
+                        break
+                    if time.time() > end:
+                        fail(f"the fake row never showed {mark}; last state {st}", L.buf)
+                    L.read(0.1)
+                with open(config) as f:
+                    text = f.read()
+                if want_off != ("off = fake" in text):
+                    fail(f"the config after turning fake {mark}:\n{text}", L.buf)
+                L.send("\x1b")  # pops to Settings, 'ext' back in the bar
+                L.wait_state(lambda s: s["query"] == "ext", what="back in Settings")
+                L.send("\x1b")  # clears 'ext'
+                L.wait_state(lambda s: s["query"] == "", what="the bar cleared in Settings")
+                L.send("\x1b")  # pops to the root
+                # A key straight after Esc would be read with it as alt-key.
+                L.read(0.3)
+                L.wait_state(lambda s: s["query"] == "" and s["totalCount"] > 3, what="the root list after Settings")
+
+            L.read(0.3)
+            L.send("fake")
+            if not root_has_fake_rows():
+                fail("the fake rows should be at the root before turning it off", L.buf)
+            L.send("\x1b")  # clear the bar
+            L.read(0.3)
+            L.wait_state(lambda s: s["query"] == "", what="an empty bar at the root")
+            flip(want_off=True)
+            L.send("fake")
+            if root_has_fake_rows():
+                fail("the fake rows are still at the root with fake turned off", L.buf)
+            L.send("\x1b")
+            L.read(0.3)
+            L.wait_state(lambda s: s["query"] == "", what="an empty bar at the root")
+            flip(want_off=False)
+            L.send("fake")
+            if not root_has_fake_rows():
+                fail("the fake rows did not come back with fake turned on", L.buf)
+            L.send("\x1b")
+            L.read(0.3)
+            L.wait_state(lambda s: s["query"] == "", what="an empty bar at the root")
+        check("Settings, Extensions: off and on", extensions_toggle)
+
         # 7. Enter on a plain row runs it and the launcher exits
         def run():
             L.clear()
@@ -494,7 +572,8 @@ esac
             again = Launcher(env)
             again.key = key
             try:
-                st = again.wait_state(lambda s: s["totalCount"] > 3, what="the second launcher's list")
+                # The count can arrive a moment before the cursor row does.
+                st = again.wait_state(lambda s: s["totalCount"] > 3 and s.get("current"), what="the second launcher's list")
                 first = st["current"]["text"]
                 if "Fake Plain Row" not in first or "recent" not in first:
                     fail(f"the first row should be the recent one, marked: {first!r}", again.buf)

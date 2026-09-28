@@ -4,9 +4,11 @@
 //
 //	swoop-settings list                 the Settings row
 //	swoop-settings view settings [q]    one row per setting, the value in the subtitle
+//	swoop-settings view extensions [q]  one row per extension, on or off
 //	swoop-settings view <key> [q]       the choices for one setting
 //	swoop-settings preview <id>         what the setting does and where it lives
-//	swoop-settings run <id>             <key>=<value> sets it; folder opens the config folder
+//	swoop-settings run <id>             <key>=<value> sets it; extension/<name> turns it
+//	                                    on or off; folder opens the config folder
 //
 // Every value is one line in ~/.config/swoop/config, the file
 // internal/settings reads and writes. The frame watches that file for the
@@ -14,14 +16,17 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
+	"github.com/beatzball/swoop/internal/ext"
 	"github.com/beatzball/swoop/internal/models"
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
@@ -175,6 +180,19 @@ var skinTones = []choice{
 // The row that opens the config folder: not a setting, a door.
 const folderID = "folder"
 
+// The Extensions row's view, and the prefix of the ids of its rows, one
+// per extension: "extension/reminders".
+const (
+	extensionsID    = "extensions"
+	extensionPrefix = "extension/"
+)
+
+// The marks for on and off: the ticked and empty boxes Tasks uses.
+const (
+	iconOn  = "󰄲"
+	iconOff = "󰄱"
+)
+
 func main() {
 	if len(os.Args) < 2 {
 		usage()
@@ -188,7 +206,7 @@ func main() {
 	var err error
 	switch os.Args[1] {
 	case "list":
-		err = protocol.Write(os.Stdout, []protocol.Item{{ID: "settings", Kind: "view", Icon: "", Title: "Settings", Subtitle: "hotkey, AI model, preview width, web search"}})
+		err = protocol.Write(os.Stdout, []protocol.Item{{ID: "settings", Kind: "view", Icon: "", Title: "Settings", Subtitle: "hotkey, AI model, preview width, extensions"}})
 	case "view":
 		err = view(arg(2), strings.TrimSpace(arg(3)))
 	case "preview":
@@ -206,7 +224,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "usage: swoop-settings list | view settings|<key> [query] | preview <id> | run <id>")
+	fmt.Fprintln(os.Stderr, "usage: swoop-settings list | view settings|extensions|<key> [query] | preview <id> | run <id>")
 	os.Exit(2)
 }
 
@@ -231,10 +249,16 @@ func view(id, query string) error {
 			}
 			items = append(items, protocol.Item{ID: s.key, Kind: "view", Icon: s.icon, Title: s.title, Subtitle: s.value()})
 		}
+		if query == "" || strings.Contains("extensions", strings.ToLower(query)) {
+			items = append(items, protocol.Item{ID: extensionsID, Kind: "view", Icon: "󰏗", Title: "Extensions", Subtitle: extensionsValue()})
+		}
 		if query == "" || strings.Contains("open the config folder", strings.ToLower(query)) {
 			items = append(items, protocol.Item{ID: folderID, Kind: "command", Icon: "", Title: "Open the config folder", Subtitle: settings.Dir()})
 		}
 		return protocol.Write(os.Stdout, items)
+	}
+	if id == extensionsID {
+		return protocol.Write(os.Stdout, extensionRows(query))
 	}
 	s := find(id)
 	if s == nil {
@@ -261,9 +285,16 @@ func view(id, query string) error {
 }
 
 func preview(id string) error {
+	if name, ok := strings.CutPrefix(id, extensionPrefix); ok {
+		return previewExtension(name)
+	}
 	key, _, _ := strings.Cut(id, "=")
 	if key == folderID {
 		fmt.Println("The folder with swoop's files: config, the AI line, the clipboard\nignore list, shell-mac.json, and a place for extensions of your own.")
+		return nil
+	}
+	if key == extensionsID {
+		fmt.Println("Every extension swoop found, bundled and your own. Enter turns one on\nor off; one that is off has no rows at the root, no pane, no actions.\nSettings stays on: it is the way back.\n\n\x1b[2m" + settings.Off + " = … in " + settings.Path() + "\x1b[22m")
 		return nil
 	}
 	if key == "settings" {
@@ -283,6 +314,9 @@ func preview(id string) error {
 func run(id string) error {
 	if id == folderID {
 		return openFolder(settings.Dir())
+	}
+	if name, ok := strings.CutPrefix(id, extensionPrefix); ok {
+		return flip(name)
 	}
 	key, value, ok := strings.Cut(id, "=")
 	if !ok {
@@ -368,4 +402,95 @@ func atoi(s string, fallback int) int {
 		return fallback
 	}
 	return n
+}
+
+// extensionsValue is the Extensions row's subtitle: how many are on.
+func extensionsValue() string {
+	all := ext.DiscoverAll(ext.Dirs())
+	on := len(ext.Discover(ext.Dirs()))
+	if on == len(all) {
+		return fmt.Sprintf("all %d on", on)
+	}
+	return fmt.Sprintf("%d on, %d off", on, len(all)-on)
+}
+
+// extensionRows is the Extensions view: every extension found, on or off,
+// by name, filtered by name on what was typed. Each row is kind toggle:
+// Enter flips it and the view stays, reloaded, with the new mark.
+func extensionRows(query string) []protocol.Item {
+	off := settings.OffList()
+	q := strings.ToLower(query)
+	var items []protocol.Item
+	for _, e := range ext.DiscoverAll(ext.Dirs()) {
+		if q != "" && !strings.Contains(strings.ToLower(e.Name), q) {
+			continue
+		}
+		it := protocol.Item{ID: extensionPrefix + e.Name, Kind: "toggle", Icon: iconOn, Title: e.Name, Subtitle: purpose(e.Name, e.Exe)}
+		switch {
+		case e.Name == settings.AlwaysOn:
+			it.Subtitle = "always on · " + it.Subtitle
+		case slices.Contains(off, e.Name):
+			// The box says it, and the word does too, for a font without
+			// the glyph.
+			it.Icon = iconOff
+			it.Subtitle = strings.TrimSuffix("off · "+it.Subtitle, " · ")
+		}
+		items = append(items, it)
+	}
+	return items
+}
+
+// flip turns one extension on if it is off, and off if it is on. Settings
+// stays on whatever is asked: ParseOff drops it.
+func flip(name string) error {
+	off := settings.OffList()
+	if i := slices.Index(off, name); i >= 0 {
+		off = slices.Delete(off, i, i+1)
+	} else {
+		off = append(off, name)
+	}
+	return settings.Set(settings.Off, settings.FormatOff(off))
+}
+
+func previewExtension(name string) error {
+	for _, e := range ext.DiscoverAll(ext.Dirs()) {
+		if e.Name != name {
+			continue
+		}
+		state := "on"
+		if slices.Contains(settings.OffList(), name) {
+			state = "off"
+		}
+		if name == settings.AlwaysOn {
+			state = "always on"
+		}
+		fmt.Printf("\x1b[1m%s\x1b[22m  %s\n\n%s\n\n\x1b[2m%s\n%s = … in %s\x1b[22m\n", e.Name, state, purpose(e.Name, e.Exe), e.Dir, settings.Off, settings.Path())
+		return nil
+	}
+	return nil
+}
+
+// purpose is an extension's one line: the first sentence of the first
+// comment in its script, without the "name:" it opens with. A script
+// without one, or a program that is not a script, has none.
+func purpose(name, exe string) string {
+	f, err := os.Open(exe)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	sc := bufio.NewScanner(f)
+	if !sc.Scan() || !strings.HasPrefix(sc.Text(), "#!") || !sc.Scan() {
+		return ""
+	}
+	line, ok := strings.CutPrefix(strings.TrimSpace(sc.Text()), "#")
+	if !ok {
+		return ""
+	}
+	line = strings.TrimPrefix(strings.TrimSpace(line), name+": ")
+	if i := strings.Index(line, ". "); i >= 0 {
+		line = line[:i]
+	}
+	// The line may stop mid-sentence, where the comment wraps.
+	return strings.TrimRight(line, ".,;: ")
 }

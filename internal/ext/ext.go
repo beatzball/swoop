@@ -20,12 +20,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/beatzball/swoop/internal/protocol"
+	"github.com/beatzball/swoop/internal/settings"
 )
 
 // Prefix starts every id that belongs to an extension: "ext/<name>/<id>".
@@ -73,11 +75,33 @@ func Dirs() []string {
 	return dirs
 }
 
-// Discover returns every extension in dirs, sorted by name. A directory
+// Discover returns the extensions in dirs that are on: every one, less
+// the names in the settings file's off list. One that is off has no rows,
+// no view and no actions, because every caller finds extensions here.
+func Discover(dirs []string) []Extension {
+	return skip(DiscoverAll(dirs), settings.OffList())
+}
+
+// skip drops the extensions named in off, keeping the order.
+func skip(exts []Extension, off []string) []Extension {
+	if len(off) == 0 {
+		return exts
+	}
+	kept := exts[:0:0]
+	for _, e := range exts {
+		if !slices.Contains(off, e.Name) {
+			kept = append(kept, e)
+		}
+	}
+	return kept
+}
+
+// DiscoverAll returns every extension in dirs, on or off, sorted by name:
+// what the Settings pane lists to turn them on and off. A directory
 // without an executable of its own name is not an extension and is
 // skipped without comment: a README or a data directory next to real
 // extensions is normal. The first directory to define a name wins.
-func Discover(dirs []string) []Extension {
+func DiscoverAll(dirs []string) []Extension {
 	seen := map[string]bool{}
 	var exts []Extension
 	for _, dir := range dirs {
@@ -113,7 +137,7 @@ func executable(path string) bool {
 	return st.Mode()&0o111 != 0
 }
 
-// Find returns the extension called name, if it is installed.
+// Find returns the extension called name, if it is installed and on.
 func Find(name string) (Extension, bool) {
 	for _, e := range Discover(Dirs()) {
 		if e.Name == name {

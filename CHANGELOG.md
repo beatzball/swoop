@@ -52,6 +52,11 @@ so here.
   same from Homebrew, the curl installer, or a checkout; the bird menu
   has Restart and Quit; and after an upgrade the frame restarts itself
   once the panel is hidden.
+- **Turn extensions on and off.** Settings, Extensions lists every
+  extension, bundled and your own; Enter turns one off, and it leaves the
+  root, Tab and ctrl-k until you turn it back on. It is one line in the
+  config, `off = reminders, tasks`, which you can also write by hand.
+  Settings itself stays on.
 
 ### Changed
 

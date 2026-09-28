@@ -104,6 +104,12 @@ func main() {
 		}
 		fmt.Println(nav.Enter(st, id, kind, title, query, pos, runCommand(path, kind, title)))
 	case "ai":
+		// With the ai extension turned off in Settings, Tab has no pane
+		// to open, and does nothing.
+		if name, _, _ := ext.Route(nav.AIView); !installed(name) {
+			fmt.Println("ignore")
+			return
+		}
 		fmt.Println(nav.Ask(st, query, pos))
 	case "settings":
 		fmt.Println(nav.Settings(st, query, pos))
@@ -180,6 +186,12 @@ func runCommand(statePath, kind, title string) func(target, action string) strin
 		}
 		return "become:" + run + "; exec " + swoopRun
 	}
+}
+
+// installed says whether the extension called name is there and on.
+func installed(name string) bool {
+	_, found := ext.Find(name)
+	return found
 }
 
 // actionsFor is the menu for a row: the launcher's own three for an app,

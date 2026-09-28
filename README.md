@@ -301,7 +301,10 @@ the log; Settings turns the group off.
 Type `settings` and press Enter, or cmd+, in the frame (alt+, in a
 terminal). One row per setting, the current value beside it; Enter on a row
 to change it: the hotkey, the preview width, the AI model, whether the model
-may search the web, what draws the transcript. Every value is one line in
+may search the web, what draws the transcript. Extensions lists every
+extension with a box for on or off; Enter turns one off, and its rows leave
+the root until you turn it back on (`off = reminders, tasks` in the file;
+Settings itself cannot be turned off). Every value is one line in
 `~/.config/swoop/config`, which you can also edit by hand. The frame watches
 that file, so a new hotkey works within a second, no restart.
 

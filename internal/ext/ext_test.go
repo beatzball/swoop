@@ -37,7 +37,16 @@ func TestRoute(t *testing.T) {
 // TestListTimeoutIsAnError sets its own short limit.
 func TestMain(m *testing.M) {
 	listTimeout = 10 * time.Second
-	os.Exit(m.Run())
+	// The machine's own settings file must not reach the tests: an off
+	// list there would hide the fakes.
+	cfg, err := os.MkdirTemp("", "swoop-ext-test")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("XDG_CONFIG_HOME", cfg)
+	code := m.Run()
+	os.RemoveAll(cfg)
+	os.Exit(code)
 }
 
 func fake(t *testing.T, dir, name, body string) string {
@@ -100,6 +109,42 @@ func TestDiscoverFirstDirWins(t *testing.T) {
 	got := Discover([]string{a, b})
 	if len(got) != 1 || got[0].Dir != filepath.Join(a, "same") {
 		t.Fatalf("want the first directory's copy only, got %+v", got)
+	}
+}
+
+func TestDiscoverSkipsWhatIsOff(t *testing.T) {
+	skipOnWindows(t)
+	dir := t.TempDir()
+	for _, n := range []string{"alpha", "beta", "gamma", "settings"} {
+		fake(t, dir, n, "echo")
+	}
+	names := func(exts []Extension) string {
+		var ns []string
+		for _, e := range exts {
+			ns = append(ns, e.Name)
+		}
+		return strings.Join(ns, ",")
+	}
+	cfg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	if got := names(Discover([]string{dir})); got != "alpha,beta,gamma,settings" {
+		t.Fatalf("nothing off: %s", got)
+	}
+	// Spaces, an unknown name, and settings, which cannot be turned off.
+	if err := os.MkdirAll(filepath.Join(cfg, "swoop"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, "swoop", "config"), []byte("off =  gamma , nosuch, settings,alpha\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if got := names(Discover([]string{dir})); got != "beta,settings" {
+		t.Fatalf("off = gamma, alpha: %s", got)
+	}
+	if got := names(DiscoverAll([]string{dir})); got != "alpha,beta,gamma,settings" {
+		t.Fatalf("DiscoverAll lists the off ones too: %s", got)
+	}
+	if got := names(skip(DiscoverAll([]string{dir}), nil)); got != "alpha,beta,gamma,settings" {
+		t.Fatalf("an empty list skips nothing: %s", got)
 	}
 }
 

@@ -3,6 +3,7 @@ package settings
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -51,5 +52,42 @@ func TestPreviewPercentFromFile(t *testing.T) {
 	_ = Set(Preview, "junk")
 	if got := PreviewPercent(); got != PreviewDefault {
 		t.Fatalf("junk falls back: %d", got)
+	}
+}
+
+func TestParseOff(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"", ""},
+		{"   ", ""},
+		{"reminders", "reminders"},
+		{" reminders ,tasks,  emoji ", "reminders|tasks|emoji"},
+		{"reminders,,tasks,", "reminders|tasks"},
+		{"tasks, tasks", "tasks"},
+		// Settings is the way back, so it is never off.
+		{"settings, window", "window"},
+		// A name nothing answers to is kept: it may be installed later.
+		{"nosuch", "nosuch"},
+	}
+	for _, c := range cases {
+		got := strings.Join(ParseOff(c.in), "|")
+		if got != c.want {
+			t.Errorf("ParseOff(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+	if got := FormatOff([]string{"tasks", " reminders", "settings", "tasks"}); got != "tasks, reminders" {
+		t.Errorf("FormatOff = %q", got)
+	}
+}
+
+func TestOffListFromFile(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	if got := OffList(); len(got) != 0 {
+		t.Fatalf("no file: %v", got)
+	}
+	if err := Set(Off, "reminders , tasks"); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(OffList(), "|"); got != "reminders|tasks" {
+		t.Fatalf("OffList = %q", got)
 	}
 }
