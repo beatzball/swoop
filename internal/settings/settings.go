@@ -82,6 +82,39 @@ const (
 	SkinDefault = "0"
 )
 
+// Off is the key for the extensions turned off, by name, comma-separated:
+// `off = reminders, tasks`. An extension that is off is not discovered, so
+// it has no rows, no view and no actions anywhere. Settings is never off:
+// it is the way back to turning the others on.
+const (
+	Off      = "off"
+	AlwaysOn = "settings"
+)
+
+// OffList is the extensions turned off, from the file.
+func OffList() []string { return ParseOff(Get(Off, "")) }
+
+// ParseOff reads the off value: names split on commas, spaces trimmed,
+// empty ones and repeats dropped, and Settings never in it. A name that is
+// not installed is kept; it may be installed later, or be in another
+// directory, and dropping it would forget what the user wrote.
+func ParseOff(value string) []string {
+	var names []string
+	seen := map[string]bool{}
+	for _, n := range strings.Split(value, ",") {
+		n = strings.TrimSpace(n)
+		if n == "" || n == AlwaysOn || seen[n] {
+			continue
+		}
+		seen[n] = true
+		names = append(names, n)
+	}
+	return names
+}
+
+// FormatOff is the value ParseOff reads back: the names, comma-separated.
+func FormatOff(names []string) string { return strings.Join(ParseOff(strings.Join(names, ",")), ", ") }
+
 // Dir is the config directory the file lives in.
 func Dir() string {
 	p := Path()
