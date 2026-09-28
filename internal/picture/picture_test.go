@@ -8,8 +8,6 @@ import (
 	"math/rand"
 	"strings"
 	"testing"
-
-	"github.com/charmbracelet/x/ansi/kitty"
 )
 
 func TestFitKeepsShape(t *testing.T) {
@@ -72,7 +70,7 @@ func TestWritePNGShape(t *testing.T) {
 		t.Fatalf("want %d lines, got %d", rows, len(lines))
 	}
 	for i, l := range lines {
-		if n := strings.Count(l, string(kitty.Placeholder)); n != cols {
+		if n := strings.Count(l, string(placeholder)); n != cols {
 			t.Errorf("line %d: want %d placeholder cells, got %d", i, cols, n)
 		}
 		if !strings.HasPrefix(l[strings.Index(l, "\x1b["):], "\x1b[38;5;7m") && !strings.Contains(l, "\x1b[38;5;7m") {
@@ -129,11 +127,11 @@ func TestCells(t *testing.T) {
 	if !strings.HasSuffix(s, "\x1b[39m") {
 		t.Fatalf("must end with a colour reset: %q", s)
 	}
-	if n := strings.Count(s, string(kitty.Placeholder)); n != 2 {
+	if n := strings.Count(s, string(placeholder)); n != 2 {
 		t.Fatalf("want 2 placeholder cells, got %d", n)
 	}
 	// Second cell: row 0, column 1.
-	want := string(kitty.Placeholder) + string(kitty.Diacritic(0)) + string(kitty.Diacritic(1))
+	want := string(placeholder) + string(diacritic(0)) + string(diacritic(1))
 	if !strings.Contains(s, want) {
 		t.Fatalf("second cell should address row 0 column 1: %q", s)
 	}
@@ -149,5 +147,21 @@ func TestTransmitRejectsBadID(t *testing.T) {
 	}
 	if err := Transmit(&out, testPNG(t, 4), 1, 1, MaxID); err != nil {
 		t.Errorf("largest id rejected: %v", err)
+	}
+}
+
+func TestPlaceholderTableIsTheProtocols(t *testing.T) {
+	if placeholder != 0x10EEEE {
+		t.Fatalf("placeholder %U", placeholder)
+	}
+	if len(diacritics) != MaxCells || diacritics[0] != 0x0305 || diacritics[1] != 0x030D {
+		t.Fatalf("the table: %d entries, first %U %U", len(diacritics), diacritics[0], diacritics[1])
+	}
+	seen := map[rune]bool{}
+	for _, d := range diacritics {
+		if seen[d] {
+			t.Fatalf("%U twice", d)
+		}
+		seen[d] = true
 	}
 }

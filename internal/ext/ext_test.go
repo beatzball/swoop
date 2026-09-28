@@ -32,6 +32,14 @@ func TestRoute(t *testing.T) {
 }
 
 // fake writes a bash extension called name into dir and returns its path.
+// TestMain gives every list ten seconds: the real two are for a launcher
+// that must not wait, and a test machine busy compiling has tripped it.
+// TestListTimeoutIsAnError sets its own short limit.
+func TestMain(m *testing.M) {
+	listTimeout = 10 * time.Second
+	os.Exit(m.Run())
+}
+
 func fake(t *testing.T, dir, name, body string) string {
 	t.Helper()
 	d := filepath.Join(dir, name)

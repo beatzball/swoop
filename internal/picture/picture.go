@@ -15,8 +15,6 @@ import (
 	"fmt"
 	"io"
 	"strings"
-
-	"github.com/charmbracelet/x/ansi/kitty"
 )
 
 // MaxCells is the largest column or row count a placeholder can address:
@@ -82,9 +80,9 @@ func Cells(id, row, cols int) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "\x1b[38;2;%d;%d;%dm", (id>>16)&0xff, (id>>8)&0xff, id&0xff)
 	for c := 0; c < cols; c++ {
-		b.WriteRune(kitty.Placeholder)
-		b.WriteRune(kitty.Diacritic(row))
-		b.WriteRune(kitty.Diacritic(c))
+		b.WriteRune(placeholder)
+		b.WriteRune(diacritic(row))
+		b.WriteRune(diacritic(c))
 	}
 	b.WriteString("\x1b[39m")
 	return b.String()
@@ -93,7 +91,7 @@ func Cells(id, row, cols int) string {
 // Transmit sends the PNG bytes to the terminal as image id, to be shown
 // scaled to cols by rows cells wherever placeholder cells for that id
 // appear. It writes in chunks, as the protocol requires: base64, at most
-// kitty.MaxChunkSize bytes per escape, m=1 on every chunk but the last.
+// maxChunk bytes per escape, m=1 on every chunk but the last.
 // The first chunk carries the options; a=T transmits and places in one go,
 // U=1 makes the placement virtual, and q=2 tells the terminal not to
 // answer, since nothing here is reading the reply.
@@ -112,8 +110,8 @@ func Transmit(w io.Writer, png []byte, cols, rows, id int) error {
 	opts := fmt.Sprintf("a=T,f=100,i=%d,c=%d,r=%d,U=1,q=2", id, cols, rows)
 	for len(data) > 0 {
 		n := len(data)
-		if n > kitty.MaxChunkSize {
-			n = kitty.MaxChunkSize
+		if n > maxChunk {
+			n = maxChunk
 		}
 		chunk, rest := data[:n], data[n:]
 		more := 1
@@ -146,9 +144,9 @@ func placeholders(w io.Writer, cols, rows, id int) error {
 	for r := 0; r < rows; r++ {
 		fmt.Fprintf(&b, "\x1b[38;5;%dm", id)
 		for c := 0; c < cols; c++ {
-			b.WriteRune(kitty.Placeholder)
-			b.WriteRune(kitty.Diacritic(r))
-			b.WriteRune(kitty.Diacritic(c))
+			b.WriteRune(placeholder)
+			b.WriteRune(diacritic(r))
+			b.WriteRune(diacritic(c))
 		}
 		b.WriteString("\x1b[39m\n")
 	}

@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/x/ansi"
+	"github.com/beatzball/swoop/internal/width"
 )
 
 // plain is the rendering with the escapes taken out: what the eye lines
 // up, without the colours.
-func plain(md string, width int) string {
-	return ansi.Strip(Render(md, width))
+func plain(md string, w int) string {
+	return width.Strip(Render(md, w))
 }
 
 func TestHeadingsAndEmphasis(t *testing.T) {
@@ -29,7 +29,7 @@ func TestParagraphsWrapToTheWidth(t *testing.T) {
 	md := "one two three four five six seven eight nine ten eleven twelve"
 	out := plain(md, 24)
 	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
-		if ansi.StringWidth(line) > 24 {
+		if width.String(line) > 24 {
 			t.Errorf("line wider than 24: %q", line)
 		}
 	}
@@ -88,7 +88,7 @@ func TestTable(t *testing.T) {
 func TestNarrowWidthIsClamped(t *testing.T) {
 	out := plain("a b c d e f g h i j k l m n o p", 5)
 	for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n") {
-		if ansi.StringWidth(line) > 20 {
+		if width.String(line) > 20 {
 			t.Errorf("line wider than the clamp: %q", line)
 		}
 	}
