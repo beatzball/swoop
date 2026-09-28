@@ -131,6 +131,18 @@ var all = []setting{
 		},
 	},
 	{
+		key: settings.Skin, title: "Emoji skin tone", icon: "✋",
+		explain: "The skin tone Enter pastes, for an emoji that takes one. ctrl-k on an\nemoji offers all six for one use.",
+		value: func() string {
+			n := atoi(settings.Get(settings.Skin, settings.SkinDefault), 0)
+			if n < 0 || n >= len(skinTones) {
+				n = 0
+			}
+			return skinTones[n].title
+		},
+		choices: func(string) []choice { return skinTones },
+	},
+	{
 		key: settings.Render, title: "Transcript renderer", icon: "󰉿",
 		explain: "What draws an AI answer in the pane. Built in: swoop's own markdown\nrenderer, no process. Or any command: the answer on its stdin, its\nstdout shown; glow, for one.",
 		value: func() string {
@@ -147,6 +159,17 @@ var all = []setting{
 			}
 		},
 	},
+}
+
+// skinTones are the six emoji tones, 0 for none and 1 to 5 from light
+// to dark: the values swoop-emoji reads.
+var skinTones = []choice{
+	{value: "0", title: "✋ None", note: "the yellow of the emoji as drawn"},
+	{value: "1", title: "✋🏻 Light", note: ""},
+	{value: "2", title: "✋🏼 Medium-light", note: ""},
+	{value: "3", title: "✋🏽 Medium", note: ""},
+	{value: "4", title: "✋🏾 Medium-dark", note: ""},
+	{value: "5", title: "✋🏿 Dark", note: ""},
 }
 
 // The row that opens the config folder: not a setting, a door.

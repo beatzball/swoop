@@ -220,6 +220,14 @@ esac
 printf '%s\\n' "$@" > '{opened}'
 """)
 
+    # A fake clipboard, pbcopy on a Mac and wl-copy on Linux, that
+    # records what it was given.
+    copied = os.path.join(tmp, "copied")
+    for name in ("pbcopy", "wl-copy"):
+        write_exe(os.path.join(fakebin, name), f"""#!/usr/bin/env bash
+cat > '{copied}'
+""")
+
     # The fake AI command: a status line on stderr, a pause, an answer.
     with open(os.path.join(home, ".config", "swoop", "ai"), "w") as f:
         f.write("sh -c 'echo \"using Fake\" >&2; sleep 1.2; echo \"The answer is 42\"'\n")
@@ -240,6 +248,10 @@ printf '%s\\n' "$@" > '{opened}'
         "SWOOP_EXTENSIONS": os.path.join(tmp, "ext"),
         "PATH": fakebin + os.pathsep + os.path.join(ROOT, "bin") + os.pathsep + env.get("PATH", ""),
     })
+    # Not inside a frame, even when this runs from one: Enter must copy,
+    # not send a keystroke to whatever is on the screen.
+    env.pop("SWOOP_SHELL", None)
+    env.pop("SWOOP_SHELL_PID", None)
     config = os.path.join(home, ".config", "swoop", "config")
 
     def check(name, fn):
@@ -328,6 +340,9 @@ printf '%s\\n' "$@" > '{opened}'
             L.wait_state(lambda s: s["query"] == "claude" and s["matchCount"] == 1, what="the claude row")
             L.send("\r")
             L.expect(r"Ask AI > ", what="back in the pane")
+            # The pane is back only once New is under the cursor again: a
+            # ctrl-k sent before that lands on a model row and is ignored.
+            L.wait_state(lambda s: "ext/ai/new" in s["current"]["text"], what="the pane back with New under the cursor")
             with open(config) as f:
                 if "ai = claude" not in f.read():
                     fail("ctrl-k on New did not set ai = claude", L.buf)
@@ -465,6 +480,55 @@ printf '%s\\n' "$@" > '{opened}'
             finally:
                 third.kill()
         check("quicklink with an argument", quicklink)
+
+        # 10. emoji: the view, a search, Enter copies (outside a frame
+        # there is no app to paste into); the next time it leads the view,
+        # and ctrl-k on a thumbs up offers the six tones
+        def emoji():
+            fourth = Launcher(env)
+            fourth.key = key
+            try:
+                fourth.wait_state(lambda s: s["totalCount"] > 3, what="the fourth launcher's list")
+                fourth.send("emoji")
+                fourth.wait_state(lambda s: s["query"] == "emoji" and "Emoji & Symbols" in s["current"]["text"], what="the Emoji & Symbols row")
+                fourth.clear()
+                fourth.send("\r")
+                fourth.expect(r"Emoji & Symbols > ", what="the emoji view")
+                fourth.clear()
+                fourth.send("rocket")
+                fourth.wait_state(lambda s: s["query"] == "rocket" and "\U0001F680" in s["current"]["text"], what="the rocket first")
+                fourth.send("\r")
+                code = fourth.wait_exit()
+                if not os.path.exists(copied):
+                    fail(f"Enter on the rocket copied nothing (exit {code})", fourth.buf)
+                with open(copied, encoding="utf-8") as f:
+                    got = f.read()
+                if got != "\U0001F680":
+                    fail(f"the clipboard got {got!r}", fourth.buf)
+                fourth.expect(r"Copied", what="the note that it was copied")
+            finally:
+                fourth.kill()
+            fifth = Launcher(env)
+            fifth.key = key
+            try:
+                fifth.wait_state(lambda s: s["totalCount"] > 3, what="the fifth launcher's list")
+                fifth.send("emoji")
+                fifth.wait_state(lambda s: s["query"] == "emoji" and "Emoji & Symbols" in s["current"]["text"], what="the Emoji & Symbols row")
+                fifth.send("\r")
+                st = fifth.wait_state(lambda s: s["query"] == "" and s["totalCount"] > 1000, what="the whole table in the view")
+                first = st["current"]["text"]
+                if "\U0001F680" not in first or "recent" not in first:
+                    fail(f"the rocket should lead the view, marked: {first!r}", fifth.buf)
+                fifth.send("thumbs up")
+                fifth.wait_state(lambda s: s["query"] == "thumbs up" and "\U0001F44D" in s["current"]["text"], what="the thumbs up")
+                fifth.clear()
+                fifth.send("\x0b")
+                fifth.expect(r"thumbs up actions > ", what="its actions")
+                st = fifth.wait_state(lambda s: s["totalCount"] == 8, what="Paste, Copy and six tones")
+                fifth.expect(r"medium-dark", what="the tones")
+            finally:
+                fifth.kill()
+        check("emoji", emoji)
     finally:
         L.kill()
         # The worker may still be around on a fast failure.

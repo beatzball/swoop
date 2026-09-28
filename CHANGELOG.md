@@ -11,6 +11,11 @@ so here.
 
 ### Added
 
+- **Emoji and symbols.** Type `emoji`, Enter, then a name or keyword:
+  every emoji and flag, and a few hundred symbols. Enter pastes into the
+  app in front, or copies without Accessibility, in a plain terminal,
+  and on Linux; ctrl-k copies or picks one of six skin tones, and the
+  default tone is a setting. The most recently used lead the view.
 - **Quicklinks.** Named links as rows at the root, from
   `~/.config/swoop/quicklinks.tsv`: name, link, app to open it with. A
   link holding `{argument}` is a pane: Enter, type, Enter opens the link

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# emoji: every emoji, flag and symbol, searched by name and keyword. Enter
+# pastes into the app in front. The work is in swoop-emoji, a Go tool in
+# bin/, which carries the table and reads the default skin tone from
+# ~/.config/swoop/config. This shim is here so the rows are routed like
+# every other extension. See cmd/swoop-emoji.
+exec swoop-emoji "$@"

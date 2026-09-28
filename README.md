@@ -187,6 +187,20 @@ swoop-links defaults > ~/.config/swoop/quicklinks.tsv   # start from the five
 
 ctrl-k on a quicklink copies the link, filled in, or deletes it.
 
+## Emoji and symbols
+
+Type `emoji`, Enter, then a name or a keyword: `rocket`, `+1`, `flag jap`,
+`arrow`, `euro`, `alpha`. Every emoji and flag is there, and a few hundred
+symbols: arrows, math, currency, punctuation, keyboard keys, box drawing,
+Greek. What you used last comes first.
+
+Enter pastes into the app you came from. That is a cmd+V keystroke, so
+the frame needs Accessibility (System Settings > Privacy & Security);
+without it Enter copies and says so. In a plain terminal, and on Linux
+for now, Enter copies. ctrl-k copies, or pastes in one of the six skin
+tones; the default tone is in Settings. Words of your own go in
+`~/.config/swoop/emoji.keywords`, one line per character: `😀 grin happy`.
+
 ## Used recently, and Stats
 
 The list starts with the five things you opened most recently, marked

@@ -75,6 +75,13 @@ const (
 	RecentDefault = "on"
 )
 
+// Skin is the emoji skin tone Enter uses: 0 for none (the yellow of
+// the emoji as drawn), 1 to 5 from light to dark.
+const (
+	Skin        = "skin"
+	SkinDefault = "0"
+)
+
 // Dir is the config directory the file lives in.
 func Dir() string {
 	p := Path()
