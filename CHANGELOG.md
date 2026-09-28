@@ -48,6 +48,10 @@ so here.
   the system's. Enter launches with `gio launch`, or runs the Exec line
   when gio is missing; the menu shows the folder and copies the path. The
   preview shows the name, the command, the comment, and the file.
+- **Start, stop, restart.** `swoop start|stop|restart|status` works the
+  same from Homebrew, the curl installer, or a checkout; the bird menu
+  has Restart and Quit; and after an upgrade the frame restarts itself
+  once the panel is hidden.
 
 ### Changed
 

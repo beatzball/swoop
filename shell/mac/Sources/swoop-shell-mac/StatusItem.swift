@@ -2,7 +2,7 @@ import AppKit
 
 /// The bird in the menu bar: the one visible sign that swoop is running,
 /// as the launchers you know have. Its menu opens the launcher,
-/// opens the settings folder, and quits. An accessory app has no Dock
+/// opens the settings folder, restarts, and quits. An accessory app has no Dock
 /// icon, so without this there is nothing to click.
 final class StatusItem {
     private let item: NSStatusItem
@@ -37,6 +37,9 @@ final class StatusItem {
         settings.target = self
         menu.addItem(settings)
         menu.addItem(.separator())
+        let restart = NSMenuItem(title: "Restart swoop", action: #selector(restart), keyEquivalent: "")
+        restart.target = self
+        menu.addItem(restart)
         let quit = NSMenuItem(title: "Quit swoop", action: #selector(quit), keyEquivalent: "")
         quit.target = self
         menu.addItem(quit)
@@ -55,10 +58,54 @@ final class StatusItem {
         NSWorkspace.shared.open(URL(fileURLWithPath: dir))
     }
 
-    /// Under launchd, a quit is followed by a restart: KeepAlive. The
-    /// menu says so, since a person who meant "stop it" needs the
-    /// uninstall instead.
+    /// Exit, and let the service start a new frame: launchd's KeepAlive,
+    /// or Homebrew's service, which is the same thing. A frame run by
+    /// hand has no service, and stays down; the log says which.
+    @objc private func restart() {
+        let label = Self.serviceLabel()
+        log(label.map { "restart from the menu; \($0) starts a new frame" }
+            ?? "restart from the menu; no service to start a new frame, so this is a quit")
+        exit(0)
+    }
+
+    /// Stop, and stay stopped until the next login or `swoop start`. An
+    /// exit alone is not enough under a service: KeepAlive would start
+    /// the frame again within a second. So the frame unloads its own
+    /// service with `launchctl bootout`, which ends this process too.
+    /// The plist stays, so the next login starts it as before.
     @objc private func quit() {
-        NSApp.terminate(nil)
+        guard let label = Self.serviceLabel() else {
+            log("quit from the menu; not under a service, exiting")
+            exit(0)
+        }
+        log("quit from the menu; launchctl bootout of \(label)")
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/bin/launchctl")
+        task.arguments = ["bootout", "gui/\(getuid())/\(label)"]
+        do {
+            try task.run()
+            task.waitUntilExit()
+        } catch {
+            log("quit: launchctl: \(error)")
+        }
+        // Only reached when bootout did not end us: it refused, or the
+        // label was not loaded after all.
+        log("quit: launchctl bootout of \(label) did not stop the frame (status \(task.terminationStatus)); exiting, and the service may start it again")
+        exit(0)
+    }
+
+    /// The launchd label this frame runs under, when a plist for it is in
+    /// ~/Library/LaunchAgents: dev.swoop.shell from the installers,
+    /// homebrew.mxcl.swoop from `brew services`. launchd names the job in
+    /// XPC_SERVICE_NAME; a frame run from a terminal has none, or "0".
+    private static func serviceLabel() -> String? {
+        let env = ProcessInfo.processInfo.environment
+        guard let label = env["XPC_SERVICE_NAME"], !label.isEmpty, label != "0" else { return nil }
+        let plist = (env["HOME"] ?? "") + "/Library/LaunchAgents/\(label).plist"
+        return FileManager.default.fileExists(atPath: plist) ? label : nil
+    }
+
+    private func log(_ message: String) {
+        FileHandle.standardError.write(Data("swoop-shell-mac: \(message)\n".utf8))
     }
 }
