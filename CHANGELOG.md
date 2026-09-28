@@ -11,6 +11,7 @@ so here.
 
 ### Added
 
+- **Start Screensaver**, a row beside Sleep and Lock Screen.
 - **ctrl-k on New conversation changes the model.** The same list as
   Settings, Enter picks one and returns to the pane; the New row says
   which model will answer.
