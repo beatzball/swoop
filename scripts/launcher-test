@@ -391,6 +391,32 @@ esac
                 if f.read().strip() != "plain":
                     fail("run got the wrong id", L.buf)
         check("Enter runs and exits", run)
+
+        # 8. the open was counted: a new launcher leads with that row, marked
+        def recent():
+            usage_log = os.path.join(home, ".state", "swoop", "usage.jsonl")
+            if not os.path.exists(usage_log):
+                fail("the run was not recorded in the usage log", "")
+            with open(usage_log) as f:
+                if "ext/fake/plain" not in f.read():
+                    fail("the usage log does not name the row that ran", "")
+            again = Launcher(env)
+            again.key = key
+            try:
+                st = again.wait_state(lambda s: s["totalCount"] > 3, what="the second launcher's list")
+                first = st["current"]["text"]
+                if "Fake Plain Row" not in first or "recent" not in first:
+                    fail(f"the first row should be the recent one, marked: {first!r}", again.buf)
+                # Stats lists it too
+                again.send("stats")
+                again.wait_state(lambda s: s["query"] == "stats" and s["matchCount"] >= 1, what="the Stats row")
+                again.send("\r")
+                again.expect(r"Stats > ", what="the Stats pane")
+                again.expect(r"Fake Plain Row", what="the opened row in Stats")
+                again.expect(r"once", what="its count")
+            finally:
+                again.kill()
+        check("Used recently and Stats", recent)
     finally:
         L.kill()
         # The worker may still be around on a fast failure.

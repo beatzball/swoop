@@ -68,6 +68,13 @@ const (
 	WebDefault = "off"
 )
 
+// Recent says whether the root list leads with what was opened most
+// recently: "on" or "off".
+const (
+	Recent        = "recent"
+	RecentDefault = "on"
+)
+
 // Dir is the config directory the file lives in.
 func Dir() string {
 	p := Path()

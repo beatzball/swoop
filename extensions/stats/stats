@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# stats: the Stats pane, what you open most and when. The work is in
+# swoop-usage, a Go tool in bin/, which also keeps the log every Enter
+# writes. This shim is here so the pane is routed like every other
+# extension. See cmd/swoop-usage and internal/usage.
+exec swoop-usage "$@"

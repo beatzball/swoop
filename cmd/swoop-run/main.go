@@ -14,6 +14,7 @@ import (
 	"os"
 
 	"github.com/beatzball/swoop/internal/ext"
+	"github.com/beatzball/swoop/internal/usage"
 )
 
 func main() {
@@ -28,6 +29,13 @@ func main() {
 	if err := dispatch(os.Args[1], action); err != nil {
 		fmt.Fprintln(os.Stderr, "swoop-run:", err)
 		os.Exit(1)
+	}
+	// An open, counted: Enter's default, or Open from the action menu.
+	// A refresh action (delete, a setting's choice, a model pick) is not
+	// an open and is not counted. bin/swoop hands the row's kind and
+	// title over in the environment; swoop-run by hand has neither.
+	if action == "" || action == "open" {
+		_ = usage.Record(os.Args[1], os.Getenv("SWOOP_KIND"), os.Getenv("SWOOP_TITLE"))
 	}
 }
 

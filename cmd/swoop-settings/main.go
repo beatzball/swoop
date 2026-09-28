@@ -123,6 +123,14 @@ var all = []setting{
 		},
 	},
 	{
+		key: settings.Recent, title: "Used recently", icon: "󰔟",
+		explain: "Whether the list starts with the five things you opened most recently,\nmarked \"recent\". Stats, a row at the root, shows the whole log; its\nctrl-k menu clears it.",
+		value:   func() string { return settings.Get(settings.Recent, settings.RecentDefault) },
+		choices: func(string) []choice {
+			return []choice{{value: "on", title: "On", note: "the five most recent first"}, {value: "off", title: "Off", note: "the list in its own order"}}
+		},
+	},
+	{
 		key: settings.Render, title: "Transcript renderer", icon: "󰉿",
 		explain: "What draws an AI answer in the pane. Built in: swoop's own markdown\nrenderer, no process. Or any command: the answer on its stdin, its\nstdout shown; glow, for one.",
 		value: func() string {

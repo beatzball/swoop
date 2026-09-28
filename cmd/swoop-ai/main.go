@@ -33,8 +33,10 @@ import (
 	"github.com/beatzball/swoop/internal/chat"
 	"github.com/beatzball/swoop/internal/markdown"
 	"github.com/beatzball/swoop/internal/models"
+	"github.com/beatzball/swoop/internal/nav"
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
+	"github.com/beatzball/swoop/internal/usage"
 )
 
 // newID is the row that starts a conversation.
@@ -42,7 +44,7 @@ const newID = "new"
 
 func main() {
 	if len(os.Args) < 2 {
-		usage()
+		usageExit()
 	}
 	store := chat.Store{Dir: chat.DefaultDir()}
 	if store.Dir == "" {
@@ -70,14 +72,14 @@ func main() {
 	case "work":
 		err = work(store, arg(2))
 	default:
-		usage()
+		usageExit()
 	}
 	if err != nil {
 		fatal(err.Error())
 	}
 }
 
-func usage() {
+func usageExit() {
 	fmt.Fprintln(os.Stderr, "usage: swoop-ai list | view ask [text] | preview <id> | actions <id> | run <id> [action] | send <id|new> <prompt>")
 	os.Exit(2)
 }
@@ -319,6 +321,7 @@ func send(store chat.Store, id, prompt string) error {
 		return fmt.Errorf("still answering")
 	}
 	c.Ask(prompt)
+	_ = usage.Record(nav.AIView, "ai", "Ask AI")
 	if err := store.Save(c); err != nil {
 		return err
 	}

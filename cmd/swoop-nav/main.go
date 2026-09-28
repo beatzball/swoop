@@ -28,9 +28,13 @@ import (
 	"github.com/beatzball/swoop/internal/nav"
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
+	"github.com/beatzball/swoop/internal/usage"
 )
 
 const envState = "SWOOP_STATE"
+
+// recentCount is how many recent rows lead the root list.
+const recentCount = 5
 
 // envApps names the file bin/swoop filled at startup with the built-in
 // rows, pictures included. Root reloads read it instead of listing apps
@@ -98,7 +102,7 @@ func main() {
 			fmt.Println(nav.AfterSend())
 			break
 		}
-		fmt.Println(nav.Enter(st, id, kind, title, query, pos, runCommand(path)))
+		fmt.Println(nav.Enter(st, id, kind, title, query, pos, runCommand(path, kind, title)))
 	case "ai":
 		fmt.Println(nav.Ask(st, query, pos))
 	case "settings":
@@ -146,14 +150,17 @@ func main() {
 // bin/swoop ever runs; that is why the files go here. The colon form
 // takes the rest of the string, which keeps any character in the command
 // safe.
-func runCommand(statePath string) func(target, action string) string {
+func runCommand(statePath, kind, title string) func(target, action string) string {
 	return func(target, action string) string {
 		// The state file, fzf's socket beside it, and the apps cache.
 		run := "rm -f " + nav.ShellQuote(statePath) + " " + nav.ShellQuote(statePath+".sock")
 		if apps := os.Getenv(envApps); apps != "" {
 			run += " " + nav.ShellQuote(apps)
 		}
-		swoopRun := "swoop-run " + nav.ShellQuote(target)
+		// The row's kind and title ride along for the usage log. Through
+		// env, because the plain terminal's path is "exec …", and exec
+		// takes a bare assignment for a command name.
+		swoopRun := "env SWOOP_KIND=" + nav.ShellQuote(kind) + " SWOOP_TITLE=" + nav.ShellQuote(title) + " swoop-run " + nav.ShellQuote(target)
 		if action != "" {
 			swoopRun += " " + nav.ShellQuote(action)
 		}
@@ -207,6 +214,13 @@ func rows(st *nav.State, query string) error {
 		sort.SliceStable(items, func(i, j int) bool {
 			return strings.ToLower(items[i].Title) < strings.ToLower(items[j].Title)
 		})
+		// What was opened most recently comes first, marked, unless the
+		// setting turns the group off.
+		if settings.Get(settings.Recent, settings.RecentDefault) != "off" {
+			if entries, err := usage.Load(); err == nil {
+				items = usage.Front(items, usage.Recent(entries, recentCount), recentCount)
+			}
+		}
 		return protocol.Write(os.Stdout, items)
 	}
 	if top.Kind == "actions" {

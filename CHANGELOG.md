@@ -11,6 +11,11 @@ so here.
 
 ### Added
 
+- **Used recently, and Stats.** The root list starts with the five things
+  opened most recently, marked. Every open is one line in
+  `~/.local/state/swoop/usage.jsonl`; a `Stats` row shows what you open
+  most, how often, when last, and a fortnight by day. A setting turns the
+  group off; ctrl-k in Stats clears the log.
 - **Start Screensaver**, a row beside Sleep and Lock Screen.
 - **ctrl-k on New conversation changes the model.** The same list as
   Settings, Enter picks one and returns to the pane; the New row says
