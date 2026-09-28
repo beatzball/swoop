@@ -22,6 +22,10 @@ so here.
   app in front, or copies without Accessibility, in a plain terminal,
   and on Linux; ctrl-k copies or picks one of six skin tones, and the
   default tone is a setting. The most recently used lead the view.
+- **Window management.** Rows that move and size the window you were in:
+  halves, thirds, quarters, maximize, almost maximize, reasonable size,
+  center, next and previous display. macOS, through the Accessibility
+  API; the first run without the permission opens the settings pane.
 - **Quicklinks.** Named links as rows at the root, from
   `~/.config/swoop/quicklinks.tsv`: name, link, app to open it with. A
   link holding `{argument}` is a pane: Enter, type, Enter opens the link

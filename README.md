@@ -227,6 +227,20 @@ swoop-snippets import ~/Downloads/snippets.json   # a JSON export: name, text, k
 echo 'Thanks, {clipboard}' | swoop-snippets add 'Thanks' ';ty'
 ```
 
+## Window management
+
+Rows that move the window you were in: Left, Right, Top, and Bottom Half;
+First, Center, and Last Third; First and Last Two Thirds; the four
+quarters; Maximize, Almost Maximize, Reasonable Size, Center; Next and
+Previous Display. Type `left half`, Enter. The launcher's panel does not
+take focus, so the app you came from is the one that moves. The preview
+names the window and the frame it will get.
+
+On macOS this needs Accessibility. The first time, Enter opens System
+Settings, Privacy & Security, Accessibility: turn on swoop (or the
+terminal swoop runs in), and run the row again. Other systems come with
+their frames.
+
 ## Used recently, and Stats
 
 The list starts with the five things you opened most recently, marked

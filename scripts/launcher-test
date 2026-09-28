@@ -169,9 +169,33 @@ class Launcher:
         fail("swoop did not exit", self.buf)
 
     def kill(self):
+        # Keep reading while waiting. A process leaving a terminal waits
+        # for its output to drain, so a blocking waitpid with nobody
+        # reading the pty hung the whole tree in exit, fzf and its
+        # preview with it, for good. SIGKILL if it takes too long.
         try:
             os.kill(self.pid, signal.SIGTERM)
-            os.waitpid(self.pid, 0)
+        except OSError:
+            return
+        end = time.time() + 5
+        while True:
+            try:
+                pid, _ = os.waitpid(self.pid, os.WNOHANG)
+            except OSError:
+                break
+            if pid:
+                break
+            if time.time() > end:
+                try:
+                    os.kill(self.pid, signal.SIGKILL)
+                except OSError:
+                    pass
+                end = float("inf")
+            self.read(0.1)
+            if self.eof:
+                time.sleep(0.05)
+        try:
+            os.close(self.fd)
         except OSError:
             pass
 
@@ -375,16 +399,22 @@ cat > '{copied}'
 
         # 5. the divider keys write the width
         def divider():
+            # The key's transform writes the file; on a slow runner that
+            # can take longer than a fixed pause, so the file is polled.
+            def saved(line, timeout=5.0):
+                end = time.time() + timeout
+                while time.time() < end:
+                    with open(config) as f:
+                        if line in f.read():
+                            return True
+                    L.read(0.1)
+                return False
             L.send("\x1b[1;3D")  # alt-left
-            L.read(0.6)
-            with open(config) as f:
-                if "preview = 63" not in f.read():
-                    fail("alt-left did not save preview = 63", L.buf)
+            if not saved("preview = 63"):
+                fail("alt-left did not save preview = 63", L.buf)
             L.send("\x1b[1;3C")  # alt-right
-            L.read(0.6)
-            with open(config) as f:
-                if "preview = 58" not in f.read():
-                    fail("alt-right did not save preview = 58", L.buf)
+            if not saved("preview = 58"):
+                fail("alt-right did not save preview = 58", L.buf)
         check("divider keys", divider)
 
         # 6. Settings: the key opens the pane, a choice sets a value and returns
@@ -566,6 +596,22 @@ cat > '{copied}'
             finally:
                 sixth.kill()
         check("snippet", snippet)
+        # 12. the window rows are at the root, with a preview. No Enter:
+        # that would move a real window, or, without Accessibility, open
+        # System Settings, and neither belongs in a headless run.
+        def window():
+            seventh = Launcher(env)
+            seventh.key = key
+            try:
+                seventh.wait_state(lambda s: s["totalCount"] > 3, what="the seventh launcher's list")
+                seventh.send("left half")
+                st = seventh.wait_state(lambda s: s["query"] == "left half" and s["matchCount"] >= 1, what="the Left Half row")
+                if "Left Half" not in st["current"]["text"]:
+                    fail(f"the first match should be Left Half: {st['current']}", seventh.buf)
+                seventh.expect(r"Move the window to the left half", what="the Left Half preview")
+            finally:
+                seventh.kill()
+        check("window rows at the root", window)
     finally:
         L.kill()
         # The worker may still be around on a fast failure.
