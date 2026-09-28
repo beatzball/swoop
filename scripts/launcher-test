@@ -252,6 +252,13 @@ printf '%s\\n' "$@" > '{opened}'
     with open(os.path.join(snippets, "fake-greeting.md"), "w") as f:
         f.write("Fake Greeting\nkeyword: ;fg\n\nHello on {date}{cursor}!\n")
 
+    # A note, with a word inside it that is not in its title.
+    notes_dir = os.path.join(home, ".data", "swoop", "notes")
+    os.makedirs(notes_dir)
+    fake_note = os.path.join(notes_dir, "fake-meeting.md")
+    with open(fake_note, "w") as f:
+        f.write("# Fake Meeting\n\nremember the zucchini\n")
+
     # A fake clipboard, pbcopy on a Mac and wl-copy on Linux, that
     # records what it was given.
     copied = os.path.join(tmp, "copied")
@@ -596,7 +603,80 @@ cat > '{copied}'
             finally:
                 sixth.kill()
         check("snippet", snippet)
-        # 12. the window rows are at the root, with a preview. No Enter:
+        # 12. notes: the root row opens the view, the note is in it, a
+        # word from inside it still finds it, Enter opens the file; then
+        # New note makes a file from what was typed and opens that
+        def notes():
+            def open_view(ln):
+                ln.wait_state(lambda s: s["totalCount"] > 3, what="the launcher's list")
+                ln.send("notes")
+                ln.wait_state(lambda s: s["query"] == "notes" and s["matchCount"] >= 1, what="rows for 'notes'")
+                # On a Mac the Notes app matches too: move to the row
+                # that is the extension's.
+                for _ in range(10):
+                    st = ln.state()
+                    if st and "markdown notes" in st["current"]["text"]:
+                        break
+                    ln.send("\x1b[B")
+                    ln.read(0.2)
+                else:
+                    fail(f"no Notes row: {ln.state()}", ln.buf)
+                ln.clear()
+                ln.send("\r")
+                ln.expect(r"Notes > ", what="the notes view")
+
+            if os.path.exists(opened):
+                os.remove(opened)
+            eighth = Launcher(env)
+            eighth.key = key
+            try:
+                open_view(eighth)
+                st = eighth.wait_state(lambda s: s["query"] == "" and s["matchCount"] == 2, what="New note and the note")
+                eighth.expect(r"Fake Meeting", what="the note's title")
+                eighth.send("zucchini")
+                st = eighth.wait_state(lambda s: s["query"] == "zucchini" and s["matchCount"] == 2, what="New note and the note found by a word inside it")
+                if "New note: zucchini" not in st["current"]["text"]:
+                    fail(f"New note should lead the view: {st['current']}", eighth.buf)
+                eighth.send("\x1b[B")
+                st = eighth.wait_state(lambda s: "Fake Meeting" in s["current"]["text"], what="the cursor on the note")
+                if "remember the zucchini" not in st["current"]["text"]:
+                    fail(f"the matching line should be the subtitle: {st['current']}", eighth.buf)
+                eighth.send("\r")
+                code = eighth.wait_exit()
+                if not os.path.exists(opened):
+                    fail(f"the note was not opened (exit {code})", eighth.buf)
+                with open(opened) as f:
+                    got = f.read().splitlines()
+                if [os.path.realpath(g) for g in got] != [os.path.realpath(fake_note)]:
+                    fail(f"open got the wrong arguments: {got}", eighth.buf)
+            finally:
+                eighth.kill()
+
+            os.remove(opened)
+            ninth = Launcher(env)
+            ninth.key = key
+            try:
+                open_view(ninth)
+                ninth.send("Fake Idea")
+                st = ninth.wait_state(lambda s: s["query"] == "Fake Idea" and "New note: Fake Idea" in s["current"]["text"], what="the New note row")
+                ninth.send("\r")
+                code = ninth.wait_exit()
+                made = os.path.join(notes_dir, "fake-idea.md")
+                if not os.path.exists(opened):
+                    fail(f"the new note was not opened (exit {code})", ninth.buf)
+                with open(opened) as f:
+                    got = f.read().splitlines()
+                if [os.path.realpath(g) for g in got] != [os.path.realpath(made)]:
+                    fail(f"open got the wrong arguments: {got}", ninth.buf)
+                with open(made) as f:
+                    body = f.read()
+                if body != "# Fake Idea\n\n":
+                    fail(f"the new note holds {body!r}", ninth.buf)
+            finally:
+                ninth.kill()
+        check("notes", notes)
+
+        # 13. the window rows are at the root, with a preview. No Enter:
         # that would move a real window, or, without Accessibility, open
         # System Settings, and neither belongs in a headless run.
         def window():

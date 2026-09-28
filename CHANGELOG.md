@@ -11,6 +11,11 @@ so here.
 
 ### Added
 
+- **Notes.** Type `notes`, Enter: markdown files in
+  `~/.local/share/swoop/notes/`, newest change first, searched by title
+  and text, previewed rendered. Enter opens the file; `New note` makes
+  one from what you typed; ctrl-k copies, reveals, or deletes to
+  `deleted/`.
 - **Snippets.** Named text as rows at the root, one markdown file each in
   `~/.config/swoop/snippets/`: name, an optional `keyword:` line, text.
   Enter pastes into the app in front with `{date}`, `{time}`,
