@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# window: rows that move and size the window you were in, halves, thirds,
+# quarters, maximize, center, next display. The work is in swoop-window,
+# a Go tool in bin/, which talks to the Accessibility API on macOS. This
+# shim is here so the rows are routed like every other extension. See
+# cmd/swoop-window.
+exec swoop-window "$@"
