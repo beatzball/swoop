@@ -5,6 +5,7 @@ package paste
 import (
 	"os"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 )
@@ -24,19 +25,39 @@ func Copy(text string) error {
 // the signal; a quarter second leaves room for a busy machine.
 const delay = "0.25"
 
-const keystrokeScript = `tell application "System Events" to keystroke "v" using command down`
+// Clipboard returns the text on the clipboard.
+func Clipboard() (string, error) {
+	out, err := exec.Command("pbpaste").Output()
+	return string(out), err
+}
+
+// keystrokeScript is the AppleScript for cmd+V, then left presses of the
+// left arrow (key code 123). The short delay lets the app take the paste
+// in before the arrows arrive, so they move the caret in the pasted text
+// and not before it.
+func keystrokeScript(left int) []string {
+	lines := []string{`tell application "System Events"`, `keystroke "v" using command down`}
+	if left > 0 {
+		lines = append(lines, "delay 0.1", "repeat "+strconv.Itoa(left)+" times", "key code 123", "end repeat")
+	}
+	return append(lines, "end tell")
+}
 
 // keystroke sends cmd+V from a process of its own, in a session of its
 // own. It has to outlive this one: the panel is still up while the
 // launcher runs this, and the frame ends everything in the terminal once
 // it hides. If System Events refuses (Automation, the first time, or
 // Accessibility taken away since the check), a notification says so.
-func keystroke(text string) (string, error) {
+func keystroke(text string, left int) (string, error) {
 	if !trusted() {
-		return "Copied " + text + ", not pasted: swoop needs Accessibility to paste for you. " +
+		return "Copied " + Short(text) + ", not pasted: swoop needs Accessibility to paste for you. " +
 			"Turn on swoop-shell-mac in System Settings > Privacy & Security > Accessibility.", nil
 	}
-	script := "sleep " + delay + "; osascript -e " + quote(keystrokeScript) + " >/dev/null 2>&1 || " +
+	var args strings.Builder
+	for _, line := range keystrokeScript(left) {
+		args.WriteString(" -e " + quote(line))
+	}
+	script := "sleep " + delay + "; osascript" + args.String() + " >/dev/null 2>&1 || " +
 		"osascript -e " + quote(notification("Copied, not pasted: allow swoop-shell-mac to control System Events in System Settings > Privacy & Security > Automation.")) + " >/dev/null 2>&1"
 	cmd := exec.Command("/bin/sh", "-c", script)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}

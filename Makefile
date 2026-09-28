@@ -44,6 +44,7 @@ bench: build
 	SWOOP_EXTENSIONS=extensions hyperfine --warmup 5 -N 'bin/swoop-nav rows 2+2'
 	hyperfine --warmup 5 -N 'bin/swoop-clipd list'
 	hyperfine --warmup 5 -N 'bin/swoop-emoji list' 'bin/swoop-emoji view emoji rocket'
+	hyperfine --warmup 5 -N 'bin/swoop-snippets list'
 
 clean:
 	find bin -type f ! -name swoop -delete

@@ -44,3 +44,16 @@ func TestPasteOutsideTheFrameCopies(t *testing.T) {
 		t.Errorf("the clipboard got %q", got)
 	}
 }
+
+// A note names a long text by its start, not all of it.
+func TestShort(t *testing.T) {
+	for in, want := range map[string]string{
+		"🚀":                     "🚀",
+		"Best,\nSam":            "Best,…",
+		strings.Repeat("a", 45): strings.Repeat("a", 40) + "…",
+	} {
+		if got := Short(in); got != want {
+			t.Errorf("Short(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

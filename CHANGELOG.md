@@ -11,6 +11,12 @@ so here.
 
 ### Added
 
+- **Snippets.** Named text as rows at the root, one markdown file each in
+  `~/.config/swoop/snippets/`: name, an optional `keyword:` line, text.
+  Enter pastes into the app in front with `{date}`, `{time}`,
+  `{clipboard}` and `{uuid}` filled, and leaves the caret at `{cursor}`;
+  it copies where emoji copies. `swoop-snippets import` reads a JSON
+  export (name, text, keyword); ctrl-k copies or deletes.
 - **Emoji and symbols.** Type `emoji`, Enter, then a name or keyword:
   every emoji and flag, and a few hundred symbols. Enter pastes into the
   app in front, or copies without Accessibility, in a plain terminal,
