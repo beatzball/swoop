@@ -296,7 +296,7 @@ func hotkeyChoices(query string) []choice {
 		{value: "alt+space", title: "alt+space", note: "Ghostty's quick terminal uses this"},
 		{value: "ctrl+space", title: "ctrl+space", note: ""},
 		{value: "ctrl+alt+space", title: "ctrl+alt+space", note: ""},
-		{value: "cmd+shift+space", title: "cmd+shift+space", note: "Raycast's default"},
+		{value: "cmd+shift+space", title: "cmd+shift+space", note: "the leading launcher's default"},
 		{value: "cmd+ctrl+space", title: "cmd+ctrl+space", note: ""},
 	}
 	q := strings.ToLower(strings.ReplaceAll(query, " ", ""))

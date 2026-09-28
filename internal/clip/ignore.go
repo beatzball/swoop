@@ -11,7 +11,7 @@ import (
 // id per line, blank lines and # comments allowed. Password managers go
 // here. The pasteboard does not say which app wrote to it, so the watcher
 // matches the app that owned the front window at that moment, which is the
-// same guess Raycast makes.
+// same guess the leading launcher makes.
 func IgnorePath() string {
 	base := os.Getenv("XDG_CONFIG_HOME")
 	if base == "" {

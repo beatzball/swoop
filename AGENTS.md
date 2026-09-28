@@ -20,6 +20,14 @@ including in the history after you delete it.
   repo-relative paths, `$HOME`, or a placeholder like `/absolute/path/to/swoop`
 - Provenance trailers of any kind: session links, agent attribution,
   `Co-Authored-By` for a tool, "generated with" footers
+- The name of a competing product, anywhere: code, comments, docs, the
+  changelog, issues, pull requests, release notes. Say "the leading
+  launcher", "other launchers", "the launchers you know". Platform names
+  (Spotlight, Finder, Reminders) are the platform, not a rival, and stay
+
+The same standard applies to everything published from here: an issue, a
+comment, a pull request body, a release. Grep the text for rival names,
+home paths, and personal details before it goes up; no hook can see those.
 
 Commits are authored `beatzball <38116726+beatzball@users.noreply.github.com>`.
 Do not change author or committer identity. Before you push, check it:
