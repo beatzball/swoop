@@ -9,6 +9,10 @@ so here.
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-09-29
+
+The owl: on the site, in the menu bar, and the site on the supernova recipe.
+
 ### Changed
 
 - **The owl in the menu bar.** The frame's menu bar item shows swoop's
@@ -466,7 +470,8 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.9.0...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.9.1...HEAD
+[0.9.1]: https://github.com/beatzball/swoop/compare/v0.9.0...v0.9.1
 [0.9.0]: https://github.com/beatzball/swoop/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/beatzball/swoop/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/beatzball/swoop/compare/v0.6.1...v0.7.0
