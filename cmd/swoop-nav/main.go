@@ -8,6 +8,7 @@
 //	swoop-nav esc                     fzf: transform on Esc
 //	swoop-nav change                  fzf: transform on typing
 //	swoop-nav landed                  fzf: transform on result-final, once armed
+//	swoop-nav back id                 fzf: transform after a terminal row's run
 //	swoop-nav rows [query]            fzf: reload, prints the current pane
 //
 // fzf exports FZF_QUERY and FZF_POS to the transform commands, which is
@@ -17,6 +18,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -45,7 +47,7 @@ const envApps = "SWOOP_APPS"
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|ai|settings|esc|change|landed|rows|window|divider ...")
+		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|ai|settings|esc|change|landed|back|rows|window|divider ...")
 		os.Exit(2)
 	}
 	nav.PreviewPercent = settings.PreviewPercent()
@@ -151,12 +153,35 @@ func main() {
 		fmt.Println(nav.Change(st, keyed(st, query)))
 	case "landed":
 		fmt.Println(nav.Landed(st, query))
+	case "back":
+		ran := ""
+		if len(os.Args) > 2 {
+			ran = os.Args[2]
+		}
+		fmt.Println(nav.Back(st, landed(ran)))
 	case "rows":
 		q := ""
 		if len(os.Args) > 2 {
 			q = os.Args[2]
 		}
-		if err := rows(st, q); err != nil {
+		q = strings.TrimSpace(q)
+		items, err := rows(st, q)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "swoop-nav:", err)
+			os.Exit(1)
+		}
+		// A landing on a row by id learns its number here, where the rows
+		// are; see nav.Landing.
+		ids := make([]string, len(items))
+		for i, it := range items {
+			ids[i] = it.ID
+		}
+		if nav.Find(st, q, ids) {
+			if err := nav.Save(path, st); err != nil {
+				fmt.Fprintln(os.Stderr, "swoop-nav:", err)
+			}
+		}
+		if err := protocol.Write(os.Stdout, items); err != nil {
 			fmt.Fprintln(os.Stderr, "swoop-nav:", err)
 			os.Exit(1)
 		}
@@ -179,10 +204,13 @@ func main() {
 // safe.
 func runCommand(statePath, kind, title string) func(target, action string) string {
 	return func(target, action string) string {
-		// The state file, fzf's socket beside it, and the apps cache.
+		// The state file, fzf's socket beside it, the apps cache, and the
+		// land file.
 		run := "rm -f " + nav.ShellQuote(statePath) + " " + nav.ShellQuote(statePath+".sock")
-		if apps := os.Getenv(envApps); apps != "" {
-			run += " " + nav.ShellQuote(apps)
+		for _, env := range []string{envApps, envLand} {
+			if f := os.Getenv(env); f != "" {
+				run += " " + nav.ShellQuote(f)
+			}
 		}
 		// The row's kind and title ride along for the usage log. Through
 		// env, because the plain terminal's path is "exec …", and exec
@@ -209,6 +237,40 @@ func runCommand(statePath, kind, title string) func(target, action string) strin
 	}
 }
 
+// envLand names the file a terminal row's run may write a row id to, to
+// come back on that row with the bar cleared (nav.Back). bin/swoop sets
+// it beside the state file; the run inherits it through fzf.
+const envLand = "SWOOP_LAND"
+
+// landed reads and removes what the run of row ran wrote to the land
+// file: one id, in the run's own extension's terms, so it gets the same
+// prefix as ran. "" when nothing was written.
+func landed(ran string) string {
+	file := os.Getenv(envLand)
+	if file == "" {
+		return ""
+	}
+	data, err := os.ReadFile(file)
+	if err != nil {
+		// No file is the usual case: the run named no row.
+		if !errors.Is(err, os.ErrNotExist) {
+			fmt.Fprintln(os.Stderr, "swoop-nav:", err)
+		}
+		return ""
+	}
+	if err := os.Remove(file); err != nil {
+		fmt.Fprintln(os.Stderr, "swoop-nav:", err)
+	}
+	id := strings.TrimSpace(string(data))
+	if id == "" {
+		return ""
+	}
+	if name, _, ok := ext.Route(ran); ok {
+		return ext.Prefix + name + "/" + id
+	}
+	return id
+}
+
 // installed says whether the extension called name is there and on.
 func installed(name string) bool {
 	_, found := ext.Find(name)
@@ -230,13 +292,13 @@ func actionsFor(id string) []protocol.Item {
 	return nil
 }
 
-// rows prints the current pane. At the root that is the cached built-in
+// rows lists the current pane. At the root that is the cached built-in
 // rows plus whatever the extensions answer for the text, in one order by
 // title, so a calculator's row for "2+2" sits in the same list as the apps;
 // with a keyword first, only that extension's rows (see scoped).
 // Inside a view it is whatever the view's extension answers. In an actions
 // pane it is the target's actions, filtered by the text.
-func rows(st *nav.State, query string) error {
+func rows(st *nav.State, query string) ([]protocol.Item, error) {
 	top := st.Top()
 	if top == nil {
 		// Before the trim: "def " is a keyword, "def" is not.
@@ -248,7 +310,7 @@ func rows(st *nav.State, query string) error {
 	if top == nil {
 		items, err := cachedApps()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		items = append(items, ext.ListAll(ext.Discover(ext.Dirs()), query)...)
 		sort.SliceStable(items, func(i, j int) bool {
@@ -261,7 +323,7 @@ func rows(st *nav.State, query string) error {
 				items = usage.Front(items, usage.Recent(entries, recentCount), recentCount)
 			}
 		}
-		return protocol.Write(os.Stdout, items)
+		return items, nil
 	}
 	if top.Kind == "actions" {
 		var items []protocol.Item
@@ -270,25 +332,21 @@ func rows(st *nav.State, query string) error {
 				items = append(items, it)
 			}
 		}
-		return protocol.Write(os.Stdout, items)
+		return items, nil
 	}
 	name, viewID, ok := ext.Route(top.View)
 	if !ok {
-		return fmt.Errorf("%q is not an extension view", top.View)
+		return nil, fmt.Errorf("%q is not an extension view", top.View)
 	}
 	e, found := ext.Find(name)
 	if !found {
-		return fmt.Errorf("extension %q is not installed", name)
+		return nil, fmt.Errorf("extension %q is not installed", name)
 	}
 	if top.Kind == "ai" {
 		// The bar there is the prompt being written, not a filter.
 		query = ""
 	}
-	items, err := e.View(viewID, query)
-	if err != nil {
-		return err
-	}
-	return protocol.Write(os.Stdout, items)
+	return e.View(viewID, query)
 }
 
 // scope finds the extension a keyword at the start of the root bar names,

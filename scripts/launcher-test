@@ -770,8 +770,11 @@ esac
                 open_view(ninth)
                 ninth.press("Fake Idea", lambda s: s["query"] == "Fake Idea" and "New note: Fake Idea" in cur(s), what="the New note row")
                 made = os.path.join(notes_dir, "fake-idea.md")
-                ninth.press("\r", screen=r"fake-editor on .*fake-idea\.md", what="the editor, run on the new note")
-                ninth.wait_state(lambda s: s["query"] == "Fake Idea" and s["matchCount"] == 2, what="the launcher still open, the new note in the view")
+                # Back with the bar empty and the new note under the
+                # cursor, not "New note: Fake Idea" again, where a second
+                # Enter would make fake-idea-2.md.
+                ninth.press("\r", lambda s: s["query"] == "" and s["matchCount"] == 3 and "Fake Idea" in cur(s) and "New note" not in cur(s),
+                            screen=r"fake-editor on .*fake-idea\.md", what="the editor on the new note, then an empty bar and the note under the cursor")
                 with open(made) as f:
                     body = f.read()
                 if body != "# Fake Idea\n\nedited by the fake editor\n":

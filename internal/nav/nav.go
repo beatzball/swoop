@@ -24,6 +24,10 @@
 //     is how anything that needs a cursor happens inside the panel. An
 //     action of kind "terminal" does the same from the actions pane,
 //     then returns to the pane below, like "refresh".
+//   - A terminal row's run may name a row to come back to, by writing its
+//     id to the file in $SWOOP_LAND. Then the bar comes back empty and the
+//     cursor on that row: New note returns on the note it made, and a
+//     second Enter does not make a second one. See Back.
 //   - Popping restores the text and the cursor row the user left.
 //   - Tab opens the Ask AI pane from anywhere, and keeps the bar's text.
 //     The bar there is a prompt, not a filter: Enter sends it to the
@@ -42,6 +46,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -68,13 +73,33 @@ type State struct {
 
 // Landing is where a chain wants the cursor once its reload lands on a
 // list other than the one on screen: the row a pop returns to, the
-// conversation a send made.
+// conversation a send made, the note a New note made.
 type Landing struct {
 	// Query is the bar's text the chain left. Text typed since means the
 	// user has moved on, and the cursor stays where the typing put it.
-	Query   string `json:"query"`
-	Pos     int    `json:"pos"`               // the row, 1-based
+	Query string `json:"query"`
+	Pos   int    `json:"pos"` // the row, 1-based
+	// ID names the row instead of Pos. Its number is known only once the
+	// rows are, so swoop-nav rows fills in Pos as it prints them (Find).
+	ID      string `json:"id,omitempty"`
 	Refresh bool   `json:"refresh,omitempty"` // redraw the preview once there
+}
+
+// Find fills in the row number of a Landing by id from the rows a
+// reload for query prints, in order. It says whether it did, so the
+// caller saves the state only then.
+func Find(st *State, query string, ids []string) bool {
+	l := st.Land
+	if l == nil || l.ID == "" || l.Pos != 0 || l.Query != query {
+		return false
+	}
+	for i, id := range ids {
+		if id == l.ID {
+			l.Pos = i + 1
+			return true
+		}
+	}
+	return false
 }
 
 // Top is the pane the user is in, or nil at the root.
@@ -105,13 +130,30 @@ func Load(path string) (*State, error) {
 	return st, nil
 }
 
-// Save writes the state file.
+// Save writes the state file. Whole or not at all, through a rename:
+// swoop-nav rows saves it too (Find), during a reload, while a key's
+// transform may be reading it, and half a file reads as the root.
 func Save(path string, st *State) error {
 	data, err := json.Marshal(st)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0o600)
+	// A name of its own, as two savers can be at it at once.
+	f, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
+	if err != nil {
+		return err
+	}
+	_, err = f.Write(data)
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Rename(f.Name(), path)
+	}
+	if err != nil {
+		os.Remove(f.Name())
+	}
+	return err
 }
 
 // RootPrompt is the bar's prompt at the root.
@@ -155,7 +197,9 @@ func Enter(st *State, id, kind, title, query string, pos int, runCmd func(target
 		// keys and screen, until it exits. The kind and title ride along
 		// for the usage log, as runCmd sends them: an edit of a note
 		// counts as an open of it.
-		return Wrap("execute", "env SWOOP_KIND="+ShellQuote(kind)+" SWOOP_TITLE="+ShellQuote(title)+" swoop-run "+ShellQuote(id)) + "+" + back()
+		// What comes back after is Back's, through swoop-nav, since the
+		// run may have named a row to land on.
+		return Wrap("execute", "env SWOOP_KIND="+ShellQuote(kind)+" SWOOP_TITLE="+ShellQuote(title)+" swoop-run "+ShellQuote(id)) + "+" + Wrap("transform", "swoop-nav back "+ShellQuote(id))
 	}
 	if kind != "view" {
 		return runCmd(id, "")
@@ -397,16 +441,31 @@ func stay() string {
 	return "clear-query+reload-sync(swoop-nav rows {q})"
 }
 
-// back reloads the pane the user is in after a terminal run, keeping the
-// bar's text; the cursor keeps its row number, as in stay. The text stays
+// Back is what follows a terminal row's run. id is the row the run named
+// in $SWOOP_LAND, "" for none.
+//
+// With none, the pane the user is in is reloaded, keeping the bar's
+// text; the cursor keeps its row number, as in stay. The text stays
 // because nothing was typed into the list: the run had the keys. The
 // preview is redrawn, because the file under the cursor has likely
 // changed and fzf would otherwise show what it drew before the run. It
 // draws the row on screen, which is the row the reload leaves there; a
 // different row there after the reload is drawn anyway, as fzf draws
 // every row the cursor comes to.
-func back() string {
-	return "reload-sync(swoop-nav rows {q})+refresh-preview"
+//
+// With a row named, the bar is cleared and the cursor lands on that row,
+// or on the first if it is not listed. New note needs this: its row is
+// made from the bar's text, so with the text kept the cursor came back
+// to "New note: <title>", and a second Enter made <title>-2.md.
+func Back(st *State, id string) string {
+	if id == "" {
+		return "reload-sync(swoop-nav rows {q})+refresh-preview"
+	}
+	return strings.Join([]string{
+		"clear-query",
+		"reload-sync(swoop-nav rows {q})",
+		land(st, Landing{ID: id}),
+	}, "+")
 }
 
 // Esc decides what Esc does: clear the bar if it has text, otherwise pop

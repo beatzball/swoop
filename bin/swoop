@@ -223,6 +223,10 @@ export SWOOP_APPS
 # run command itself when Enter replaces fzf.
 SWOOP_STATE="$(mktemp "${TMPDIR:-/tmp}/swoop-state.XXXXXX")"
 export SWOOP_STATE
+# Where a terminal row's run may write a row id to come back on, with the
+# bar cleared: New note names the note it made. See nav.Back.
+SWOOP_LAND="$SWOOP_STATE.land"
+export SWOOP_LAND
 # fzf's API, for the Ask AI worker: a Unix socket beside the state file,
 # which fzf exports to its children as FZF_SOCK, or a localhost port on
 # Windows, exported as FZF_PORT. Requests need the key.
@@ -268,7 +272,7 @@ fzf < "$rows" \
   --listen "$listen" \
   --bind 'esc:transform:swoop-nav esc' \
   --bind 'change:transform:swoop-nav change' || status=$?
-rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_APPS" "$sock"
+rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_LAND" "$SWOOP_APPS" "$sock"
 # Inside a frame of our own, tell it we are leaving, so it can put the
 # panel away before the terminal prints "Process exited".
 [ -n "${SWOOP_SHELL_PID:-}" ] && kill -USR2 "$SWOOP_SHELL_PID" 2>/dev/null

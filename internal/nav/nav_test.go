@@ -372,7 +372,7 @@ func TestTerminalRowHandsOverTheTerminalAndStays(t *testing.T) {
 	st := &State{Stack: []Frame{{Kind: "view", View: "ext/notes/notes", Title: "Notes", Query: "", Pos: 1}}}
 	got := Enter(st, "ext/notes/fake.md", "terminal", "Fake (draft)", "zuc", 2, run)
 	want := "execute[env SWOOP_KIND='terminal' SWOOP_TITLE='Fake (draft)' swoop-run 'ext/notes/fake.md']" +
-		"+reload-sync(swoop-nav rows {q})+refresh-preview"
+		"+transform(swoop-nav back 'ext/notes/fake.md')"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -470,6 +470,8 @@ func TestNoChainWaits(t *testing.T) {
 		"actions":         Actions(&State{}, "v", "view", "V", "", 1),
 		"ask":             Ask(&State{}, "", 1),
 		"send":            AfterSend(ai),
+		"back":            Back(inView(), ""),
+		"back, landing":   Back(inView(), "ext/notes/new.md"),
 	}
 	for name, got := range chains {
 		for _, a := range strings.Split(got, "+") {
@@ -477,5 +479,33 @@ func TestNoChainWaits(t *testing.T) {
 				t.Errorf("%s waits, and would drop the keys typed meanwhile: %q", name, got)
 			}
 		}
+	}
+}
+
+func TestBackKeepsTheBarUnlessTheRunNamesARow(t *testing.T) {
+	st := &State{Stack: []Frame{{Kind: "view", View: "ext/notes/notes", Title: "Notes"}}}
+	// An edit: the bar as it was, the same row number, the preview redrawn.
+	if got := Back(st, ""); got != "reload-sync(swoop-nav rows {q})+refresh-preview" || st.Land != nil {
+		t.Fatalf("got %q %+v", got, st.Land)
+	}
+	// A New note: the bar cleared, the cursor on the note it made.
+	if got := Back(st, "ext/notes/fake-idea.md"); got != "clear-query+reload-sync(swoop-nav rows {q})+rebind(result-final)" {
+		t.Fatalf("got %q", got)
+	}
+	if st.Land == nil || *st.Land != (Landing{ID: "ext/notes/fake-idea.md"}) {
+		t.Fatalf("land on the note: %+v", st.Land)
+	}
+	ids := []string{"ext/notes/+new", "ext/notes/fake-idea.md", "ext/notes/fake-meeting.md"}
+	if Find(st, "typed", ids) {
+		t.Fatal("rows for other text are not the rows the landing waits on")
+	}
+	if !Find(st, "", ids) || st.Land.Pos != 2 {
+		t.Fatalf("the note is row 2: %+v", st.Land)
+	}
+	if Find(st, "", ids) {
+		t.Fatal("found once; later reloads leave it")
+	}
+	if got := Landed(st, ""); got != "pos(2)+unbind(result-final)" {
+		t.Fatalf("got %q", got)
 	}
 }

@@ -6,7 +6,8 @@
 // so quitting the editor brings the view back with the preview redrawn.
 // ctrl-k Open in app hands it to the app that owns .md files instead. A
 // New note row leads the view and makes a note whose first line is what
-// was typed, and opens that. See store.go for the folder and the file.
+// was typed, and opens that; the view comes back with the bar empty and
+// the new note under the cursor. See store.go for the folder and the file.
 //
 //	swoop-notes list                    the root row
 //	swoop-notes view notes [query]      New note, then the notes
@@ -20,6 +21,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -184,6 +186,14 @@ func run(id, action string) error {
 		p, err := create(dir(), t)
 		if err != nil {
 			return err
+		}
+		// Come back on the note just made, with the bar cleared. With the
+		// title left in the bar, the cursor came back to "New note:
+		// <title>", and a second Enter made a second note.
+		if land := os.Getenv("SWOOP_LAND"); land != "" {
+			if err := os.WriteFile(land, []byte(filepath.Base(p)+"\n"), 0o600); err != nil {
+				return err
+			}
 		}
 		return settings.Edit(p)
 	}

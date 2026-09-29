@@ -38,6 +38,10 @@ so here.
   `2026-09-28 21:15` as its heading and `2026-09-28-21-15.md` as its
   file, instead of `untitled`. The New note row says the name it will
   get.
+- **New note comes back on the note it made**, with the bar empty, so a
+  second Enter does not make a second note. For extensions: a run of a
+  `terminal` row may write a row id to the file named by `$SWOOP_LAND`,
+  and the launcher comes back on that row with the bar cleared.
 
 ### Fixed
 
