@@ -269,6 +269,15 @@ func AISendTarget(st *State, id, query string) (string, bool) {
 	return strings.TrimPrefix(id, AIPrefix), true
 }
 
+// Settled ends every chain that waits for a reload. fzf ignores keys
+// while it waits ("While waiting, user input is ignored", its man page),
+// and its socket shows the new list before the wait is over, so nothing
+// in fzf's state says when a key counts again. This appends a byte to a
+// file beside the state file once the chain is done; the launcher test
+// watches it grow before it sends the next key. One shell per pop, tick
+// or send, never per keystroke.
+const Settled = `execute-silent(test -n "$SWOOP_STATE" && echo >> "$SWOOP_STATE.settled")`
+
 // AfterSend is what follows a send: clear the bar, list again so the
 // conversation is at the top under New, land on it, and draw it. The
 // worker the send started fills the preview from then on.
@@ -279,6 +288,7 @@ func AfterSend() string {
 		"wait",
 		"pos(2)",
 		"refresh-preview",
+		Settled,
 	}, "+")
 }
 
@@ -307,6 +317,7 @@ func stay(pos int) string {
 		"reload-sync(swoop-nav rows {q})",
 		"wait",
 		fmt.Sprintf("pos(%d)", pos),
+		Settled,
 	}, "+")
 }
 
@@ -321,6 +332,7 @@ func back(pos int) string {
 		"wait",
 		fmt.Sprintf("pos(%d)", pos),
 		"refresh-preview",
+		Settled,
 	}, "+")
 }
 
@@ -367,6 +379,7 @@ func popActions(st *State) string {
 		"reload-sync(swoop-nav rows {q})",
 		"wait",
 		fmt.Sprintf("pos(%d)", frame.Pos),
+		Settled,
 	}, "+")
 }
 

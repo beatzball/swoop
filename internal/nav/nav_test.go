@@ -51,7 +51,7 @@ func TestEscClearsThenPopsThenCloses(t *testing.T) {
 		t.Fatalf("text in the bar: got %q", got)
 	}
 	got := Esc(st, "")
-	want := "enable-search+change-prompt(  )+change-preview-window(right,58%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(de)+reload-sync(swoop-nav rows {q})+wait+pos(3)"
+	want := "enable-search+change-prompt(  )+change-preview-window(right,58%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(de)+reload-sync(swoop-nav rows {q})+wait+pos(3)+" + Settled
 	if got != want {
 		t.Fatalf("pop: got  %q\nwant %q", got, want)
 	}
@@ -84,7 +84,7 @@ func TestEnterOnRefreshActionRunsAndReturnsToTheViewBelow(t *testing.T) {
 		{Kind: "actions", View: "ext/clipboard/17", Title: "hello", Query: "he", Pos: 2},
 	}}
 	got := Enter(st, "delete", "refresh", "Delete", "", 2, run)
-	want := "execute-silent(swoop-run 'ext/clipboard/17' 'delete')+disable-search+change-prompt(Clipboard History > )+change-preview-window(right,58%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(he)+reload-sync(swoop-nav rows {q})+wait+pos(2)"
+	want := "execute-silent(swoop-run 'ext/clipboard/17' 'delete')+disable-search+change-prompt(Clipboard History > )+change-preview-window(right,58%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(he)+reload-sync(swoop-nav rows {q})+wait+pos(2)+" + Settled
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -107,7 +107,7 @@ func TestEscFromActionsReturnsToTheViewBelow(t *testing.T) {
 		{Kind: "actions", View: "ext/clipboard/17", Title: "hello", Query: "he", Pos: 2},
 	}}
 	got := Esc(st, "")
-	if !strings.HasPrefix(got, "disable-search+change-prompt(Clipboard History > )") || !strings.HasSuffix(got, "change-query(he)+reload-sync(swoop-nav rows {q})+wait+pos(2)") {
+	if !strings.HasPrefix(got, "disable-search+change-prompt(Clipboard History > )") || !strings.HasSuffix(got, "change-query(he)+reload-sync(swoop-nav rows {q})+wait+pos(2)+"+Settled) {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -205,7 +205,7 @@ func TestEnterInTheAIPaneSendsThenClears(t *testing.T) {
 	if _, ok := AISendTarget(&State{}, "ext/ai/new", "why"); ok {
 		t.Fatal("only inside the pane")
 	}
-	if got := AfterSend(); got != "clear-query+reload-sync(swoop-nav rows)+wait+pos(2)+refresh-preview" {
+	if got := AfterSend(); got != "clear-query+reload-sync(swoop-nav rows)+wait+pos(2)+refresh-preview+"+Settled {
 		t.Fatalf("got %q", got)
 	}
 	if got := Enter(st, "ext/ai/20260925-1", "conversation", "earlier", "and then", 2, run); got != "ignore" {
@@ -297,7 +297,7 @@ func TestToggleRowInAViewRunsAndStays(t *testing.T) {
 	if !strings.HasPrefix(got, "execute-silent(swoop-run 'ext/tasks/t\x1fbuy milk')+") {
 		t.Fatalf("runs the row quietly: %q", got)
 	}
-	if !strings.HasSuffix(got, "+clear-query+reload-sync(swoop-nav rows {q})+wait+pos(3)") {
+	if !strings.HasSuffix(got, "+clear-query+reload-sync(swoop-nav rows {q})+wait+pos(3)+"+Settled) {
 		t.Fatalf("stays in the pane, reloaded, same row: %q", got)
 	}
 	if len(st.Stack) != 1 {
@@ -313,7 +313,7 @@ func TestTerminalRowHandsOverTheTerminalAndStays(t *testing.T) {
 	st := &State{Stack: []Frame{{Kind: "view", View: "ext/notes/notes", Title: "Notes", Query: "", Pos: 1}}}
 	got := Enter(st, "ext/notes/fake.md", "terminal", "Fake (draft)", "zuc", 2, run)
 	want := "execute[env SWOOP_KIND='terminal' SWOOP_TITLE='Fake (draft)' swoop-run 'ext/notes/fake.md']" +
-		"+reload-sync(swoop-nav rows {q})+wait+pos(2)+refresh-preview"
+		"+reload-sync(swoop-nav rows {q})+wait+pos(2)+refresh-preview+" + Settled
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -338,7 +338,7 @@ func TestTerminalActionPopsBackToThePaneBelow(t *testing.T) {
 	if !strings.HasPrefix(got, "execute(swoop-run 'ext/tasks/t\x1fmilk' 'edit')+enable-search") && !strings.HasPrefix(got, "execute(swoop-run 'ext/tasks/t\x1fmilk' 'edit')+disable-search") {
 		t.Fatalf("runs the action with the terminal: %q", got)
 	}
-	if !strings.HasSuffix(got, "change-query(mi)+reload-sync(swoop-nav rows {q})+wait+pos(3)+refresh-preview") {
+	if !strings.HasSuffix(got, "change-query(mi)+reload-sync(swoop-nav rows {q})+wait+pos(3)+"+Settled+"+refresh-preview") {
 		t.Fatalf("back to the pane below, reloaded, redrawn: %q", got)
 	}
 	if strings.Contains(got, "cleanup") {

@@ -158,8 +158,9 @@ func main() {
 // safe.
 func runCommand(statePath, kind, title string) func(target, action string) string {
 	return func(target, action string) string {
-		// The state file, fzf's socket beside it, and the apps cache.
-		run := "rm -f " + nav.ShellQuote(statePath) + " " + nav.ShellQuote(statePath+".sock")
+		// The state file, fzf's socket and the settled mark (nav.Settled)
+		// beside it, and the apps cache.
+		run := "rm -f " + nav.ShellQuote(statePath) + " " + nav.ShellQuote(statePath+".sock") + " " + nav.ShellQuote(statePath+".settled")
 		if apps := os.Getenv(envApps); apps != "" {
 			run += " " + nav.ShellQuote(apps)
 		}

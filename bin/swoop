@@ -257,7 +257,7 @@ fzf < "$rows" \
   --listen "$listen" \
   --bind 'esc:transform:swoop-nav esc' \
   --bind 'change:transform:swoop-nav change' || status=$?
-rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_APPS" "$sock"
+rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_STATE.settled" "$SWOOP_APPS" "$sock"
 # Inside a frame of our own, tell it we are leaving, so it can put the
 # panel away before the terminal prints "Process exited".
 [ -n "${SWOOP_SHELL_PID:-}" ] && kill -USR2 "$SWOOP_SHELL_PID" 2>/dev/null

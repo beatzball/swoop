@@ -186,7 +186,23 @@ class Launcher:
             self.read(0.1)
         fail(f"fzf never reached: {what}; last state {self.state()}", self.buf)
 
-    def press(self, keys, until=None, screen=None, what="", timeout=10.0):
+    def marks(self):
+        """How many wait chains have finished: the size of the settled mark
+        beside the state file (nav.Settled). fzf ignores keys while it
+        waits for a reload, and its socket shows the new list before the
+        wait is over, so this is the only sign that a key counts again."""
+        if self.sock is None:
+            self.state()
+        if self.sock is None:
+            return 0
+        try:
+            return os.path.getsize(self.sock[:-len(".sock")] + ".settled")
+        except OSError:
+            return 0
+
+    seen_marks = 0
+
+    def press(self, keys, until=None, screen=None, what="", timeout=10.0, settles=False):
         """Send keys, then wait for the exact change they cause: `until`, a
         pred on fzf's state, and or `screen`, a regex on the output after
         the keys. Never a pause. The next key waits on this one's effect,
@@ -197,7 +213,16 @@ class Launcher:
         the keys, or the wait would pass at once and prove nothing; where
         the state does not change, wait on the screen instead. The mark
         moves before the keys, so a screen wait cannot be met by text
-        already on the screen, such as a prompt from the last visit."""
+        already on the screen, such as a prompt from the last visit.
+
+        `settles` is for a key whose actions end in fzf's wait: a pop, a
+        tick, a send, a run in the terminal. Those keys also wait for the
+        settled mark to grow, since a key sent while fzf waits is dropped.
+        A chain that ended with nobody waiting on it fails the next press,
+        so a missing `settles` is found, not left to flake."""
+        n = self.marks()
+        if n != self.seen_marks:
+            fail(f"a wait chain ended before {keys!r} with no wait on it; the key before needs settles=True", self.buf)
         if until:
             before = self.state(1000)
             if before and until(before):
@@ -205,6 +230,13 @@ class Launcher:
         self.clear()
         self.send(keys)
         st = None
+        if settles:
+            end = time.time() + timeout
+            while self.marks() <= n:
+                if time.time() > end:
+                    fail(f"fzf never came out of its wait: {what}; last state {self.state()}", self.buf)
+                self.read(0.1)
+            self.seen_marks = self.marks()
         if until:
             st = self.wait_state(until, timeout=timeout, what=what)
         if screen:
@@ -404,14 +436,14 @@ esac
             L.press("\x1b", lambda s: s["query"] == "" and s["matchCount"] == 3, what="all three rows back after Esc cleared the bar")
             # pops: the text back, and the root's rows under it, so the
             # ctrl-k below lands on the view row and not on a fruit
-            L.press("\x1b", lambda s: s["query"] == "fake th" and "Fake Things" in cur(s), what="the earlier text and the root list back after popping")
+            L.press("\x1b", lambda s: s["query"] == "fake th" and "Fake Things" in cur(s), settles=True, what="the earlier text and the root list back after popping")
         check("view push, filter, Esc, Esc", view)
 
         # 3. the action menu
         def actions():
             # ctrl-k on the highlighted view row
             L.press("\x0b", lambda s: has(s, "Copy Fake") and has(s, "Delete Fake"), screen=r"actions > ", what="the actions menu")
-            L.press("\x1b", lambda s: s["query"] == "fake th" and "Fake Things" in cur(s), what="back at the root with the text")
+            L.press("\x1b", lambda s: s["query"] == "fake th" and "Fake Things" in cur(s), settles=True, what="back at the root with the text")
         check("action menu", actions)
 
         # 4. Ask AI: Tab, Enter, thinking, status, answer, Esc Esc
@@ -419,7 +451,7 @@ esac
             L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the bar cleared at the root")
             L.press("\t", lambda s: "ext/ai/new" in cur(s), screen=r"Ask AI > ", what="the Ask AI pane, New conversation")
             L.press("what is the answer", lambda s: s["query"] == "what is the answer", what="the question in the bar")
-            L.press("\r", screen=r"thinking", what="the conversation row saying thinking")
+            L.press("\r", screen=r"thinking", settles=True, what="the conversation row saying thinking")
             L.expect(r"using Fake", what="the command's stderr under the dots")
             L.expect(r"The answer is 42", timeout=15, what="the answer in the preview")
             L.wait_state(lambda s: "1 turn" in cur(s), what="the subtitle after the answer, the conversation under the cursor")
@@ -429,17 +461,17 @@ esac
             L.press("claude", lambda s: s["query"] == "claude" and s["matchCount"] == 1, what="the claude row")
             # The pane is back only once New is under the cursor again: a
             # ctrl-k sent before that lands on a model row and is ignored.
-            L.press("\r", lambda s: "ext/ai/new" in cur(s), screen=r"Ask AI > ", what="the pane back with New under the cursor")
+            L.press("\r", lambda s: "ext/ai/new" in cur(s), screen=r"Ask AI > ", settles=True, what="the pane back with New under the cursor")
             with open(config) as f:
                 if "ai = claude" not in f.read():
                     fail("ctrl-k on New did not set ai = claude", L.buf)
             # and back to the custom line, so the fake model answers again
             L.press("\x0b", lambda s: has(s, "The line in"), screen=r"New conversation actions > ", what="the model menu again")
             L.press("The line", lambda s: s["query"] == "The line" and s["matchCount"] == 1, what="the custom-line row")
-            L.press("\r", lambda s: "ext/ai/new" in cur(s), screen=r"Ask AI > ", what="the pane back again with New under the cursor")
+            L.press("\r", lambda s: "ext/ai/new" in cur(s), screen=r"Ask AI > ", settles=True, what="the pane back again with New under the cursor")
             # Back at the root: the whole list, an empty bar (it was empty
             # before Tab).
-            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the root list after Esc from Ask AI")
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), settles=True, what="the root list after Esc from Ask AI")
         check("Ask AI", ask)
 
         # 5. the divider keys write the width
@@ -471,12 +503,12 @@ esac
             L.press("preview", lambda s: s["query"] == "preview" and s["matchCount"] == 1 and "Preview width" in cur(s), what="one row for 'preview'")
             L.press("\r", lambda s: s["query"] == "" and has(s, "70%"), screen=r"Preview width > ", what="the choices pane")
             L.press("70", lambda s: s["query"] == "70" and s["matchCount"] == 1, what="the 70% choice")
-            L.press("\r", lambda s: s["query"] == "preview" and "Preview width" in cur(s) and "70%" in cur(s), what="back in Settings with the earlier text, the new width in the row's subtitle")
+            L.press("\r", lambda s: s["query"] == "preview" and "Preview width" in cur(s) and "70%" in cur(s), settles=True, what="back in Settings with the earlier text, the new width in the row's subtitle")
             with open(config) as f:
                 if "preview = 70" not in f.read():
                     fail("the choice did not write preview = 70", L.buf)
             L.press("\x1b", lambda s: s["query"] == "" and has(s, "Preview width"), what="the bar cleared in Settings")  # clears 'preview'
-            L.press("\x1b", lambda s: s["query"] == "fake" and has(s, "Fake Search"), what="the root with the earlier text back")  # pops to the root
+            L.press("\x1b", lambda s: s["query"] == "fake" and has(s, "Fake Search"), settles=True, what="the root with the earlier text back")  # pops to the root
             # and clear it for the next step
             L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="an empty bar at the root")
         check("Settings pane", settings_pane)
@@ -502,30 +534,25 @@ esac
                 L.press("ext", lambda s: s["query"] == "ext" and s["matchCount"] == 1 and "Extensions" in cur(s), what="the Extensions row")
                 L.press("\r", lambda s: s["query"] == "" and has(s, "extension/fake"), screen=r"Extensions > ", what="the Extensions pane")
                 L.press("fake", lambda s: s["query"] == "fake" and s["matchCount"] == 1 and "extension/fake" in cur(s), what="the fake extension's row")
-                L.send("\r")
                 # A toggle stays: the same pane, the bar cleared, the mark
                 # flipped on the row.
                 mark = "off" if want_off else "on"
-                end = time.time() + 10
-                while True:
-                    st = L.state(limit=100)
-                    rows = [m["text"] for m in (st or {}).get("matches", []) if "extension/fake" in m["text"]]
-                    if st and st["query"] == "" and rows and (("\toff" in rows[0]) == want_off):
-                        break
-                    if time.time() > end:
-                        fail(f"the fake row never showed {mark}; last state {st}", L.buf)
-                    L.read(0.1)
+
+                def flipped(s):
+                    rows = [m["text"] for m in s["matches"] if "extension/fake" in m["text"]]
+                    return s["query"] == "" and rows and (("\toff" in rows[0]) == want_off)
+                L.press("\r", flipped, settles=True, what=f"the fake row showing {mark}")
                 with open(config) as f:
                     text = f.read()
                 if want_off != ("off = fake" in text):
                     fail(f"the config after turning fake {mark}:\n{text}", L.buf)
-                L.press("\x1b", lambda s: s["query"] == "ext" and "Extensions" in cur(s), what="back in Settings")  # pops to Settings, 'ext' back in the bar
+                L.press("\x1b", lambda s: s["query"] == "ext" and "Extensions" in cur(s), settles=True, what="back in Settings")  # pops to Settings, 'ext' back in the bar
                 L.press("\x1b", lambda s: s["query"] == "" and has(s, "Extensions"), what="the bar cleared in Settings")  # clears 'ext'
                 # pops to the root. The wait is on the root's own rows, not
                 # an empty bar, which Settings had too: typed before the
                 # pop lands, "fake" is read as alt-f, or eaten by the
                 # pop's clear-query.
-                L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the root list after Settings")
+                L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), settles=True, what="the root list after Settings")
 
             def type_fake():
                 L.press("fake", lambda s: s["query"] == "fake", what="'fake' in the bar at the root")
@@ -698,7 +725,7 @@ esac
                 st = eighth.press("\x1b[B", lambda s: "Fake Meeting" in cur(s), what="the cursor on the note")
                 if "remember the zucchini" not in cur(st):
                     fail(f"the matching line should be the subtitle: {st['current']}", eighth.buf)
-                eighth.press("\r", screen=r"fake-editor on .*fake-meeting\.md", what="the editor, run on the note")
+                eighth.press("\r", screen=r"fake-editor on .*fake-meeting\.md", settles=True, what="the editor, run on the note")
                 eighth.expect(r"edited by the fake editor", what="the preview redrawn with the edit")
                 st = eighth.wait_state(lambda s: s["query"] == "zucchini" and "Fake Meeting" in s["current"]["text"], what="the launcher still open, same query, same row")
                 eighth.expect(r"Notes > ", what="still in the notes view")
@@ -730,7 +757,7 @@ esac
                 open_view(ninth)
                 ninth.press("Fake Idea", lambda s: s["query"] == "Fake Idea" and "New note: Fake Idea" in cur(s), what="the New note row")
                 made = os.path.join(notes_dir, "fake-idea.md")
-                ninth.press("\r", screen=r"fake-editor on .*fake-idea\.md", what="the editor, run on the new note")
+                ninth.press("\r", screen=r"fake-editor on .*fake-idea\.md", settles=True, what="the editor, run on the new note")
                 ninth.wait_state(lambda s: s["query"] == "Fake Idea" and s["matchCount"] == 2, what="the launcher still open, the new note in the view")
                 with open(made) as f:
                     body = f.read()
@@ -770,18 +797,20 @@ esac
                 # Tomorrow from either side of the Enter, in case it
                 # falls across midnight: the file's date and the label.
                 before = datetime.date.today()
-                eighth.send("\r")
-                after = datetime.date.today()
                 days = set()
-                for d in (before, after):
+                for d in (before, before + datetime.timedelta(days=1)):
                     t = d + datetime.timedelta(days=1)
                     days.add((t.isoformat(), f"tomorrow, {t.strftime('%a')} {t.day} {t.strftime('%b')}"))
-                eighth.wait_state(lambda s: s["query"] == "" and any(label in cur(s) for _, label in days) and "buy milk" in cur(s), what="the new task with tomorrow's date, the view still open")
+                # The add ends in fzf's wait, which drops a key sent before
+                # it is over, so the Enter below waits on the settled mark
+                # as well as the new row under the cursor.
+                eighth.press("\r", lambda s: s["query"] == "" and any(label in cur(s) for _, label in days) and "buy milk" in cur(s),
+                             settles=True, what="the new task with tomorrow's date under the cursor, the view still open")
                 with open(tasks_md) as f:
                     got = f.read()
                 if not any(f"- [ ] buy milk due: {iso}\n" in got for iso, _ in days):
                     fail(f"the file did not get the task: {got!r}", eighth.buf)
-                eighth.press("\r", lambda s: "buy milk" in cur(s) and "done" in cur(s), what="the task marked done, the view still open")
+                eighth.press("\r", lambda s: "buy milk" in cur(s) and "done" in cur(s), settles=True, what="the task marked done, the view still open")
                 with open(tasks_md) as f:
                     got = f.read()
                 if "- [x] buy milk due: " not in got:
@@ -802,7 +831,10 @@ esac
                 ninth.press("reminders", lambda s: s["query"] == "reminders" and s["matchCount"] >= 1, what="rows for 'reminders'")
                 # The Reminders app matches too: move to the extension's row.
                 down_to(ninth, "Apple Reminders: overdue", "the Reminders row")
-                ninth.press("\r", lambda s: "Loading reminders" in cur(s), timeout=3, what="the Loading row")
+                # Loading is there only until the fetch lands, which on a
+                # slow runner can be before the first look: either one
+                # shows the view answered, and the rows must follow.
+                ninth.press("\r", lambda s: "Loading reminders" in cur(s) or "Fake water the plants" in cur(s), what="the Loading row, or the rows already")
                 ninth.wait_state(lambda s: "Fake water the plants" in cur(s), what="the rows, with no keystroke")
             finally:
                 ninth.kill()
