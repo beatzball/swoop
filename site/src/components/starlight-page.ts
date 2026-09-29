@@ -8,7 +8,8 @@ import type { TocEntry } from '../extract-headings.js';
 import './starlight-header.js';
 import './starlight-sidebar.js';
 import './starlight-toc.js';
-import "./litro-footer.js";
+import './litro-footer.js';
+import { pageReset } from '@beatzball/litro/runtime/page-reset.js';
 
 /**
  * <starlight-page
@@ -40,7 +41,9 @@ export class StarlightPage extends LitElement {
     _navOpen:    { state: true },
   };
 
-  static override styles = css`
+  static override styles = [
+    pageReset,
+    css`
     :host {
       display: block;
     }
@@ -147,7 +150,8 @@ export class StarlightPage extends LitElement {
         display: none;
       }
     }
-  `;
+  `,
+  ];
 
   siteTitle = '';
   pageTitle = '';
@@ -175,6 +179,12 @@ export class StarlightPage extends LitElement {
 
   override render() {
     const hasSidebar = !this.noSidebar;
+    // TEMPLATE NOTE — the note below was an HTML comment in the template. An
+    // HTML comment is served to every reader, so the prose lives here, named by
+    // the element it belongs to.
+    //
+    // <litro-footer recipe="supernova"></litro-footer>
+    //     Credit line. Delete this element if you would rather not carry it.
     return html`
       <div class="page-wrap">
         <starlight-header
@@ -209,7 +219,7 @@ export class StarlightPage extends LitElement {
             </aside>
           ` : ''}
         </div>
-        <litro-footer recipe="starlight"></litro-footer>
+        <litro-footer recipe="supernova"></litro-footer>
       </div>
     `;
   }

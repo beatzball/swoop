@@ -1,7 +1,8 @@
 # swoop docs site — agent instructions
 
 This directory is the source for **https://swoop.sh**. It is a Litro
-`starlight` site in SSG mode: Markdown in, static HTML out.
+`supernova` site (the lit adapter) in SSG mode: Markdown in, static HTML out.
+The docs half is the starlight layout; the landing page is supernova's.
 
 Read this before changing anything in `site/`.
 
@@ -12,10 +13,10 @@ Read this before changing anything in `site/`.
 | `content/docs/*.md` | Every documentation page. One file = one page. |
 | `server/starlight.config.js` | Site title, top nav, and the sidebar tree. |
 | `_data/metadata.js` | Site title, canonical URL, description (used for SEO and OG images). |
-| `pages/index.ts` | The landing page (a Lit component, not Markdown). |
+| `pages/index.ts` | The landing page (a Lit component, not Markdown). Its copy is in the lists at the top of the file. |
 | `pages/docs/[slug].ts` | The doc page template. Do not edit to add a page. |
 | `src/seo.ts` | Per-page description, canonical, Open Graph and Twitter tags. |
-| `src/components/` | Shared UI. Rarely needs touching. |
+| `src/components/` | Shared UI, from the recipe. `starlight-header.ts` carries swoop's logo and GitHub button. |
 | `public/` | The logo, the icons, and the demo recording as WebP. See below. |
 | `scripts/cut-logo.mjs` | Cuts the icons from `public/logo.svg`. |
 | `Dockerfile`, `nginx.conf` | Deploy. Coolify builds these on push to `main`. |

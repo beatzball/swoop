@@ -1,7 +1,7 @@
 import { html, css } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { customElement } from 'lit/decorators.js';
-import { LitroPage } from '@beatzball/litro/runtime';
+import { LitroPage, pageReset } from '@beatzball/litro/runtime';
 import { definePageData } from '@beatzball/litro';
 import { createError } from 'h3';
 import type { Post } from 'litro:content';
@@ -267,7 +267,9 @@ export class DocPage extends LitroPage {
    * <div slot="content"> subtree. Global stylesheets (starlight.css,
    * highlight.css) cannot pierce shadow DOM boundaries.
    */
-  static override styles = css`
+  static override styles = [
+    pageReset,
+    css`
     /* ── Typography for slotted doc content ─────────────────────────── */
     h1, h2, h3, h4, h5, h6 {
       margin-top: 1.5em; margin-bottom: 0.5em;
@@ -281,6 +283,10 @@ export class DocPage extends LitroPage {
     p  { margin-top: 0; margin-bottom: 1rem; line-height: 1.7; }
     a  { color: var(--sl-color-text-accent, var(--sl-color-accent)); text-decoration: none; }
     a:hover { text-decoration: underline; }
+    /* An inline code span holds unbreakable tokens — a flag, a path, a package
+       name — and one longer than the screen takes the whole page sideways. A
+       code BLOCK keeps its own horizontal scroll instead, so the pre rule below
+       puts wrapping back. */
     code {
       font-family: var(--sl-font-mono, ui-monospace, monospace);
       font-size: 0.875em;
@@ -288,6 +294,7 @@ export class DocPage extends LitroPage {
       border: 1px solid var(--sl-color-border, #e8e8e8);
       border-radius: 0.25rem;
       padding: 0.15em 0.4em;
+      overflow-wrap: anywhere;
     }
     pre {
       background-color: #0d0e11;
@@ -299,7 +306,7 @@ export class DocPage extends LitroPage {
       font-size: var(--sl-text-sm, 0.875rem);
       line-height: 1.6;
     }
-    pre code { background: none; border: none; padding: 0; font-size: inherit; }
+    pre code { background: none; border: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
     ul, ol { padding-left: 1.5rem; margin: 0 0 1rem; }
     li { margin-bottom: 0.25rem; line-height: 1.7; }
     blockquote {
@@ -339,11 +346,21 @@ export class DocPage extends LitroPage {
     .hljs-symbol, .hljs-bullet, .hljs-link { color: #38bdf8; }
     .hljs-emphasis { font-style: italic; }
     .hljs-strong { font-weight: bold; }
-  `;
+  `,
+  ];
 
   override render() {
     const data = this.serverData as DocPageData | null;
     if (!data?.doc) return html`<p>Loading&hellip;</p>`;
+
+    // TEMPLATE NOTE — the note below was an HTML comment in the template. An
+    // HTML comment is served to every reader, so the prose lives here, named by
+    // the element it belongs to.
+    //
+    // ${unsafeHTML(data.body)}
+    //     unsafeHTML renders the Markdown-generated HTML directly.
+    //     The content/docs directory is trusted-author-only; do not place
+    //     user-submitted or untrusted content here without sanitizing.
 
     return html`
       <starlight-page
@@ -356,9 +373,6 @@ export class DocPage extends LitroPage {
         currentPath="/docs/${data.currentSlug}"
       >
         <div slot="content">
-          <!-- unsafeHTML renders the Markdown-generated HTML directly.
-               The content/docs directory is trusted-author-only; do not place
-               user-submitted or untrusted content here without sanitizing. -->
           ${unsafeHTML(data.body)}
 
           ${data.prevDoc || data.nextDoc ? html`

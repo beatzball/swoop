@@ -1,9 +1,29 @@
 import { LitElement, html, css } from "lit";
 import { customElement } from "lit/decorators.js";
+import { pageReset } from '@beatzball/litro/runtime/page-reset.js';
 
 export interface NavItem {
   label: string;
   href: string;
+}
+
+/**
+ * A real browser, not a server DOM shim.
+ *
+ * `typeof document !== "undefined"` is NOT enough. A server-side DOM shim can
+ * define `document` and still leave `documentElement` undefined, which is how
+ * the FAST copy of this header threw
+ * "Cannot read properties of undefined (reading 'getAttribute')" during SSR
+ * and took down every page that carried it. Lit's SSR never calls
+ * firstUpdated(), so this copy never reached the bug — but the adapter copies
+ * are read against each other, and the shape has to be the same in all of
+ * them. See `.agents/rules/adapters-ssr.md` in the litro repository.
+ *
+ * Guard on the thing you are about to touch, not on a global a shim provides.
+ */
+function themeRoot(): HTMLElement | undefined {
+  if (typeof document === "undefined") return undefined;
+  return document.documentElement ?? undefined;
 }
 
 /**
@@ -21,7 +41,9 @@ export class StarlightHeader extends LitElement {
     _theme: { type: String, state: true },
   };
 
-  static override styles = css`
+  static override styles = [
+    pageReset,
+    css`
     :host {
       display: block;
       position: sticky;
@@ -37,11 +59,6 @@ export class StarlightHeader extends LitElement {
       align-items: center;
       padding: 0 var(--sl-content-pad-x, 1.5rem);
       gap: 1rem;
-      /* The page-level box-sizing:border-box reset is a document stylesheet
-         and does not cross into this shadow root, so without this line the
-         1.5rem padding is added on top of the row rather than taken out of
-         it. See beatzball/litro#137. */
-      box-sizing: border-box;
     }
 
     /* At 320px the row runs 13px past the viewport once the menu button is
@@ -88,12 +105,27 @@ export class StarlightHeader extends LitElement {
       }
     }
 
+    /* THE BRAND FACE. --sl-font-brand is what the wordmark and the navigation
+       are set in, and it falls back to the body sans, so a site that never
+       sets it looks exactly as it did. A site that wants the terminal
+       character in its header sets it once, to the mono, and both the name
+       and the links follow.
+
+       It is a token rather than a fork of this component because that is the
+       whole of the difference: two declarations, not a second header. */
     .site-title {
+      font-family: var(--sl-font-brand, var(--sl-font-sans));
       font-size: var(--sl-text-lg, 1.125rem);
       font-weight: 700;
       color: var(--sl-color-text, #23262f);
       text-decoration: none;
       white-space: nowrap;
+      /* A flex item will not shrink below its own text, so a long site name
+         pushes the theme toggle past the right edge of a 320px screen. These
+         three let the row give way and end the name in an ellipsis instead. */
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
       display: inline-flex;
       align-items: center;
       gap: 0.5rem;
@@ -149,9 +181,37 @@ export class StarlightHeader extends LitElement {
       align-items: center;
       gap: 0.25rem;
       flex: 1;
+      /* min-width: 0, or a flex item refuses to shrink below its content and
+         the whole header grows past a phone's screen. On the docs pages the
+         nav is hidden behind the hamburger below 72rem and this never showed;
+         the landing page has no sidebar, so it keeps its links and needs the
+         row to be able to give way. */
+      min-width: 0;
+    }
+
+    /* A phone cannot fit four links, a search control and two icon buttons.
+       The links SCROLL rather than disappear: dropping one would take a
+       destination away from exactly the reader with the least room to go
+       looking for it. The bar is hidden because a scrollbar inside a header
+       is noise, and the links are still reachable by keyboard and by swipe. */
+    @media (max-width: 48rem) {
+      nav {
+        overflow-x: auto;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+      }
+
+      nav::-webkit-scrollbar {
+        display: none;
+      }
+
+      nav a {
+        flex-shrink: 0;
+      }
     }
 
     nav a {
+      font-family: var(--sl-font-brand, var(--sl-font-sans));
       padding: 0.35rem 0.75rem;
       font-size: var(--sl-text-sm, 0.875rem);
       font-weight: 500;
@@ -190,15 +250,16 @@ export class StarlightHeader extends LitElement {
       flex-shrink: 0;
     }
 
+    .theme-toggle:hover {
+      background-color: var(--sl-color-gray-2, #e8e8e8);
+    }
+
     .theme-toggle svg {
       width: 1.125rem;
       height: 1.125rem;
     }
-
-    .theme-toggle:hover {
-      background-color: var(--sl-color-gray-2, #e8e8e8);
-    }
-  `;
+  `,
+  ];
 
   siteTitle = "";
   nav: NavItem[] = [];
@@ -206,43 +267,66 @@ export class StarlightHeader extends LitElement {
   navOpen = false;
   hasSidebar = false;
 
+  // What the server renders the icon as. Dark, because the head script in
+  // src/route-meta.ts makes dark the default, so the icon does not flip on
+  // load for a reader who has chosen nothing.
   _theme = "dark";
 
+  /**
+   * Keep the toggle's icon on the theme the page is actually showing.
+   *
+   * THIS READS, IT DOES NOT DECIDE. The head script in route-meta.ts sets
+   * data-theme before the first paint, from the reader's stored choice or,
+   * when they have made none, from the system. Resolving it a second time
+   * here would answer a moment later, and a different answer would overwrite
+   * a correct value with a wrong one — which is what this component used to
+   * do: it fell back to "light" with no look at prefers-color-scheme, so on
+   * a dark system every page carrying this header flipped to light right
+   * after it loaded.
+   */
+  private _readTheme = () => {
+    if (!themeRoot()) return;
+    this._theme =
+      document.documentElement.getAttribute("data-theme") === "dark"
+        ? "dark"
+        : "light";
+  };
+
+  private _systemTheme?: MediaQueryList;
+
   override firstUpdated() {
-    // Read what the head script already decided rather than re-deriving it.
-    // If the two ever disagree the toggle shows the wrong icon, and clicking
-    // it appears to do nothing for one press.
-    const attr =
-      typeof document !== "undefined"
-        ? document.documentElement.getAttribute("data-theme")
-        : null;
-    let stored: string | null = null;
-    try {
-      stored = typeof localStorage !== "undefined"
-        ? localStorage.getItem("sl-theme")
-        : null;
-    } catch {
-      // Private browsing can throw on access; fall through to the default.
+    // One guard for the whole block: with no documentElement there is no
+    // theme to read and no system preference worth listening to.
+    if (!themeRoot()) return;
+    this._readTheme();
+    // The head script follows the system while the reader has stored no
+    // choice, so the icon has to follow it too. The head script's own
+    // listener was registered first, in <head>, so by the time this one runs
+    // data-theme is already up to date.
+    if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+      this._systemTheme = window.matchMedia("(prefers-color-scheme: dark)");
+      this._systemTheme.addEventListener("change", this._readTheme);
     }
-    const resolved =
-      attr === "light" || attr === "dark"
-        ? attr
-        : stored === "light" || stored === "dark"
-          ? stored
-          : "dark";
-    this._theme = resolved;
-    if (typeof document !== "undefined") {
-      document.documentElement.setAttribute("data-theme", resolved);
-    }
+  }
+
+  override disconnectedCallback() {
+    super.disconnectedCallback();
+    this._systemTheme?.removeEventListener("change", this._readTheme);
   }
 
   private _toggleTheme() {
     const next = this._theme === "light" ? "dark" : "light";
     this._theme = next;
+    // Writing the choice is what stops the head script's system listener
+    // from overriding it later.
     if (typeof localStorage !== "undefined") {
-      localStorage.setItem("sl-theme", next);
+      try {
+        localStorage.setItem("sl-theme", next);
+      } catch {
+        // Site data blocked. The choice holds for this page either way.
+      }
     }
-    if (typeof document !== "undefined") {
+    if (themeRoot()) {
       document.documentElement.setAttribute("data-theme", next);
     }
   }

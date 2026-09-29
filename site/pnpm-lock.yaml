@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@beatzball/litro':
-        specifier: 0.16.3
-        version: 0.16.3(esbuild@0.28.2)(rolldown@1.2.7)(terser@5.51.2)(typescript@5.9.3)
+        specifier: 0.17.2
+        version: 0.17.2(esbuild@0.28.2)(rolldown@1.2.7)(terser@5.51.2)(typescript@5.9.3)
       '@lit-labs/ssr':
         specifier: ^3.3.0
         version: 3.3.1
@@ -62,11 +62,11 @@ packages:
     resolution: {integrity: sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg==}
     engines: {node: '>=6.9.0'}
 
-  '@beatzball/litro-router@0.2.1':
-    resolution: {integrity: sha512-wpOa+cZlM1XXAJZJYgNzFFIKGm0I7rOaWUhSslHn4i4V9lF8ozvySuHXy9I1jW5yC+KGpeukyEDypVdv5g9EAg==}
+  '@beatzball/litro-router@0.3.1':
+    resolution: {integrity: sha512-2UJIhVU+3oJxFCxO3lbJTlBzHSdS6IzvOnjnXvn5tLYe6vAaratpujBrNO0ZRMvhqXgA2RJHjw5ZrfbfZ9tpbA==}
 
-  '@beatzball/litro@0.16.3':
-    resolution: {integrity: sha512-7XItvTtxueys/xjijaNOla4RbVPZSlsxYr48AuaOXoHrbVbO8Cy1n78HG1lAIj8/G9UIJetOnKT7cVNcL36DhQ==}
+  '@beatzball/litro@0.17.2':
+    resolution: {integrity: sha512-E4/K0HD8KkyvG2mthAQjfy4bEkTMBOHe7TlYs/0OjaWm1/KvfN8ssumzBNz+HFUkkaFoG6x036LAK2qww9yMQQ==}
     hasBin: true
     peerDependencies:
       '@elenajs/core': ^1.0.0
@@ -2611,11 +2611,11 @@ snapshots:
       '@babel/helper-string-parser': 7.29.7
       '@babel/helper-validator-identifier': 7.29.7
 
-  '@beatzball/litro-router@0.2.1': {}
+  '@beatzball/litro-router@0.3.1': {}
 
-  '@beatzball/litro@0.16.3(esbuild@0.28.2)(rolldown@1.2.7)(terser@5.51.2)(typescript@5.9.3)':
+  '@beatzball/litro@0.17.2(esbuild@0.28.2)(rolldown@1.2.7)(terser@5.51.2)(typescript@5.9.3)':
     dependencies:
-      '@beatzball/litro-router': 0.2.1
+      '@beatzball/litro-router': 0.3.1
       '@lit-labs/ssr': 3.3.1
       '@lit-labs/ssr-client': 1.1.8
       '@resvg/resvg-js': 2.6.2
