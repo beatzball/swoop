@@ -17,6 +17,13 @@ so here.
   file beside it; the bundled ones are `def`, `calc`, `clip`, `files`,
   `ai`, `links`, `emoji`, `snip`, `win`, `notes`, `tasks`, `rem`, `stats`
   and `settings`.
+- **A docs site, at https://swoop.sh**: install, trying it in a terminal,
+  Ask AI, every extension that ships, and Settings, from the README's own
+  words. The README links to it at the top.
+- **Writing an Extension**, a page of the site that builds one extension
+  from nothing: a shell script that lists, previews and runs, then opens a
+  pane, then offers ctrl-k actions, then toggles and opens an editor, each
+  step tried in the launcher.
 
 ### Changed
 

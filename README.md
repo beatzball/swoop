@@ -1,5 +1,8 @@
 # swoop
 
+**[swoop.sh](https://swoop.sh)**: install, every feature, and a guide to
+writing your own extension.
+
 Say it like a bird does: swoop down, grab the thing, gone.
 
 An open-source keyboard launcher built the Unix way: fzf does
@@ -392,6 +395,9 @@ That is the whole contract. A shell script is enough; `extensions/system/system`
 in this repository is one, and it is what puts Sleep and Lock Screen in the
 list. Any language works, as long as it starts fast: `list` runs when the
 launcher opens and `preview` on every cursor move.
+
+[Writing an Extension](https://swoop.sh/docs/writing-an-extension) builds
+one from nothing, a step at a time, and tries each step in the launcher.
 
 ## License
 
