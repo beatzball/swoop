@@ -124,7 +124,9 @@ where the bugs have been.
   pseudo-terminal with a fake extension and a fake AI command, and asks
   fzf for its state through its socket. Run it for any change to
   `bin/swoop`, `internal/nav`, `cmd/swoop-nav`, `cmd/swoop-ai`, or an
-  extension. CI runs it on macOS and Linux
+  extension. CI runs it on macOS and Linux. Every key it sends waits on
+  the exact change that key causes, through fzf's state where it can;
+  never a pause, which a slow runner outlasts
 - A bug found on screen gets a check in one of these before the fix is
   merged, so it stays fixed
 

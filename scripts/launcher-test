@@ -51,6 +51,30 @@ def write_exe(path, body):
     os.chmod(path, os.stat(path).st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
+def cur(s):
+    """The row under the cursor. Mid-reload fzf can hold no rows, and then
+    no current one."""
+    return (s.get("current") or {}).get("text", "")
+
+
+def has(s, text):
+    """Whether any match in the state holds `text`."""
+    return any(text in m["text"] for m in s.get("matches", []))
+
+
+def down_to(ln, text, what):
+    """Move the cursor down until the current row holds `text`. Each Down
+    waits for the cursor to leave the row it was on, so the next one is
+    not sent before this one has moved it."""
+    for _ in range(10):
+        st = ln.wait_state(lambda s: s.get("current"), what="a row under the cursor")
+        if text in cur(st):
+            return
+        idx = st["current"]["index"]
+        ln.press("\x1b[B", lambda s: s.get("current") and s["current"]["index"] != idx, what=f"the cursor moving down, on the way to {what}")
+    fail(f"no {what}: {ln.state()}", ln.buf)
+
+
 class Launcher:
     """One swoop in a pseudo-terminal."""
 
@@ -98,9 +122,14 @@ class Launcher:
     def send(self, text):
         os.write(self.fd, text.encode() if isinstance(text, str) else text)
 
-    def expect(self, pattern, timeout=5.0, what=None):
+    def expect(self, pattern, timeout=10.0, what=None):
         """Wait until `pattern` (a regex) shows up in output received since
-        the last mark. Returns the match."""
+        the last mark. Returns the match. Only for what fzf's state does
+        not hold: a prompt, a preview, a note printed on the way out.
+        Anything in the state (the query, the counts, the rows) is waited
+        on through wait_state, which is exact where the stream is not.
+        Ten seconds, because the macOS runner is three times slower than a
+        laptop."""
         end = time.time() + timeout
         while True:
             m = re.search(pattern, self.buf[self.mark:])
@@ -145,15 +174,42 @@ class Launcher:
         except ValueError:
             return None
 
-    def wait_state(self, pred, timeout=5.0, what=""):
-        """Wait until fzf's state satisfies pred; returns it."""
+    def wait_state(self, pred, timeout=10.0, what="", limit=1000):
+        """Wait until fzf's state satisfies pred; returns it. The state
+        carries up to `limit` matches, for a pred that looks past the
+        current row."""
         end = time.time() + timeout
         while time.time() < end:
-            st = self.state()
+            st = self.state(limit)
             if st and pred(st):
                 return st
             self.read(0.1)
         fail(f"fzf never reached: {what}; last state {self.state()}", self.buf)
+
+    def press(self, keys, until=None, screen=None, what="", timeout=10.0):
+        """Send keys, then wait for the exact change they cause: `until`, a
+        pred on fzf's state, and or `screen`, a regex on the output after
+        the keys. Never a pause. The next key waits on this one's effect,
+        so it cannot land while this one's transform or reload is still in
+        flight: an Esc's clear-query eating letters typed after it, a
+        ctrl-k landing on a row from before a pop, or a letter read
+        together with an Esc as alt-letter. `until` must be false before
+        the keys, or the wait would pass at once and prove nothing; where
+        the state does not change, wait on the screen instead. The mark
+        moves before the keys, so a screen wait cannot be met by text
+        already on the screen, such as a prompt from the last visit."""
+        if until:
+            before = self.state(1000)
+            if before and until(before):
+                fail(f"already true before {keys!r}, so no wait on it: {what}", self.buf)
+        self.clear()
+        self.send(keys)
+        st = None
+        if until:
+            st = self.wait_state(until, timeout=timeout, what=what)
+        if screen:
+            self.expect(screen, timeout=timeout, what=what)
+        return st
 
     def clear(self):
         """Mark: later expects see only what comes after this point."""
@@ -330,110 +386,67 @@ esac
         def root():
             # On a Mac the root list holds every app, sorted by title, so
             # the fake rows are off screen until typing narrows it.
-            L.send("fake")
-            L.expect(r"Fake Things", what="the fake view row after typing 'fake'")
-            L.expect(r"Fake Plain Row", what="the fake plain row")
-            L.clear()
-            L.send(" plain")
-            st = L.wait_state(lambda s: s["query"] == "fake plain" and s["matchCount"] == 1, what="one match for 'fake plain'")
-            if "Fake Plain Row" not in st["current"]["text"]:
-                fail(f"the match should be the plain row: {st['current']}", L.buf)
+            L.wait_state(lambda s: s["totalCount"] > 3, what="the launcher's list")
+            L.press("fake", lambda s: s["query"] == "fake" and has(s, "Fake Things") and has(s, "Fake Plain Row"), what="the fake view row and plain row after typing 'fake'")
+            L.press(" plain", lambda s: s["query"] == "fake plain" and s["matchCount"] == 1 and "Fake Plain Row" in cur(s), what="one match for 'fake plain', the plain row")
         check("root list and filter", root)
 
         # 2. a view: push, ask, Esc clears, Esc pops with the text back
         def view():
-            L.send("\x1b")  # Esc: clear the bar
-            L.read(0.3)
-            L.clear()
-            L.send("fake th")
-            L.expect(r"Fake Things")
-            L.clear()
-            L.send("\r")
-            L.expect(r"Fake Things > ", what="the view's prompt")
-            L.expect(r"banana", what="the view's rows")
-            L.clear()
-            L.send("err")
-            st = L.wait_state(lambda s: s["query"] == "err" and s["matchCount"] == 1, what="the extension leaving one row for 'err'")
-            if "cherry" not in st["current"]["text"]:
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the bar cleared at the root")
+            L.press("fake th", lambda s: s["query"] == "fake th" and "Fake Things" in cur(s), what="the view row for 'fake th'")
+            L.press("\r", lambda s: s["query"] == "" and s["matchCount"] == 3 and has(s, "banana"),
+                    screen=r"Fake Things > ", what="the view's prompt and rows")
+            st = L.press("err", lambda s: s["query"] == "err" and s["matchCount"] == 1, what="the extension leaving one row for 'err'")
+            if "cherry" not in cur(st):
                 fail(f"the one row should be cherry: {st['current']}", L.buf)
-            L.clear()
-            L.send("\x1b")  # clears 'err'
-            L.wait_state(lambda s: s["query"] == "" and s["matchCount"] == 3, what="all three rows back after Esc cleared the bar")
-            L.clear()
-            L.send("\x1b")  # pops
-            L.wait_state(lambda s: s["query"] == "fake th", what="the earlier text back in the bar after popping")
-            L.expect(r"Fake Things", what="the root list again")
+            # clears 'err'
+            L.press("\x1b", lambda s: s["query"] == "" and s["matchCount"] == 3, what="all three rows back after Esc cleared the bar")
+            # pops: the text back, and the root's rows under it, so the
+            # ctrl-k below lands on the view row and not on a fruit
+            L.press("\x1b", lambda s: s["query"] == "fake th" and "Fake Things" in cur(s), what="the earlier text and the root list back after popping")
         check("view push, filter, Esc, Esc", view)
 
         # 3. the action menu
         def actions():
-            L.clear()
-            L.send("\x0b")  # ctrl-k on the highlighted view row
-            L.expect(r"actions > ", what="the actions prompt")
-            L.expect(r"Copy Fake")
-            L.expect(r"Delete Fake")
-            L.clear()
-            L.send("\x1b")
-            L.wait_state(lambda s: s["query"] == "fake th", what="back at the root with the text")
+            # ctrl-k on the highlighted view row
+            L.press("\x0b", lambda s: has(s, "Copy Fake") and has(s, "Delete Fake"), screen=r"actions > ", what="the actions menu")
+            L.press("\x1b", lambda s: s["query"] == "fake th" and "Fake Things" in cur(s), what="back at the root with the text")
         check("action menu", actions)
 
         # 4. Ask AI: Tab, Enter, thinking, status, answer, Esc Esc
         def ask():
-            L.send("\x1b")  # clear the bar
-            L.read(0.3)
-            L.clear()
-            L.send("\t")
-            L.expect(r"Ask AI > ", what="the Ask AI prompt")
-            L.expect(r"New conversation")
-            L.clear()
-            L.send("what is the answer")
-            L.read(0.3)
-            L.send("\r")
-            L.expect(r"thinking", timeout=5, what="the conversation row saying thinking")
-            L.expect(r"using Fake", timeout=5, what="the command's stderr under the dots")
-            L.expect(r"The answer is 42", timeout=8, what="the answer in the preview")
-            L.expect(r"1 turn", timeout=5, what="the subtitle after the answer")
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the bar cleared at the root")
+            L.press("\t", lambda s: "ext/ai/new" in cur(s), screen=r"Ask AI > ", what="the Ask AI pane, New conversation")
+            L.press("what is the answer", lambda s: s["query"] == "what is the answer", what="the question in the bar")
+            L.press("\r", screen=r"thinking", what="the conversation row saying thinking")
+            L.expect(r"using Fake", what="the command's stderr under the dots")
+            L.expect(r"The answer is 42", timeout=15, what="the answer in the preview")
+            L.wait_state(lambda s: "1 turn" in cur(s), what="the subtitle after the answer, the conversation under the cursor")
             # ctrl-k on New conversation: the model list; Enter on one sets it
-            L.send("\x1b[A")  # up, onto New conversation
-            L.wait_state(lambda s: "ext/ai/new" in s["current"]["text"], what="the cursor on New conversation")
-            L.clear()
-            L.send("\x0b")
-            L.expect(r"New conversation actions > ", what="the model menu")
-            L.expect(r"The line in", what="the custom-line choice in the menu")
-            L.send("claude")
-            L.wait_state(lambda s: s["query"] == "claude" and s["matchCount"] == 1, what="the claude row")
-            L.send("\r")
-            L.expect(r"Ask AI > ", what="back in the pane")
+            L.press("\x1b[A", lambda s: "ext/ai/new" in cur(s), what="the cursor on New conversation")  # up
+            L.press("\x0b", lambda s: has(s, "The line in"), screen=r"New conversation actions > ", what="the model menu, the custom-line choice in it")
+            L.press("claude", lambda s: s["query"] == "claude" and s["matchCount"] == 1, what="the claude row")
             # The pane is back only once New is under the cursor again: a
             # ctrl-k sent before that lands on a model row and is ignored.
-            L.wait_state(lambda s: "ext/ai/new" in s["current"]["text"], what="the pane back with New under the cursor")
+            L.press("\r", lambda s: "ext/ai/new" in cur(s), screen=r"Ask AI > ", what="the pane back with New under the cursor")
             with open(config) as f:
                 if "ai = claude" not in f.read():
                     fail("ctrl-k on New did not set ai = claude", L.buf)
-            # and back to the custom line, so the fake model answers again.
-            # The mark moves first: "Ask AI > " is already in the buffer
-            # from the pick above, and the expect below must wait for the
-            # pane to come back a second time, not find the first.
-            L.clear()
-            L.send("\x0b")
-            L.expect(r"New conversation actions > ", what="the model menu again")
-            L.send("The line")
-            L.wait_state(lambda s: s["query"] == "The line" and s["matchCount"] == 1, what="the custom-line row")
-            L.send("\r")
-            L.expect(r"Ask AI > ", what="back in the pane again")
-            L.wait_state(lambda s: "ext/ai/new" in s["current"]["text"], what="the pane back with New under the cursor")
-            L.clear()
-            L.send("\x1b")
+            # and back to the custom line, so the fake model answers again
+            L.press("\x0b", lambda s: has(s, "The line in"), screen=r"New conversation actions > ", what="the model menu again")
+            L.press("The line", lambda s: s["query"] == "The line" and s["matchCount"] == 1, what="the custom-line row")
+            L.press("\r", lambda s: "ext/ai/new" in cur(s), screen=r"Ask AI > ", what="the pane back again with New under the cursor")
             # Back at the root: the whole list, an empty bar (it was empty
             # before Tab).
-            L.wait_state(lambda s: s["query"] == "" and s["totalCount"] > 3, what="the root list after Esc from Ask AI")
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the root list after Esc from Ask AI")
         check("Ask AI", ask)
 
         # 5. the divider keys write the width
         def divider():
             # The key's transform writes the file; on a slow runner that
             # can take longer than a fixed pause, so the file is polled.
-            def saved(line, timeout=5.0):
+            def saved(line, timeout=10.0):
                 end = time.time() + timeout
                 while time.time() < end:
                     with open(config) as f:
@@ -453,32 +466,19 @@ esac
         def settings_pane():
             # Text in the bar first: Settings keeps it and gives it back on
             # the way out, which is how the return to the root is known.
-            L.send("fake")
-            L.wait_state(lambda s: s["query"] == "fake", what="text in the bar before Settings")
-            L.clear()
-            L.send("\x1b,")  # alt-,
-            L.expect(r"Settings > ", what="the Settings prompt")
-            L.expect(r"Preview width", what="the settings rows")
-            L.clear()
-            L.send("preview")
-            L.wait_state(lambda s: s["query"] == "preview" and s["matchCount"] == 1, what="one row for 'preview'")
-            L.send("\r")
-            L.expect(r"Preview width > ", what="the choices pane")
-            L.clear()
-            L.send("70")
-            L.wait_state(lambda s: s["query"] == "70" and s["matchCount"] == 1, what="the 70% choice")
-            L.send("\r")
-            L.wait_state(lambda s: s["query"] == "preview", what="back in Settings with the earlier text")
-            L.expect(r"70%", what="the new width in the row's subtitle")
+            L.press("fake", lambda s: s["query"] == "fake" and has(s, "Fake Search"), what="text in the bar before Settings")
+            L.press("\x1b,", lambda s: s["query"] == "" and has(s, "Preview width"), screen=r"Settings > ", what="the Settings pane and its rows")  # alt-,
+            L.press("preview", lambda s: s["query"] == "preview" and s["matchCount"] == 1 and "Preview width" in cur(s), what="one row for 'preview'")
+            L.press("\r", lambda s: s["query"] == "" and has(s, "70%"), screen=r"Preview width > ", what="the choices pane")
+            L.press("70", lambda s: s["query"] == "70" and s["matchCount"] == 1, what="the 70% choice")
+            L.press("\r", lambda s: s["query"] == "preview" and "Preview width" in cur(s) and "70%" in cur(s), what="back in Settings with the earlier text, the new width in the row's subtitle")
             with open(config) as f:
                 if "preview = 70" not in f.read():
                     fail("the choice did not write preview = 70", L.buf)
-            L.send("\x1b")  # clears 'preview'
-            L.wait_state(lambda s: s["query"] == "", what="the bar cleared in Settings")
-            L.send("\x1b")  # pops to the root
-            L.wait_state(lambda s: s["query"] == "fake", what="the root with the earlier text back")
-            L.send("\x1b")  # and clear it for the next step
-            L.wait_state(lambda s: s["query"] == "", what="an empty bar at the root")
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Preview width"), what="the bar cleared in Settings")  # clears 'preview'
+            L.press("\x1b", lambda s: s["query"] == "fake" and has(s, "Fake Search"), what="the root with the earlier text back")  # pops to the root
+            # and clear it for the next step
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="an empty bar at the root")
         check("Settings pane", settings_pane)
 
         # 6b. Settings, Extensions: Enter turns the fake extension off, and
@@ -488,9 +488,9 @@ esac
                 # "Fake Search", the quicklink, answers "fake" whether the
                 # fake extension is on or off: once it is in, the reload
                 # for the text has landed, and the list can be read.
-                end = time.time() + 5
+                end = time.time() + 10
                 while time.time() < end:
-                    st = L.state(limit=500)
+                    st = L.state(limit=1000)
                     texts = [m["text"] for m in (st or {}).get("matches", [])]
                     if st and st["query"] == "fake" and any("Fake Search" in t for t in texts):
                         return any("Fake Things" in t for t in texts)
@@ -498,21 +498,15 @@ esac
                 fail(f"the root list for 'fake' never came; last state {L.state()}", L.buf)
 
             def flip(want_off):
-                L.clear()
-                L.send("\x1b,")  # alt-,
-                L.expect(r"Settings > ", what="the Settings prompt")
-                L.send("ext")
-                L.wait_state(lambda s: s["query"] == "ext" and s["matchCount"] == 1 and "Extensions" in s["current"]["text"], what="the Extensions row")
-                L.clear()
-                L.send("\r")
-                L.expect(r"Extensions > ", what="the Extensions prompt")
-                L.send("fake")
-                L.wait_state(lambda s: s["query"] == "fake" and s["matchCount"] == 1 and "extension/fake" in s["current"]["text"], what="the fake extension's row")
+                L.press("\x1b,", lambda s: s["query"] == "" and has(s, "Extensions"), screen=r"Settings > ", what="the Settings pane")  # alt-,
+                L.press("ext", lambda s: s["query"] == "ext" and s["matchCount"] == 1 and "Extensions" in cur(s), what="the Extensions row")
+                L.press("\r", lambda s: s["query"] == "" and has(s, "extension/fake"), screen=r"Extensions > ", what="the Extensions pane")
+                L.press("fake", lambda s: s["query"] == "fake" and s["matchCount"] == 1 and "extension/fake" in cur(s), what="the fake extension's row")
                 L.send("\r")
                 # A toggle stays: the same pane, the bar cleared, the mark
                 # flipped on the row.
                 mark = "off" if want_off else "on"
-                end = time.time() + 5
+                end = time.time() + 10
                 while True:
                     st = L.state(limit=100)
                     rows = [m["text"] for m in (st or {}).get("matches", []) if "extension/fake" in m["text"]]
@@ -525,59 +519,36 @@ esac
                     text = f.read()
                 if want_off != ("off = fake" in text):
                     fail(f"the config after turning fake {mark}:\n{text}", L.buf)
-                L.send("\x1b")  # pops to Settings, 'ext' back in the bar
-                L.wait_state(lambda s: s["query"] == "ext", what="back in Settings")
-                L.send("\x1b")  # clears 'ext'
-                L.wait_state(lambda s: s["query"] == "", what="the bar cleared in Settings")
-                L.send("\x1b")  # pops to the root
-                # A key straight after Esc would be read with it as alt-key.
-                L.read(0.3)
-                L.wait_state(lambda s: s["query"] == "" and s["totalCount"] > 3, what="the root list after Settings")
+                L.press("\x1b", lambda s: s["query"] == "ext" and "Extensions" in cur(s), what="back in Settings")  # pops to Settings, 'ext' back in the bar
+                L.press("\x1b", lambda s: s["query"] == "" and has(s, "Extensions"), what="the bar cleared in Settings")  # clears 'ext'
+                # pops to the root. The wait is on the root's own rows, not
+                # an empty bar, which Settings had too: typed before the
+                # pop lands, "fake" is read as alt-f, or eaten by the
+                # pop's clear-query.
+                L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the root list after Settings")
 
             def type_fake():
-                # Typed straight after an Esc whose transform is still
-                # running, the letters can be swallowed by its clear-query
-                # when it lands (seen on a slow runner). Type, and if the
-                # bar is still empty after a moment, type once more.
-                L.send("fake")
-                end = time.time() + 1.5
-                while time.time() < end:
-                    st = L.state()
-                    if st and st["query"] == "fake":
-                        return
-                    L.read(0.1)
-                st = L.state()
-                if st and st["query"] == "":
-                    L.send("fake")
+                L.press("fake", lambda s: s["query"] == "fake", what="'fake' in the bar at the root")
 
-            L.read(0.3)
             type_fake()
             if not root_has_fake_rows():
                 fail("the fake rows should be at the root before turning it off", L.buf)
-            L.send("\x1b")  # clear the bar
-            L.read(0.3)
-            L.wait_state(lambda s: s["query"] == "", what="an empty bar at the root")
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="an empty bar at the root")  # clear the bar
             flip(want_off=True)
             type_fake()
             if root_has_fake_rows():
                 fail("the fake rows are still at the root with fake turned off", L.buf)
-            L.send("\x1b")
-            L.read(0.3)
-            L.wait_state(lambda s: s["query"] == "", what="an empty bar at the root")
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="an empty bar at the root")
             flip(want_off=False)
             type_fake()
             if not root_has_fake_rows():
                 fail("the fake rows did not come back with fake turned on", L.buf)
-            L.send("\x1b")
-            L.read(0.3)
-            L.wait_state(lambda s: s["query"] == "", what="an empty bar at the root")
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="an empty bar at the root")
         check("Settings, Extensions: off and on", extensions_toggle)
 
         # 7. Enter on a plain row runs it and the launcher exits
         def run():
-            L.clear()
-            L.send("plain")
-            L.expect(r"Fake Plain Row")
+            L.press("plain", lambda s: s["query"] == "plain" and "Fake Plain Row" in cur(s), what="the plain row")
             L.send("\r")
             code = L.wait_exit()
             if not os.path.exists(marker):
@@ -604,12 +575,9 @@ esac
                 if "Fake Plain Row" not in first or "recent" not in first:
                     fail(f"the first row should be the recent one, marked: {first!r}", again.buf)
                 # Stats lists it too
-                again.send("stats")
-                again.wait_state(lambda s: s["query"] == "stats" and s["matchCount"] >= 1, what="the Stats row")
-                again.send("\r")
-                again.expect(r"Stats > ", what="the Stats pane")
-                again.expect(r"Fake Plain Row", what="the opened row in Stats")
-                again.expect(r"once", what="its count")
+                again.press("stats", lambda s: s["query"] == "stats" and s["matchCount"] >= 1, what="the Stats row")
+                again.press("\r", lambda s: s["query"] == "" and any("Fake Plain Row" in m["text"] and "once" in m["text"] for m in s["matches"]),
+                            screen=r"Stats > ", what="the Stats pane, the opened row in it with its count")
             finally:
                 again.kill()
         check("Used recently and Stats", recent)
@@ -621,17 +589,11 @@ esac
             third.key = key
             try:
                 third.wait_state(lambda s: s["totalCount"] > 3, what="the third launcher's list")
-                third.send("fake search")
-                st = third.wait_state(lambda s: s["query"] == "fake search" and s["matchCount"] == 1, what="the quicklink row")
-                if "Fake Search" not in st["current"]["text"]:
+                st = third.press("fake search", lambda s: s["query"] == "fake search" and s["matchCount"] == 1, what="the quicklink row")
+                if "Fake Search" not in cur(st):
                     fail(f"the match should be the quicklink: {st['current']}", third.buf)
-                third.clear()
-                third.send("\r")
-                third.expect(r"Fake Search > ", what="the quicklink's pane")
-                third.expect(r"Type, then Enter", what="the pane's hint row")
-                third.clear()
-                third.send("hello world")
-                st = third.wait_state(lambda s: s["query"] == "hello world" and "hello+world" in s["current"]["text"], what="the row carrying the text, link filled in")
+                third.press("\r", lambda s: s["query"] == "" and "Type, then Enter" in cur(s), screen=r"Fake Search > ", what="the quicklink's pane and its hint row")
+                third.press("hello world", lambda s: s["query"] == "hello world" and "hello+world" in cur(s), what="the row carrying the text, link filled in")
                 third.send("\r")
                 code = third.wait_exit()
                 if not os.path.exists(opened):
@@ -652,14 +614,9 @@ esac
             fourth.key = key
             try:
                 fourth.wait_state(lambda s: s["totalCount"] > 3, what="the fourth launcher's list")
-                fourth.send("emoji")
-                fourth.wait_state(lambda s: s["query"] == "emoji" and "Emoji & Symbols" in s["current"]["text"], what="the Emoji & Symbols row")
-                fourth.clear()
-                fourth.send("\r")
-                fourth.expect(r"Emoji & Symbols > ", what="the emoji view")
-                fourth.clear()
-                fourth.send("rocket")
-                fourth.wait_state(lambda s: s["query"] == "rocket" and "\U0001F680" in s["current"]["text"], what="the rocket first")
+                fourth.press("emoji", lambda s: s["query"] == "emoji" and "Emoji & Symbols" in cur(s), what="the Emoji & Symbols row")
+                fourth.press("\r", lambda s: s["query"] == "" and s["totalCount"] > 1000, screen=r"Emoji & Symbols > ", what="the emoji view")
+                fourth.press("rocket", lambda s: s["query"] == "rocket" and "\U0001F680" in cur(s), what="the rocket first")
                 fourth.send("\r")
                 code = fourth.wait_exit()
                 if not os.path.exists(copied):
@@ -675,20 +632,13 @@ esac
             fifth.key = key
             try:
                 fifth.wait_state(lambda s: s["totalCount"] > 3, what="the fifth launcher's list")
-                fifth.send("emoji")
-                fifth.wait_state(lambda s: s["query"] == "emoji" and "Emoji & Symbols" in s["current"]["text"], what="the Emoji & Symbols row")
-                fifth.send("\r")
-                st = fifth.wait_state(lambda s: s["query"] == "" and s["totalCount"] > 1000, what="the whole table in the view")
-                first = st["current"]["text"]
+                fifth.press("emoji", lambda s: s["query"] == "emoji" and "Emoji & Symbols" in cur(s), what="the Emoji & Symbols row")
+                st = fifth.press("\r", lambda s: s["query"] == "" and s["totalCount"] > 1000, what="the whole table in the view")
+                first = cur(st)
                 if "\U0001F680" not in first or "recent" not in first:
                     fail(f"the rocket should lead the view, marked: {first!r}", fifth.buf)
-                fifth.send("thumbs up")
-                fifth.wait_state(lambda s: s["query"] == "thumbs up" and "\U0001F44D" in s["current"]["text"], what="the thumbs up")
-                fifth.clear()
-                fifth.send("\x0b")
-                fifth.expect(r"thumbs up actions > ", what="its actions")
-                st = fifth.wait_state(lambda s: s["totalCount"] == 8, what="Paste, Copy and six tones")
-                fifth.expect(r"medium-dark", what="the tones")
+                fifth.press("thumbs up", lambda s: s["query"] == "thumbs up" and "\U0001F44D" in cur(s), what="the thumbs up")
+                fifth.press("\x0b", lambda s: s["totalCount"] == 8 and has(s, "medium-dark"), screen=r"thumbs up actions > ", what="its actions: Paste, Copy and six tones")
             finally:
                 fifth.kill()
         check("emoji", emoji)
@@ -703,8 +653,7 @@ esac
             sixth.key = key
             try:
                 sixth.wait_state(lambda s: s["totalCount"] > 3, what="the sixth launcher's list")
-                sixth.send("fake greeting")
-                st = sixth.wait_state(lambda s: s["query"] == "fake greeting" and "Fake Greeting" in s["current"]["text"], what="the snippet row")
+                st = sixth.press("fake greeting", lambda s: s["query"] == "fake greeting" and "Fake Greeting" in cur(s), what="the snippet row")
                 if ";fg" not in st["current"]["text"]:
                     fail(f"the snippet's keyword should be in its row: {st['current']}", sixth.buf)
                 before = datetime.date.today().isoformat()
@@ -730,21 +679,11 @@ esac
         def notes():
             def open_view(ln):
                 ln.wait_state(lambda s: s["totalCount"] > 3, what="the launcher's list")
-                ln.send("notes")
-                ln.wait_state(lambda s: s["query"] == "notes" and s["matchCount"] >= 1, what="rows for 'notes'")
+                ln.press("notes", lambda s: s["query"] == "notes" and s["matchCount"] >= 1, what="rows for 'notes'")
                 # On a Mac the Notes app matches too: move to the row
                 # that is the extension's.
-                for _ in range(10):
-                    st = ln.state()
-                    if st and "markdown notes" in st["current"]["text"]:
-                        break
-                    ln.send("\x1b[B")
-                    ln.read(0.2)
-                else:
-                    fail(f"no Notes row: {ln.state()}", ln.buf)
-                ln.clear()
-                ln.send("\r")
-                ln.expect(r"Notes > ", what="the notes view")
+                down_to(ln, "markdown notes", "the Notes row")
+                ln.press("\r", lambda s: s["query"] == "" and s["matchCount"] == 2, screen=r"Notes > ", what="the notes view: New note and the note")
 
             if os.path.exists(opened):
                 os.remove(opened)
@@ -752,19 +691,14 @@ esac
             eighth.key = key
             try:
                 open_view(eighth)
-                st = eighth.wait_state(lambda s: s["query"] == "" and s["matchCount"] == 2, what="New note and the note")
-                eighth.expect(r"Fake Meeting", what="the note's title")
-                eighth.send("zucchini")
+                eighth.wait_state(lambda s: has(s, "Fake Meeting"), what="the note's title")
                 # The count is 2 before and after the reload, so the wait
                 # is on the row text, which only the reload changes.
-                eighth.wait_state(lambda s: s["query"] == "zucchini" and s["matchCount"] == 2 and "New note: zucchini" in s["current"]["text"], what="New note leading the view, and the note found by a word inside it")
-                eighth.send("\x1b[B")
-                st = eighth.wait_state(lambda s: "Fake Meeting" in s["current"]["text"], what="the cursor on the note")
-                if "remember the zucchini" not in st["current"]["text"]:
+                eighth.press("zucchini", lambda s: s["query"] == "zucchini" and s["matchCount"] == 2 and "New note: zucchini" in cur(s), what="New note leading the view, and the note found by a word inside it")
+                st = eighth.press("\x1b[B", lambda s: "Fake Meeting" in cur(s), what="the cursor on the note")
+                if "remember the zucchini" not in cur(st):
                     fail(f"the matching line should be the subtitle: {st['current']}", eighth.buf)
-                eighth.clear()
-                eighth.send("\r")
-                eighth.expect(r"fake-editor on .*fake-meeting\.md", what="the editor, run on the note")
+                eighth.press("\r", screen=r"fake-editor on .*fake-meeting\.md", what="the editor, run on the note")
                 eighth.expect(r"edited by the fake editor", what="the preview redrawn with the edit")
                 st = eighth.wait_state(lambda s: s["query"] == "zucchini" and "Fake Meeting" in s["current"]["text"], what="the launcher still open, same query, same row")
                 eighth.expect(r"Notes > ", what="still in the notes view")
@@ -778,8 +712,7 @@ esac
                     fail("Enter handed the note to open, not the editor", eighth.buf)
                 # ctrl-k, Open in app: the old way, for a window, still
                 # there, and it ends the launcher like any action.
-                eighth.send("\x0b")
-                eighth.wait_state(lambda s: "Open in app" in s["current"]["text"], what="Open in app in the menu")
+                eighth.press("\x0b", lambda s: "Open in app" in cur(s), what="Open in app in the menu")
                 eighth.send("\r")
                 code = eighth.wait_exit()
                 if not os.path.exists(opened):
@@ -795,12 +728,9 @@ esac
             ninth.key = key
             try:
                 open_view(ninth)
-                ninth.send("Fake Idea")
-                st = ninth.wait_state(lambda s: s["query"] == "Fake Idea" and "New note: Fake Idea" in s["current"]["text"], what="the New note row")
-                ninth.clear()
-                ninth.send("\r")
+                ninth.press("Fake Idea", lambda s: s["query"] == "Fake Idea" and "New note: Fake Idea" in cur(s), what="the New note row")
                 made = os.path.join(notes_dir, "fake-idea.md")
-                ninth.expect(r"fake-editor on .*fake-idea\.md", what="the editor, run on the new note")
+                ninth.press("\r", screen=r"fake-editor on .*fake-idea\.md", what="the editor, run on the new note")
                 ninth.wait_state(lambda s: s["query"] == "Fake Idea" and s["matchCount"] == 2, what="the launcher still open, the new note in the view")
                 with open(made) as f:
                     body = f.read()
@@ -818,9 +748,8 @@ esac
             seventh.key = key
             try:
                 seventh.wait_state(lambda s: s["totalCount"] > 3, what="the seventh launcher's list")
-                seventh.send("left half")
-                st = seventh.wait_state(lambda s: s["query"] == "left half" and s["matchCount"] >= 1, what="the Left Half row")
-                if "Left Half" not in st["current"]["text"]:
+                st = seventh.press("left half", lambda s: s["query"] == "left half" and s["matchCount"] >= 1, what="the Left Half row")
+                if "Left Half" not in cur(st):
                     fail(f"the first match should be Left Half: {st['current']}", seventh.buf)
                 seventh.expect(r"Move the window to the left half", what="the Left Half preview")
             finally:
@@ -835,14 +764,9 @@ esac
             eighth.key = key
             try:
                 eighth.wait_state(lambda s: s["totalCount"] > 3, what="the eighth launcher's list")
-                eighth.send("tasks")
-                eighth.wait_state(lambda s: s["query"] == "tasks" and "ext/tasks/tasks" in s["current"]["text"], what="the Tasks row")
-                eighth.clear()
-                eighth.send("\r")
-                eighth.expect(r"Tasks > ", what="the tasks view")
-                eighth.wait_state(lambda s: "Type a task" in s["current"]["text"], what="the hint row of an empty list")
-                eighth.send("buy milk tomorrow")
-                eighth.wait_state(lambda s: s["query"] == "buy milk tomorrow" and "Add task: buy milk" in s["current"]["text"], what="the Add task row")
+                eighth.press("tasks", lambda s: s["query"] == "tasks" and "ext/tasks/tasks" in cur(s), what="the Tasks row")
+                eighth.press("\r", lambda s: "Type a task" in cur(s), screen=r"Tasks > ", what="the tasks view, the hint row of an empty list")
+                eighth.press("buy milk tomorrow", lambda s: s["query"] == "buy milk tomorrow" and "Add task: buy milk" in cur(s), what="the Add task row")
                 # Tomorrow from either side of the Enter, in case it
                 # falls across midnight: the file's date and the label.
                 before = datetime.date.today()
@@ -852,13 +776,12 @@ esac
                 for d in (before, after):
                     t = d + datetime.timedelta(days=1)
                     days.add((t.isoformat(), f"tomorrow, {t.strftime('%a')} {t.day} {t.strftime('%b')}"))
-                eighth.wait_state(lambda s: s["query"] == "" and any(label in s["current"]["text"] for _, label in days) and "buy milk" in s["current"]["text"], what="the new task with tomorrow's date, the view still open")
+                eighth.wait_state(lambda s: s["query"] == "" and any(label in cur(s) for _, label in days) and "buy milk" in cur(s), what="the new task with tomorrow's date, the view still open")
                 with open(tasks_md) as f:
                     got = f.read()
                 if not any(f"- [ ] buy milk due: {iso}\n" in got for iso, _ in days):
                     fail(f"the file did not get the task: {got!r}", eighth.buf)
-                eighth.send("\r")
-                eighth.wait_state(lambda s: "buy milk" in s["current"]["text"] and "done" in s["current"]["text"], what="the task marked done, the view still open")
+                eighth.press("\r", lambda s: "buy milk" in cur(s) and "done" in cur(s), what="the task marked done, the view still open")
                 with open(tasks_md) as f:
                     got = f.read()
                 if "- [x] buy milk due: " not in got:
@@ -872,27 +795,15 @@ esac
         # and the rows follow without a keystroke, when the fetch behind
         # it asks fzf to reload. The fake osascript takes two seconds.
         def reminders():
-            # Mid-reload fzf can hold no rows, and then no current one.
-            def current(s):
-                return (s.get("current") or {}).get("text", "")
             ninth = Launcher(env)
             ninth.key = key
             try:
                 ninth.wait_state(lambda s: s["totalCount"] > 3, what="the launcher's list")
-                ninth.send("reminders")
-                ninth.wait_state(lambda s: s["query"] == "reminders" and s["matchCount"] >= 1, what="rows for 'reminders'")
+                ninth.press("reminders", lambda s: s["query"] == "reminders" and s["matchCount"] >= 1, what="rows for 'reminders'")
                 # The Reminders app matches too: move to the extension's row.
-                for _ in range(10):
-                    st = ninth.state()
-                    if st and "Apple Reminders: overdue" in current(st):
-                        break
-                    ninth.send("\x1b[B")
-                    ninth.read(0.2)
-                else:
-                    fail(f"no Reminders row: {ninth.state()}", ninth.buf)
-                ninth.send("\r")
-                ninth.wait_state(lambda s: "Loading reminders" in current(s), timeout=3, what="the Loading row")
-                ninth.wait_state(lambda s: "Fake water the plants" in current(s), timeout=8, what="the rows, with no keystroke")
+                down_to(ninth, "Apple Reminders: overdue", "the Reminders row")
+                ninth.press("\r", lambda s: "Loading reminders" in cur(s), timeout=3, what="the Loading row")
+                ninth.wait_state(lambda s: "Fake water the plants" in cur(s), what="the rows, with no keystroke")
             finally:
                 ninth.kill()
         if sys.platform == "darwin":
