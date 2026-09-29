@@ -33,9 +33,13 @@ import (
 // icon is the rows' glyph, a clipboard with a page on it (nf-fa-paste).
 const icon = "\uf0ea"
 
-// helpID is the one row shown while there are no snippets, so the
-// feature can be found and says how to start.
-const helpID = "+help"
+// viewID is the Snippets row, always at the root, so the feature can be
+// found whatever the snippets are called. Its pane lists newID first,
+// then every snippet. A plus, so no file can be called the same.
+const (
+	viewID = "+snippets"
+	newID  = "+new"
+)
 
 func main() {
 	if len(os.Args) < 2 {
@@ -51,6 +55,8 @@ func main() {
 	switch os.Args[1] {
 	case "list":
 		err = list()
+	case "view":
+		err = view(arg(3))
 	case "preview":
 		err = preview(arg(2))
 	case "actions":
@@ -77,20 +83,56 @@ func main() {
 }
 
 func usageExit() {
-	fmt.Fprintln(os.Stderr, "usage: swoop-snippets list | preview <file> | actions <file> | run <file> [paste|copy|delete] | add <name> [keyword] < text | import <export.json>")
+	fmt.Fprintln(os.Stderr, "usage: swoop-snippets list | view snippets [text] | preview <file> | actions <file> | run <file> [paste|copy|delete] | add <name> [keyword] < text | import <export.json>")
 	os.Exit(2)
 }
 
-// list prints one row per snippet, the keyword in the subtitle. fzf
-// filters at the root, so every snippet is printed whatever was typed.
+// list prints the Snippets row, then one row per snippet with the
+// keyword in the subtitle. fzf filters at the root, so every snippet is
+// printed whatever was typed.
 func list() error {
 	snippets, err := heads()
 	if err != nil {
 		return err
 	}
-	if len(snippets) == 0 {
-		return protocol.Write(os.Stdout, []protocol.Item{{ID: helpID, Kind: "terminal", Icon: icon, Title: "Snippets", Subtitle: "none yet: Enter makes your first one in the editor"}})
+	items := make([]protocol.Item, 0, len(snippets)+1)
+	items = append(items, protocol.Item{ID: viewID, Kind: "view", Icon: icon, Title: "Snippets", Subtitle: "new one, or all of them"})
+	return protocol.Write(os.Stdout, append(items, rows(snippets)...))
+}
+
+// view prints the Snippets pane: New snippet first, then the snippets
+// whose name or keyword holds every word typed. The extension filters
+// here; fzf's matching is off inside a pane.
+func view(query string) error {
+	snippets, err := heads()
+	if err != nil {
+		return err
 	}
+	words := strings.Fields(strings.ToLower(query))
+	var kept []Snippet
+	for _, s := range snippets {
+		hay := strings.ToLower(s.Name + " " + s.Keyword)
+		all := true
+		for _, w := range words {
+			if !strings.Contains(hay, w) {
+				all = false
+				break
+			}
+		}
+		if all {
+			kept = append(kept, s)
+		}
+	}
+	sub := "a new file, opened in the editor"
+	if len(snippets) == 0 {
+		sub = "none yet: Enter makes the Signature example in the editor"
+	}
+	items := []protocol.Item{{ID: newID, Kind: "terminal", Icon: icon, Title: "New snippet", Subtitle: sub}}
+	return protocol.Write(os.Stdout, append(items, rows(kept)...))
+}
+
+// rows is one row per snippet.
+func rows(snippets []Snippet) []protocol.Item {
 	items := make([]protocol.Item, len(snippets))
 	for i, s := range snippets {
 		sub := "snippet"
@@ -99,23 +141,24 @@ func list() error {
 		}
 		items[i] = protocol.Item{ID: s.File, Kind: "snippet", Icon: icon, Title: s.Name, Subtitle: sub}
 	}
-	return protocol.Write(os.Stdout, items)
+	return items
 }
 
-// howTo is the preview of the help row, and what Enter on it says.
+// howTo is the preview of the Snippets and New snippet rows.
 func howTo() string {
 	return fmt.Sprintf("A snippet is a file in %s:\n\n"+
 		"  Signature\n  keyword: ;sig\n\n  Best,\n  {cursor}\n\n"+
 		"The first line is the name, the keyword line is optional, the rest is\n"+
 		"the text. Enter pastes it into the app you came from.\n\n"+
-		"Enter here makes this example and opens it in your editor.\n\n"+
+		"New snippet makes this example the first time, in your editor;\n"+
+		"after that, a file named by the date and time.\n\n"+
 		"Placeholders: {date} {time} {clipboard} {uuid}, and {cursor} for\n"+
 		"where the caret ends up.\n\n"+
 		"Or: swoop-snippets import export.json (name, text, keyword)\n", tilde(dir()))
 }
 
 func preview(id string) error {
-	if id == helpID {
+	if id == viewID || id == newID {
 		fmt.Print(howTo())
 		return nil
 	}
@@ -145,7 +188,7 @@ func tilde(p string) string {
 // caret has nowhere to go, so {cursor} is only removed. Delete is a
 // refresh: the list comes back without the snippet.
 func actions(id string) error {
-	if id == helpID {
+	if id == viewID || id == newID {
 		return nil
 	}
 	if _, err := read(id); err != nil {
@@ -160,12 +203,19 @@ func actions(id string) error {
 }
 
 func run(id, action string) error {
-	if id == helpID {
-		// The first snippet: the example from the how-to, opened in the
-		// editor here in the panel. Quit, and it is a row.
-		return edit(Snippet{Name: "Signature", Keyword: ";sig", Text: "Best,\n{cursor}"})
+	if id == viewID {
+		return nil
 	}
-	if action == "new" {
+	if id == newID || action == "new" {
+		have, err := heads()
+		if err != nil {
+			return err
+		}
+		if len(have) == 0 {
+			// The first snippet: the example from the how-to, opened in
+			// the editor here in the panel. Quit, and it is a row.
+			return edit(Snippet{Name: "Signature", Keyword: ";sig", Text: "Best,\n{cursor}"})
+		}
 		// A file named by the date and time, like a New note with
 		// nothing typed; the first line is the name, so the editor is
 		// where it gets a real one.

@@ -11,6 +11,10 @@ so here.
 
 ### Fixed
 
+- **A Snippets row, always.** Once a snippet existed, `snippets` matched
+  nothing: each snippet is a row named after itself. Now a Snippets row
+  opens a pane, New snippet first, then every snippet, filtered as you
+  type; snippets stay at the root too.
 - **Snippets with none yet: Enter makes the first one.** The row used to
   post the how-to and close the launcher. Now it writes the Signature
   example and opens it in your editor, in the panel; quit, and it is a

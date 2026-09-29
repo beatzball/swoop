@@ -241,7 +241,9 @@ tones; the default tone is in Settings. Words of your own go in
 ## Snippets
 
 A snippet is named text you paste often: a signature, an address, a reply.
-Type its name, press Enter, and it is pasted into the app you came from,
+Type `snippets`, Enter, for the pane: New snippet first, then every
+snippet, filtered as you type. Or type a snippet's name straight at the
+root. Enter pastes it into the app you came from,
 the same way as emoji (only into a text field, Accessibility for
 swoop-shell-mac; in a plain terminal, and on Linux for now, Enter
 copies). Each snippet is a markdown file in
