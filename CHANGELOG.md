@@ -9,21 +9,10 @@ so here.
 
 ## [Unreleased]
 
-### Fixed
+## [0.9.0] - 2026-09-29
 
-- **Snippets: Edit on ctrl-k, and the placeholders explained.** Edit
-  opens the snippet's file in your editor. The how-to that the Snippets
-  and New snippet rows preview, and the README, say what each of
-  `{date}`, `{time}`, `{clipboard}`, `{uuid}` and `{cursor}` becomes.
-- **A Snippets row, always.** Once a snippet existed, `snippets` matched
-  nothing: each snippet is a row named after itself. Now a Snippets row
-  opens a pane, New snippet first, then every snippet, filtered as you
-  type; snippets stay at the root too.
-- **Snippets with none yet: Enter makes the first one.** The row used to
-  post the how-to and close the launcher. Now it writes the Signature
-  example and opens it in your editor, in the panel; quit, and it is a
-  row. ctrl-k on any snippet has `New snippet`, a file named by the date
-  and time, opened the same way.
+Keywords that scope the bar, a docs site, a Snippets pane, and a
+launcher that never drops a key.
 
 ### Added
 
@@ -60,6 +49,21 @@ so here.
   and the launcher comes back on that row with the bar cleared.
 
 ### Fixed
+
+- **Snippets: Edit on ctrl-k, and the placeholders explained.** Edit
+  opens the snippet's file in your editor. The how-to that the Snippets
+  and New snippet rows preview, and the README, say what each of
+  `{date}`, `{time}`, `{clipboard}`, `{uuid}` and `{cursor}` becomes.
+- **A Snippets row, always.** Once a snippet existed, `snippets` matched
+  nothing: each snippet is a row named after itself. Now a Snippets row
+  opens a pane, New snippet first, then every snippet, filtered as you
+  type; snippets stay at the root too.
+- **Snippets with none yet: Enter makes the first one.** The row used to
+  post the how-to and close the launcher. Now it writes the Signature
+  example and opens it in your editor, in the panel; quit, and it is a
+  row. ctrl-k on any snippet has `New snippet`, a file named by the date
+  and time, opened the same way.
+
 
 - **The Settings titles sit in one column.** Editor, Open the config
   folder, the Settings row at the root, and every choice had no icon,
@@ -449,7 +453,8 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.9.0...HEAD
+[0.9.0]: https://github.com/beatzball/swoop/compare/v0.8.0...v0.9.0
 [0.8.0]: https://github.com/beatzball/swoop/compare/v0.7.0...v0.8.0
 [0.7.0]: https://github.com/beatzball/swoop/compare/v0.6.1...v0.7.0
 [0.6.1]: https://github.com/beatzball/swoop/compare/v0.6.0...v0.6.1
