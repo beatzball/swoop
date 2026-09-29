@@ -144,17 +144,27 @@ func rows(snippets []Snippet) []protocol.Item {
 	return items
 }
 
-// howTo is the preview of the Snippets and New snippet rows.
+// howTo is the preview of the Snippets and New snippet rows: the file
+// format and every placeholder, with what it becomes, since this is the
+// one place a person reads before writing one.
 func howTo() string {
+	now := time.Now()
 	return fmt.Sprintf("A snippet is a file in %s:\n\n"+
 		"  Signature\n  keyword: ;sig\n\n  Best,\n  {cursor}\n\n"+
 		"The first line is the name, the keyword line is optional, the rest is\n"+
-		"the text. Enter pastes it into the app you came from.\n\n"+
+		"the text. Enter pastes it into the app you came from; ctrl-k edits,\n"+
+		"copies, or deletes it.\n\n"+
 		"New snippet makes this example the first time, in your editor;\n"+
 		"after that, a file named by the date and time.\n\n"+
-		"Placeholders: {date} {time} {clipboard} {uuid}, and {cursor} for\n"+
-		"where the caret ends up.\n\n"+
-		"Or: swoop-snippets import export.json (name, text, keyword)\n", tilde(dir()))
+		"Placeholders, filled when you paste:\n\n"+
+		"  {date}       today, %s\n"+
+		"  {time}       now, %s\n"+
+		"  {clipboard}  whatever you copied last\n"+
+		"  {uuid}       a fresh id, like 6f1c…-…\n"+
+		"  {cursor}     no text; the caret ends up here after the paste\n\n"+
+		"Anything else in braces is left as written.\n\n"+
+		"Or: swoop-snippets import export.json (name, text, keyword)\n",
+		tilde(dir()), now.Format("2006-01-02"), now.Format("15:04"))
 }
 
 func preview(id string) error {
@@ -197,6 +207,7 @@ func actions(id string) error {
 	return protocol.Write(os.Stdout, []protocol.Item{
 		{ID: "paste", Kind: "action", Icon: icon, Title: "Paste", Subtitle: "Enter"},
 		{ID: "copy", Kind: "action", Icon: icon, Title: "Copy", Subtitle: "to the clipboard"},
+		{ID: "edit", Kind: "terminal", Icon: icon, Title: "Edit", Subtitle: "the snippet's file, in the editor"},
 		{ID: "new", Kind: "terminal", Icon: icon, Title: "New snippet", Subtitle: "a new file, opened in the editor"},
 		{ID: "delete", Kind: "refresh", Icon: "", Title: "Delete", Subtitle: "Remove the snippet's file"},
 	})
@@ -228,6 +239,8 @@ func run(id, action string) error {
 	text, back := Fill(s.Text, realEnv(paste.Clipboard))
 	switch action {
 	case "", "open", "paste":
+	case "edit":
+		return settings.Edit(filepath.Join(dir(), s.File))
 	case "copy":
 		return paste.Copy(text)
 	case "delete":
