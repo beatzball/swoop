@@ -11,6 +11,9 @@ so here.
 
 ### Changed
 
+- **The owl is the logo.** The site's header, hero, touch icon and favicon
+  carry it, cut from the drawing with the background removed; the hero
+  shows it mirrored and large, larger still on a phone.
 - The site at swoop.sh is rebuilt on litro's supernova recipe: a new
   landing page with the install command to copy, the keys worth knowing,
   and what swoop is built on. The docs pages and their addresses are the

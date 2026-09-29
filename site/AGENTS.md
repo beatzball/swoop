@@ -18,7 +18,7 @@ Read this before changing anything in `site/`.
 | `src/seo.ts` | Per-page description, canonical, Open Graph and Twitter tags. |
 | `src/components/` | Shared UI, from the recipe. `starlight-header.ts` carries swoop's logo and GitHub button. |
 | `public/` | The logo, the icons, and the demo recording as WebP. See below. |
-| `scripts/cut-logo.mjs` | Cuts the icons from `public/logo.svg`. |
+| `scripts/cut-logo.mjs` | Cuts the icons from `public/logo.png`. |
 | `Dockerfile`, `nginx.conf` | Deploy. Coolify builds these on push to `main`. |
 | `../.github/workflows/site.yml` | Builds, tests, and calls the deploy hook. |
 
@@ -84,13 +84,13 @@ Read this before changing anything in `site/`.
   gif2webp -mixed -q 80 demo/swoop.gif -o site/public/swoop.webp   # brew install webp
   ```
 
-- `public/logo.svg` is the logo's source. `logo.png` (512px, inlined into the
-  share cards), `logo.webp` (the pages), `apple-touch-icon.png`,
-  `favicon-32.png` and `favicon.ico` are cut from it. Change the SVG, and cut
-  all five again:
+- `public/logo.png` is the logo: the owl drawing, cut from the supplied art
+  with the background and shadow removed, on a transparent ground.
+  `logo.webp` (the pages), `apple-touch-icon.png`, `favicon-32.png` and
+  `favicon.ico` are cut from it. Change the PNG, and cut all four again:
 
   ```sh
-  node scripts/cut-logo.mjs && cwebp -lossless public/logo.png -o public/logo.webp
+  node scripts/cut-logo.mjs && cwebp -q 92 public/logo.png -o public/logo.webp
   ```
 
 ### Images are sized at build time, and lazy below the first one

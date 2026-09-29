@@ -260,29 +260,13 @@ export const routeMeta = {
 };
 
 /**
- * The bird from public/logo.svg, drawn inline as the hero's mark.
- *
- * Inline rather than an <img>, so the hero costs no extra request, and filled
- * from the accent token rather than the file's own color, so it follows the
- * theme. It is atmosphere: the headline and the header already say the name,
- * so it is hidden from assistive tech. Change the logo, and change this too.
+ * The owl from public/logo.webp as the hero's mark: a full-color drawing,
+ * so an <img> rather than an inline path filled from the theme. It is
+ * atmosphere: the headline and the header already say the name, so it is
+ * hidden from assistive tech. Change the logo, and change this too.
  */
 const MARK = html`
-  <svg slot="mark" viewBox="0 0 512 512" aria-hidden="true">
-    <path
-      d="M48 96 C 90 380, 250 440, 350 318"
-      fill="none"
-      stroke="var(--nova-accent)"
-      stroke-opacity="0.45"
-      stroke-width="34"
-      stroke-linecap="round"
-    />
-    <path
-      transform="translate(372 256) rotate(-32) scale(1.15)"
-      d="M-110 -40 C -50 -72 -10 -44 0 8 C 10 -44 50 -72 110 -40 C 60 -40 26 -10 12 42 L -12 42 C -26 -10 -60 -40 -110 -40 Z"
-      fill="var(--nova-accent)"
-    />
-  </svg>
+  <img slot="mark" src="/logo.webp" alt="" aria-hidden="true" style="transform: scaleX(-1) translateY(-14%)" />
 `;
 
 @customElement('page-home')
@@ -367,6 +351,12 @@ export class HomePage extends LitroPage {
       /* How solid the hero's mark is. A light ground shows far less of a
          faint shape than a dark one, so the value is per theme. */
       --nova-mark-opacity: var(--brand-mark-opacity, 0.11);
+      /* How wide the mark is drawn. The owl has a lot of wing; drawn
+         larger, the right edge crops it the way a poster would. */
+      --nova-mark-size: var(--brand-mark-size, clamp(26rem, 60vw, 54rem));
+      /* On a phone the mark sits behind the words; about 1.6 times the
+         recipe's default, so the owl is still a presence there. */
+      --nova-mark-size-narrow: var(--brand-mark-size-narrow, clamp(21rem, 100vw, 36rem));
       --nova-font-mono: var(
         --brand-font-mono,
         ui-monospace,
@@ -681,7 +671,7 @@ export class HomePage extends LitroPage {
     // reader.
     //
     // <litro-hero-nova>
-    //     MARK is the bird from public/logo.svg, slotted as the hero's mark;
+    //     MARK is the owl from public/logo.webp, slotted as the hero's mark;
     //     a slotted mark replaces the recipe's own drawing by construction.
     //
     // <section class="demo shell">
