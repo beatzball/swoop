@@ -19,6 +19,10 @@ let package = Package(
             dependencies: [
                 .product(name: "GhosttyTerminal", package: "libghostty-spm"),
             ],
+            // The menu bar mark, the owl as a one-colour template image at
+            // 18 and 36 px. It rides in the target's resource bundle beside
+            // the executable, like libghostty's.
+            resources: [.copy("Resources")],
             linkerSettings: [
                 // Carbon for RegisterEventHotKey: a global hotkey with no
                 // Accessibility permission and no event tap.
