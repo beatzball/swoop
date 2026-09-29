@@ -247,7 +247,8 @@ previewed as rendered markdown. Typing searches the titles and the text.
 Enter opens the note in your editor, right in the panel; quit the editor
 and the list is back, the preview showing your change. `New note`, at
 the top, makes a note whose first line is what you typed, and opens it
-the same way. The editor is the Editor setting (`editor = nvim` in the
+the same way; with nothing typed, the note is named by the date and
+time, `2026-09-28 21:15`. The editor is the Editor setting (`editor = nvim` in the
 config), else `$EDITOR`, else `nano`. ctrl-k opens the note in the app
 that opens `.md` files instead, copies the text, shows the file in its
 folder, or deletes it. An editor wants room: widen the list with the

@@ -9,6 +9,13 @@ so here.
 
 ## [Unreleased]
 
+### Changed
+
+- **A New note with nothing typed is named by the date and time**,
+  `2026-09-28 21:15` as its heading and `2026-09-28-21-15.md` as its
+  file, instead of `untitled`. The New note row says the name it will
+  get.
+
 ## [0.8.0] - 2026-09-28
 
 What a launcher has: quicklinks, emoji, snippets, window management,

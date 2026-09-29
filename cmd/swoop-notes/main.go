@@ -86,7 +86,7 @@ func view(query string) error {
 	items := make([]protocol.Item, 0, len(notes)+1)
 	title := strings.TrimSpace(query)
 	if title == "" {
-		items = append(items, protocol.Item{ID: newID, Kind: "terminal", Icon: "", Title: "New note", Subtitle: "type its first line, then Enter"})
+		items = append(items, protocol.Item{ID: newID, Kind: "terminal", Icon: "", Title: "New note", Subtitle: "type its first line, or Enter for " + stamp()})
 	} else {
 		items = append(items, protocol.Item{ID: newID + "/" + title, Kind: "terminal", Icon: "", Title: "New note: " + title, Subtitle: "Enter makes it and opens it"})
 	}
@@ -123,7 +123,7 @@ func newTitle(id string) (string, bool) {
 func preview(id string) error {
 	if t, ok := newTitle(id); ok {
 		if t == "" {
-			fmt.Printf("Type the new note's first line, then Enter.\n\nIt goes in %s, one markdown file per note,\nand opens in %s, here in the panel.\n", tilde(dir()), strings.Join(settings.Editor(), " "))
+			fmt.Printf("Type the new note's first line, then Enter.\nWith nothing typed, Enter makes a note titled\n\n  # %s\n\nIt goes in %s, one markdown file per note,\nand opens in %s, here in the panel.\n", stamp(), tilde(dir()), strings.Join(settings.Editor(), " "))
 			return nil
 		}
 		fmt.Printf("Enter makes a note in %s that starts\n\n  # %s\n\nand opens it.\n", tilde(dir()), t)
