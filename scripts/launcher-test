@@ -693,6 +693,13 @@ esac
             sixth.key = key
             try:
                 sixth.wait_state(lambda s: s["totalCount"] > 3, what="the sixth launcher's list")
+                # The Snippets row opens a pane: New snippet, then the snippets.
+                sixth.press("snippets", lambda s: s["query"] == "snippets" and "ext/snippets/+snippets" in cur(s), what="the Snippets row")
+                sixth.press("\r", lambda s: s["query"] == "" and s["totalCount"] == 2 and "+new" in cur(s), screen=r"Snippets > ", what="the Snippets pane, New snippet first")
+                sixth.press("greet", lambda s: s["query"] == "greet" and s["totalCount"] == 2 and "+new" in cur(s), what="the pane filtered, New snippet still first")
+                sixth.press("\x1b", lambda s: s["query"] == "" and s["totalCount"] == 2, what="the bar cleared in the pane")
+                sixth.press("\x1b", lambda s: s["query"] == "snippets" and s["totalCount"] > 3, what="back at the root with the text")
+                sixth.press("\x1b", lambda s: s["query"] == "", what="the bar cleared at the root")
                 st = sixth.press("fake greeting", lambda s: s["query"] == "fake greeting" and "Fake Greeting" in cur(s), what="the snippet row")
                 if ";fg" not in st["current"]["text"]:
                     fail(f"the snippet's keyword should be in its row: {st['current']}", sixth.buf)

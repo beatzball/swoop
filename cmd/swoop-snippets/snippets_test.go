@@ -277,7 +277,7 @@ func TestEditWritesOnceAndLands(t *testing.T) {
 	t.Setenv("EDITOR", "true")
 	land := filepath.Join(t.TempDir(), "land")
 	t.Setenv("SWOOP_LAND", land)
-	if err := run(helpID, ""); err != nil {
+	if err := run(newID, ""); err != nil {
 		t.Fatal(err)
 	}
 	got, err := os.ReadFile(land)
@@ -288,7 +288,7 @@ func TestEditWritesOnceAndLands(t *testing.T) {
 	if err := os.WriteFile(p, []byte("Signature\n\nEdited\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := run(helpID, ""); err != nil {
+	if err := run(newID, ""); err != nil {
 		t.Fatal(err)
 	}
 	if data, _ := os.ReadFile(p); string(data) != "Signature\n\nEdited\n" {
@@ -301,4 +301,45 @@ func TestEditWritesOnceAndLands(t *testing.T) {
 	if len(have) != 2 {
 		t.Fatalf("New snippet should add one file: %+v", have)
 	}
+}
+
+// The Snippets row is always at the root; its pane leads with New
+// snippet and filters by name or keyword.
+func TestSnippetsRowAndView(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	out := capture(t, func() error { return list() })
+	if !strings.HasPrefix(out, viewID+"\tview\t") {
+		t.Fatalf("the Snippets row should lead the root rows: %q", out)
+	}
+	if err := put([]Snippet{{Name: "Greeting", Keyword: ";hi", Text: "Hello"}, {Name: "Address", Text: "1 Main St"}}); err != nil {
+		t.Fatal(err)
+	}
+	out = capture(t, func() error { return view("") })
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 3 || !strings.HasPrefix(lines[0], newID+"\tterminal\t") {
+		t.Fatalf("New snippet, then two: %q", out)
+	}
+	out = capture(t, func() error { return view(";hi") })
+	if lines := strings.Split(strings.TrimSpace(out), "\n"); len(lines) != 2 || !strings.Contains(lines[1], "Greeting") {
+		t.Fatalf("a keyword filters the pane: %q", out)
+	}
+}
+
+// capture runs fn with stdout in a file and returns what it printed.
+func capture(t *testing.T, fn func() error) string {
+	t.Helper()
+	f, err := os.Create(filepath.Join(t.TempDir(), "out"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdout := os.Stdout
+	os.Stdout = f
+	err = fn()
+	os.Stdout = stdout
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(f.Name())
+	return string(data)
 }
