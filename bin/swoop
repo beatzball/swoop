@@ -200,6 +200,16 @@ esac
 #                then pops a view, then closes; typing inside a view asks
 #                the extension for new rows; typing at the root asks the
 #                extensions with the text while fzf matches the apps
+#   wait+:       at the head of every key that reads the row under the
+#                cursor (Enter, a click, ctrl-k, Tab, alt-,): the key is
+#                held until the list in flight has landed, so a second
+#                quick Enter ticks the next task, not the one just ticked.
+#                No chain waits; see nav.LandEvent in internal/nav
+#   result-final:
+#                places the cursor once a pop's or a send's list lands.
+#                Unbound at start; a chain that needs it rebinds it, and
+#                swoop-nav landed unbinds it again, so it costs nothing
+#                on a keystroke
 icons="$(mktemp "${TMPDIR:-/tmp}/swoop-icons.XXXXXX")"
 rows="$(mktemp "${TMPDIR:-/tmp}/swoop-rows.XXXXXX")"
 # The built-in rows, pictures attached, listed once. Every reload at the
@@ -234,7 +244,7 @@ swoop-list | swoop-icons -out "$icons" > "$SWOOP_APPS"
 swoop-nav rows > "$rows"
 fzf < "$rows" \
   --ansi \
-  --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons' '$rows')" \
+  --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons' '$rows')+unbind(result-final)" \
   --delimiter $'\t' \
   --with-nth $'{3} {4}  \t{5}' \
   --nth 1 \
@@ -249,15 +259,16 @@ fzf < "$rows" \
   --bind 'alt-left:transform:swoop-nav divider +5' \
   --bind 'alt-right:transform:swoop-nav divider -5' \
   --bind 'ctrl-u:preview-half-page-up,ctrl-d:preview-half-page-down' \
-  --bind 'enter:transform:swoop-nav enter {1} {2} {4}' \
-  --bind 'left-click:transform:swoop-nav enter {1} {2} {4}' \
-  --bind 'ctrl-k:transform:swoop-nav actions {1} {2} {4}' \
-  --bind 'tab:transform:swoop-nav ai' \
-  --bind 'alt-,:transform:swoop-nav settings' \
+  --bind 'enter:wait+transform:swoop-nav enter {1} {2} {4}' \
+  --bind 'left-click:wait+transform:swoop-nav enter {1} {2} {4}' \
+  --bind 'ctrl-k:wait+transform:swoop-nav actions {1} {2} {4}' \
+  --bind 'tab:wait+transform:swoop-nav ai' \
+  --bind 'alt-,:wait+transform:swoop-nav settings' \
+  --bind 'result-final:transform:swoop-nav landed' \
   --listen "$listen" \
   --bind 'esc:transform:swoop-nav esc' \
   --bind 'change:transform:swoop-nav change' || status=$?
-rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_STATE.settled" "$SWOOP_APPS" "$sock"
+rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_APPS" "$sock"
 # Inside a frame of our own, tell it we are leaving, so it can put the
 # panel away before the terminal prints "Process exited".
 [ -n "${SWOOP_SHELL_PID:-}" ] && kill -USR2 "$SWOOP_SHELL_PID" 2>/dev/null

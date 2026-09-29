@@ -7,6 +7,7 @@
 //	swoop-nav actions [id kind title] fzf: transform on ctrl-k
 //	swoop-nav esc                     fzf: transform on Esc
 //	swoop-nav change                  fzf: transform on typing
+//	swoop-nav landed                  fzf: transform on result-final, once armed
 //	swoop-nav rows [query]            fzf: reload, prints the current pane
 //
 // fzf exports FZF_QUERY and FZF_POS to the transform commands, which is
@@ -44,7 +45,7 @@ const envApps = "SWOOP_APPS"
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|ai|settings|esc|change|rows|window|divider ...")
+		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|ai|settings|esc|change|landed|rows|window|divider ...")
 		os.Exit(2)
 	}
 	nav.PreviewPercent = settings.PreviewPercent()
@@ -67,6 +68,24 @@ func main() {
 
 	query := os.Getenv("FZF_QUERY")
 	pos, _ := strconv.Atoi(os.Getenv("FZF_POS"))
+
+	switch os.Args[1] {
+	case "enter", "actions", "ai", "settings":
+		// These read the row under the cursor, or remember its number. A
+		// chain's cursor still to be placed is placed first, and the key
+		// done again there; see nav.LandEvent.
+		again := "swoop-nav " + os.Args[1]
+		if os.Args[1] == "enter" || os.Args[1] == "actions" {
+			again += " {1} {2} {4}"
+		}
+		if acts := nav.Settle(st, query, again); acts != "" {
+			fmt.Println(acts)
+			if err := nav.Save(path, st); err != nil {
+				fmt.Fprintln(os.Stderr, "swoop-nav:", err)
+			}
+			return
+		}
+	}
 
 	switch os.Args[1] {
 	case "enter", "actions":
@@ -99,7 +118,7 @@ func main() {
 				fmt.Println("ignore")
 				break
 			}
-			fmt.Println(nav.AfterSend())
+			fmt.Println(nav.AfterSend(st))
 			break
 		}
 		fmt.Println(nav.Enter(st, id, kind, title, query, pos, runCommand(path, kind, title)))
@@ -130,6 +149,8 @@ func main() {
 		fmt.Println(nav.Esc(st, query))
 	case "change":
 		fmt.Println(nav.Change(st, keyed(st, query)))
+	case "landed":
+		fmt.Println(nav.Landed(st, query))
 	case "rows":
 		q := ""
 		if len(os.Args) > 2 {
@@ -158,9 +179,8 @@ func main() {
 // safe.
 func runCommand(statePath, kind, title string) func(target, action string) string {
 	return func(target, action string) string {
-		// The state file, fzf's socket and the settled mark (nav.Settled)
-		// beside it, and the apps cache.
-		run := "rm -f " + nav.ShellQuote(statePath) + " " + nav.ShellQuote(statePath+".sock") + " " + nav.ShellQuote(statePath+".settled")
+		// The state file, fzf's socket beside it, and the apps cache.
+		run := "rm -f " + nav.ShellQuote(statePath) + " " + nav.ShellQuote(statePath+".sock")
 		if apps := os.Getenv(envApps); apps != "" {
 			run += " " + nav.ShellQuote(apps)
 		}

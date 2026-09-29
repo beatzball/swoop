@@ -45,6 +45,10 @@ so here.
   folder, the Settings row at the root, and every choice had no icon,
   and the skin tone row's hand was two cells wide, so those titles were
   a cell off from the rest.
+- **Keys typed while a list reloads are kept.** Two quick Enters on a
+  checklist tick two tasks, and letters typed right after Esc all reach
+  the bar. Before, the launcher ignored keys until the new list had
+  landed, so the second Enter and the first letters were lost.
 
 ## [0.8.0] - 2026-09-28
 
