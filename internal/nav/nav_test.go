@@ -51,12 +51,15 @@ func TestEscClearsThenPopsThenCloses(t *testing.T) {
 		t.Fatalf("text in the bar: got %q", got)
 	}
 	got := Esc(st, "")
-	want := "enable-search+change-prompt(  )+change-preview-window(right,58%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(de)+reload-sync(swoop-nav rows {q})+wait+pos(3)+" + Settled
+	want := "enable-search+change-prompt(  )+change-preview-window(right,58%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(de)+reload-sync(swoop-nav rows {q})+rebind(result-final)"
 	if got != want {
 		t.Fatalf("pop: got  %q\nwant %q", got, want)
 	}
 	if len(st.Stack) != 0 {
 		t.Fatal("pop must remove the frame")
+	}
+	if st.Land == nil || *st.Land != (Landing{Query: "de", Pos: 3}) {
+		t.Fatalf("the cursor goes back to row 3 once the root lands: %+v", st.Land)
 	}
 	if got := Esc(st, ""); got != "abort" {
 		t.Fatalf("root with an empty bar: got %q", got)
@@ -84,7 +87,7 @@ func TestEnterOnRefreshActionRunsAndReturnsToTheViewBelow(t *testing.T) {
 		{Kind: "actions", View: "ext/clipboard/17", Title: "hello", Query: "he", Pos: 2},
 	}}
 	got := Enter(st, "delete", "refresh", "Delete", "", 2, run)
-	want := "execute-silent(swoop-run 'ext/clipboard/17' 'delete')+disable-search+change-prompt(Clipboard History > )+change-preview-window(right,58%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(he)+reload-sync(swoop-nav rows {q})+wait+pos(2)+" + Settled
+	want := "execute-silent(swoop-run 'ext/clipboard/17' 'delete')+disable-search+change-prompt(Clipboard History > )+change-preview-window(right,58%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(he)+reload-sync(swoop-nav rows {q})+rebind(result-final)"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -107,7 +110,7 @@ func TestEscFromActionsReturnsToTheViewBelow(t *testing.T) {
 		{Kind: "actions", View: "ext/clipboard/17", Title: "hello", Query: "he", Pos: 2},
 	}}
 	got := Esc(st, "")
-	if !strings.HasPrefix(got, "disable-search+change-prompt(Clipboard History > )") || !strings.HasSuffix(got, "change-query(he)+reload-sync(swoop-nav rows {q})+wait+pos(2)+"+Settled) {
+	if !strings.HasPrefix(got, "disable-search+change-prompt(Clipboard History > )") || !strings.HasSuffix(got, "change-query(he)+reload-sync(swoop-nav rows {q})+rebind(result-final)") {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -252,9 +255,13 @@ func TestEnterInTheAIPaneSendsThenClears(t *testing.T) {
 	if _, ok := AISendTarget(&State{}, "ext/ai/new", "why"); ok {
 		t.Fatal("only inside the pane")
 	}
-	if got := AfterSend(); got != "clear-query+reload-sync(swoop-nav rows)+wait+pos(2)+refresh-preview+"+Settled {
+	if got := AfterSend(st); got != "clear-query+reload-sync(swoop-nav rows)+rebind(result-final)" {
 		t.Fatalf("got %q", got)
 	}
+	if st.Land == nil || *st.Land != (Landing{Pos: 2, Refresh: true}) {
+		t.Fatalf("the cursor goes to the conversation once the list lands: %+v", st.Land)
+	}
+	st.Land = nil
 	if got := Enter(st, "ext/ai/20260925-1", "conversation", "earlier", "and then", 2, run); got != "ignore" {
 		t.Fatalf("Enter itself neither runs nor pushes in the pane: %q", got)
 	}
@@ -269,13 +276,16 @@ func TestEscFromTheAIPaneRestoresTheBar(t *testing.T) {
 		t.Fatalf("text first: %q", got)
 	}
 	got := Esc(st, "")
-	for _, part := range []string{"enable-search", "change-preview-window(right,58%,border-left,nowrap)", "change-query(why is the sky blue)", "pos(2)"} {
+	for _, part := range []string{"enable-search", "change-preview-window(right,58%,border-left,nowrap)", "change-query(why is the sky blue)", "rebind(result-final)"} {
 		if !strings.Contains(got, part) {
 			t.Fatalf("missing %q in %q", part, got)
 		}
 	}
 	if len(st.Stack) != 0 {
 		t.Fatalf("should be at the root: %+v", st.Stack)
+	}
+	if st.Land == nil || st.Land.Pos != 2 {
+		t.Fatalf("back on row 2 once the root lands: %+v", st.Land)
 	}
 }
 
@@ -344,8 +354,10 @@ func TestToggleRowInAViewRunsAndStays(t *testing.T) {
 	if !strings.HasPrefix(got, "execute-silent(swoop-run 'ext/tasks/t\x1fbuy milk')+") {
 		t.Fatalf("runs the row quietly: %q", got)
 	}
-	if !strings.HasSuffix(got, "+clear-query+reload-sync(swoop-nav rows {q})+wait+pos(3)+"+Settled) {
-		t.Fatalf("stays in the pane, reloaded, same row: %q", got)
+	// No pos: fzf keeps the cursor's row number across the reload, and
+	// with no wait the next Enter is read, not dropped.
+	if !strings.HasSuffix(got, "+clear-query+reload-sync(swoop-nav rows {q})") || st.Land != nil {
+		t.Fatalf("stays in the pane, reloaded, same row: %q %+v", got, st.Land)
 	}
 	if len(st.Stack) != 1 {
 		t.Fatalf("the pane was popped: %+v", st.Stack)
@@ -360,7 +372,7 @@ func TestTerminalRowHandsOverTheTerminalAndStays(t *testing.T) {
 	st := &State{Stack: []Frame{{Kind: "view", View: "ext/notes/notes", Title: "Notes", Query: "", Pos: 1}}}
 	got := Enter(st, "ext/notes/fake.md", "terminal", "Fake (draft)", "zuc", 2, run)
 	want := "execute[env SWOOP_KIND='terminal' SWOOP_TITLE='Fake (draft)' swoop-run 'ext/notes/fake.md']" +
-		"+reload-sync(swoop-nav rows {q})+wait+pos(2)+refresh-preview+" + Settled
+		"+transform(swoop-nav back 'ext/notes/fake.md')"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -385,13 +397,115 @@ func TestTerminalActionPopsBackToThePaneBelow(t *testing.T) {
 	if !strings.HasPrefix(got, "execute(swoop-run 'ext/tasks/t\x1fmilk' 'edit')+enable-search") && !strings.HasPrefix(got, "execute(swoop-run 'ext/tasks/t\x1fmilk' 'edit')+disable-search") {
 		t.Fatalf("runs the action with the terminal: %q", got)
 	}
-	if !strings.HasSuffix(got, "change-query(mi)+reload-sync(swoop-nav rows {q})+wait+pos(3)+"+Settled+"+refresh-preview") {
-		t.Fatalf("back to the pane below, reloaded, redrawn: %q", got)
+	if !strings.HasSuffix(got, "change-query(mi)+reload-sync(swoop-nav rows {q})+rebind(result-final)") {
+		t.Fatalf("back to the pane below, reloaded: %q", got)
+	}
+	if st.Land == nil || *st.Land != (Landing{Query: "mi", Pos: 3, Refresh: true}) {
+		t.Fatalf("back on row 3, the preview redrawn: %+v", st.Land)
 	}
 	if strings.Contains(got, "cleanup") {
 		t.Fatalf("a terminal action must not end the launcher: %q", got)
 	}
 	if len(st.Stack) != 1 {
 		t.Fatalf("the actions pane is still there: %+v", st.Stack)
+	}
+}
+
+func TestLandedPlacesTheCursorOnceAndUnbinds(t *testing.T) {
+	st := &State{Land: &Landing{Query: "de", Pos: 3, Refresh: true}}
+	if got := Landed(st, "de"); got != "pos(3)+refresh-preview+unbind(result-final)" {
+		t.Fatalf("got %q", got)
+	}
+	if st.Land != nil {
+		t.Fatal("a landing happens once")
+	}
+	if got := Landed(st, "de"); got != "unbind(result-final)" {
+		t.Fatalf("nothing pending: %q", got)
+	}
+	// Typed since the chain: the user has moved on, the cursor stays.
+	st.Land = &Landing{Query: "de", Pos: 3}
+	if got := Landed(st, "dex"); got != "unbind(result-final)" || st.Land != nil {
+		t.Fatalf("typed after: %q %+v", got, st.Land)
+	}
+}
+
+func TestSettleLandsBeforeAKeyReadsTheRow(t *testing.T) {
+	st := &State{}
+	if got := Settle(st, "", "swoop-nav enter {1} {2} {4}"); got != "" {
+		t.Fatalf("nothing pending, nothing to do: %q", got)
+	}
+	st.Land = &Landing{Query: "de", Pos: 3}
+	got := Settle(st, "de", "swoop-nav enter {1} {2} {4}")
+	if got != "pos(3)+unbind(result-final)+transform(swoop-nav enter {1} {2} {4})" {
+		t.Fatalf("got %q", got)
+	}
+	if st.Land != nil {
+		t.Fatal("settled means landed")
+	}
+}
+
+// TestNoChainWaits is the record of which chains wait: none. fzf drops
+// keys during wait, so a chain that must put the cursor on a new list
+// arms the landing event instead (see LandEvent). The one wait left is
+// in bin/swoop, at the head of the keys that read the row under the
+// cursor, and it holds only while a list is on its way.
+func TestNoChainWaits(t *testing.T) {
+	view := func() *State {
+		return &State{Stack: []Frame{
+			{Kind: "view", View: "ext/tasks/tasks", Title: "Tasks", Query: "mi", Pos: 3},
+			{Kind: "actions", View: "ext/tasks/t", Title: "milk", Query: "", Pos: 1},
+		}}
+	}
+	inView := func() *State { return &State{Stack: view().Stack[:1]} }
+	ai := &State{Stack: []Frame{{Kind: "ai", View: AIView, Title: AITitle}}}
+	chains := map[string]string{
+		"pop":             Esc(inView(), ""),
+		"pop actions":     Esc(view(), ""),
+		"refresh action":  Enter(view(), "delete", "refresh", "Delete", "", 1, run),
+		"terminal action": Enter(view(), "edit", "terminal", "Edit", "", 1, run),
+		"refresh row":     Enter(&State{Stack: view().Stack[:1]}, "x", "refresh", "x", "", 1, run),
+		"toggle":          Enter(inView(), "t", "toggle", "t", "", 2, run),
+		"terminal row":    Enter(inView(), "n", "terminal", "n", "", 2, run),
+		"push":            Enter(&State{}, "v", "view", "V", "", 1, run),
+		"actions":         Actions(&State{}, "v", "view", "V", "", 1),
+		"ask":             Ask(&State{}, "", 1),
+		"send":            AfterSend(ai),
+		"back":            Back(inView(), ""),
+		"back, landing":   Back(inView(), "ext/notes/new.md"),
+	}
+	for name, got := range chains {
+		for _, a := range strings.Split(got, "+") {
+			if a == "wait" {
+				t.Errorf("%s waits, and would drop the keys typed meanwhile: %q", name, got)
+			}
+		}
+	}
+}
+
+func TestBackKeepsTheBarUnlessTheRunNamesARow(t *testing.T) {
+	st := &State{Stack: []Frame{{Kind: "view", View: "ext/notes/notes", Title: "Notes"}}}
+	// An edit: the bar as it was, the same row number, the preview redrawn.
+	if got := Back(st, ""); got != "reload-sync(swoop-nav rows {q})+refresh-preview" || st.Land != nil {
+		t.Fatalf("got %q %+v", got, st.Land)
+	}
+	// A New note: the bar cleared, the cursor on the note it made.
+	if got := Back(st, "ext/notes/fake-idea.md"); got != "clear-query+reload-sync(swoop-nav rows {q})+rebind(result-final)" {
+		t.Fatalf("got %q", got)
+	}
+	if st.Land == nil || *st.Land != (Landing{ID: "ext/notes/fake-idea.md"}) {
+		t.Fatalf("land on the note: %+v", st.Land)
+	}
+	ids := []string{"ext/notes/+new", "ext/notes/fake-idea.md", "ext/notes/fake-meeting.md"}
+	if Find(st, "typed", ids) {
+		t.Fatal("rows for other text are not the rows the landing waits on")
+	}
+	if !Find(st, "", ids) || st.Land.Pos != 2 {
+		t.Fatalf("the note is row 2: %+v", st.Land)
+	}
+	if Find(st, "", ids) {
+		t.Fatal("found once; later reloads leave it")
+	}
+	if got := Landed(st, ""); got != "pos(2)+unbind(result-final)" {
+		t.Fatalf("got %q", got)
 	}
 }

@@ -38,6 +38,10 @@ so here.
   `2026-09-28 21:15` as its heading and `2026-09-28-21-15.md` as its
   file, instead of `untitled`. The New note row says the name it will
   get.
+- **New note comes back on the note it made**, with the bar empty, so a
+  second Enter does not make a second note. For extensions: a run of a
+  `terminal` row may write a row id to the file named by `$SWOOP_LAND`,
+  and the launcher comes back on that row with the bar cleared.
 
 ### Fixed
 
@@ -45,6 +49,10 @@ so here.
   folder, the Settings row at the root, and every choice had no icon,
   and the skin tone row's hand was two cells wide, so those titles were
   a cell off from the rest.
+- **Keys typed while a list reloads are kept.** Two quick Enters on a
+  checklist tick two tasks, and letters typed right after Esc all reach
+  the bar. Before, the launcher ignored keys until the new list had
+  landed, so the second Enter and the first letters were lost.
 
 ## [0.8.0] - 2026-09-28
 
