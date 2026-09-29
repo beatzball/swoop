@@ -16,6 +16,13 @@ so here.
   file, instead of `untitled`. The New note row says the name it will
   get.
 
+### Fixed
+
+- **The Settings titles sit in one column.** Editor, Open the config
+  folder, the Settings row at the root, and every choice had no icon,
+  and the skin tone row's hand was two cells wide, so those titles were
+  a cell off from the rest.
+
 ## [0.8.0] - 2026-09-28
 
 What a launcher has: quicklinks, emoji, snippets, window management,

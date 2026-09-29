@@ -114,6 +114,40 @@ func wide(r rune) bool {
 
 var wideRanges = [][2]rune{
 	{0x1100, 0x115f},   // Hangul Jamo
+	{0x231a, 0x231b},   // watch, hourglass: the emoji below 0x2e80
+	{0x2329, 0x232a},   // angle brackets
+	{0x23e9, 0x23ec},   // fast-forward and the like
+	{0x23f0, 0x23f0},   // alarm clock
+	{0x23f3, 0x23f3},   // hourglass flowing
+	{0x25fd, 0x25fe},   // small squares
+	{0x2614, 0x2615},   // umbrella, hot drink
+	{0x2648, 0x2653},   // the zodiac
+	{0x267f, 0x267f},   // wheelchair
+	{0x2693, 0x2693},   // anchor
+	{0x26a1, 0x26a1},   // high voltage
+	{0x26aa, 0x26ab},   // circles
+	{0x26bd, 0x26be},   // soccer ball, baseball
+	{0x26c4, 0x26c5},   // snowman, sun behind cloud
+	{0x26ce, 0x26ce},   // Ophiuchus
+	{0x26d4, 0x26d4},   // no entry
+	{0x26ea, 0x26ea},   // church
+	{0x26f2, 0x26f3},   // fountain, golf
+	{0x26f5, 0x26f5},   // sailboat
+	{0x26fa, 0x26fa},   // tent
+	{0x26fd, 0x26fd},   // fuel pump
+	{0x2705, 0x2705},   // check mark button
+	{0x270a, 0x270b},   // raised fist, raised hand
+	{0x2728, 0x2728},   // sparkles
+	{0x274c, 0x274c},   // cross mark
+	{0x274e, 0x274e},   // cross mark button
+	{0x2753, 0x2755},   // question and exclamation marks
+	{0x2757, 0x2757},   // exclamation mark
+	{0x2795, 0x2797},   // plus, minus, divide
+	{0x27b0, 0x27b0},   // curly loop
+	{0x27bf, 0x27bf},   // double curly loop
+	{0x2b1b, 0x2b1c},   // large squares
+	{0x2b50, 0x2b50},   // star
+	{0x2b55, 0x2b55},   // hollow red circle
 	{0x2e80, 0x303e},   // CJK radicals, punctuation
 	{0x3041, 0x33ff},   // Hiragana, Katakana, CJK compatibility
 	{0x3400, 0x4dbf},   // CJK extension A
