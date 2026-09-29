@@ -72,18 +72,27 @@ func configured() string {
 	return ""
 }
 
-func firstOllamaModel() string {
-	out, err := exec.Command("ollama", "list").Output()
-	if err != nil {
-		return ""
+// pickOllama chooses the model the defaults run, and says which and why
+// for the status line. The one named in the settings wins when it is
+// pulled; ollama lists "llama3.2:latest" for a pull of "llama3.2", so the
+// name matches either way. Otherwise the first listed, which is the
+// newest pulled: not a judgment of which is best, so the note says how
+// to pick another. Empty with no models.
+func pickOllama(listed []string, named string) (model, why string) {
+	named = strings.TrimSpace(named)
+	if named != "" {
+		for _, m := range listed {
+			if m == named || m == named+":latest" {
+				return m, "ollama " + m + ", named in settings"
+			}
+		}
 	}
-	lines := strings.Split(string(out), "\n")
-	if len(lines) < 2 {
-		return ""
+	if len(listed) == 0 {
+		return "", ""
 	}
-	fields := strings.Fields(lines[1])
-	if len(fields) == 0 {
-		return ""
+	m := listed[0]
+	if named != "" {
+		return m, named + " is not pulled; ollama " + m + ", the newest"
 	}
-	return fields[0]
+	return m, "ollama " + m + ", the newest pulled; ollama = <model> in settings picks another"
 }

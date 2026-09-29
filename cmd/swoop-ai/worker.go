@@ -47,7 +47,7 @@ func work(store chat.Store, id string) error {
 
 	// What the transports write into, and the clock reads from.
 	k := &sink{}
-	if note := webNote(p); note != "" {
+	if note := startNote(p); note != "" {
 		// Said before the model says anything, and kept until it does.
 		k.say(note)
 	}

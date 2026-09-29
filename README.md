@@ -154,8 +154,10 @@ conversation row in the pane:
 | anything else | the line in `~/.config/swoop/ai` | if it does | if it does |
 
 Without a choice it uses the line in that file, then `claude -p` if `claude`
-is on your PATH, then `ollama run` with the first model `ollama list`
-shows. Web search is off until you turn it on in Settings; on, the models
+is on your PATH, then `ollama run` with the model named by `ollama =
+llama3.2` in `~/.config/swoop/config`, or else the newest one you pulled;
+the line under the dots says which. Copy on Linux needs `wl-copy` or
+`xclip`, and the Copy rows say so when neither is there. Web search is off until you turn it on in Settings; on, the models
 that can will search and fetch, and the line under the dots says when the
 one you picked cannot. Anything that reads a question and prints an answer
 works, streaming or not. Conversations are files in

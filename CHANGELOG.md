@@ -11,6 +11,13 @@ so here.
 
 ### Changed
 
+- **Ask AI loose ends.** With no model picked, ollama runs the model named
+  by `ollama = <model>` in the settings file, or else the newest one
+  pulled, and the line under the dots says which; `ai = ollama` with no
+  model does the same. On Linux the Copy rows say when neither `wl-copy`
+  nor `xclip` is installed. On Windows a worker that has stopped is seen
+  as stopped, instead of dots until the five minute limit.
+
 - **A New note with nothing typed is named by the date and time**,
   `2026-09-28 21:15` as its heading and `2026-09-28-21-15.md` as its
   file, instead of `untitled`. The New note row says the name it will

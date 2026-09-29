@@ -17,6 +17,9 @@ func Copy(text string) error {
 	return cmd.Run()
 }
 
+// Missing is always empty: pbcopy comes with macOS.
+func Missing() string { return "" }
+
 // Clipboard returns the text on the clipboard.
 func Clipboard() (string, error) {
 	out, err := exec.Command("pbpaste").Output()

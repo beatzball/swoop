@@ -14,7 +14,7 @@
 // hand: in a plain terminal the app in front is that terminal, and cmd+V
 // would land in the shell that follows the launcher. The clipboard is the
 // per-OS part, one file each behind a build tag: pbcopy on macOS, wl-copy
-// or xclip on Linux.
+// or xclip on Linux, clip on Windows.
 //
 // After the paste, the caret can be moved back with left-arrow presses,
 // for a snippet with {cursor} in it. The count rides in the same request;
