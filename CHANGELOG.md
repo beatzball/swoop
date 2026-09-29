@@ -9,6 +9,14 @@ so here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Snippets with none yet: Enter makes the first one.** The row used to
+  post the how-to and close the launcher. Now it writes the Signature
+  example and opens it in your editor, in the panel; quit, and it is a
+  row. ctrl-k on any snippet has `New snippet`, a file named by the date
+  and time, opened the same way.
+
 ### Added
 
 - **Keywords**: an extension's keyword and a space ask only that

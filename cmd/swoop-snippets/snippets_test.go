@@ -269,3 +269,36 @@ func TestHeadsCache(t *testing.T) {
 		t.Fatalf("another folder: %s", got)
 	}
 }
+
+// Enter with no snippets writes the example and opens it; a second Enter
+// keeps the file as it is. New snippet makes a file named by the time.
+func TestEditWritesOnceAndLands(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("EDITOR", "true")
+	land := filepath.Join(t.TempDir(), "land")
+	t.Setenv("SWOOP_LAND", land)
+	if err := run(helpID, ""); err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(land)
+	if err != nil || string(got) != "signature.md\n" {
+		t.Fatalf("the landing should name the example's file: %q %v", got, err)
+	}
+	p := filepath.Join(dir(), "signature.md")
+	if err := os.WriteFile(p, []byte("Signature\n\nEdited\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := run(helpID, ""); err != nil {
+		t.Fatal(err)
+	}
+	if data, _ := os.ReadFile(p); string(data) != "Signature\n\nEdited\n" {
+		t.Errorf("a second Enter must not write over the edited example: %q", data)
+	}
+	if err := run("signature.md", "new"); err != nil {
+		t.Fatal(err)
+	}
+	have, _ := heads()
+	if len(have) != 2 {
+		t.Fatalf("New snippet should add one file: %+v", have)
+	}
+}
