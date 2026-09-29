@@ -15,9 +15,12 @@ final class StatusItem {
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         if let button = item.button {
             // A template image takes the menu bar's own colour, light or
-            // dark. The bird is an SF Symbol; a system without it (older
-            // macOS) gets the name as text.
-            if let image = NSImage(systemSymbolName: "bird", accessibilityDescription: "swoop") {
+            // dark. The owl is a silhouette cut from the logo, 18 px with a
+            // 36 px @2x, in the resource bundle; without the bundle the SF
+            // Symbol bird stands in, and without that the name as text.
+            if let image = StatusItem.owl() {
+                button.image = image
+            } else if let image = NSImage(systemSymbolName: "bird", accessibilityDescription: "swoop") {
                 image.isTemplate = true
                 button.image = image
             } else {
@@ -107,5 +110,22 @@ final class StatusItem {
 
     private func log(_ message: String) {
         FileHandle.standardError.write(Data("swoop-shell-mac: \(message)\n".utf8))
+    }
+
+    /// The owl from the resource bundle, as a template image sized for
+    /// the bar: 18 points, with the @2x file for Retina. nil when the
+    /// bundle is not beside the executable.
+    static func owl() -> NSImage? {
+        guard let url = Bundle.module.url(forResource: "menubar", withExtension: "png", subdirectory: "Resources"),
+              let image = NSImage(contentsOf: url) else { return nil }
+        if let url2x = Bundle.module.url(forResource: "menubar@2x", withExtension: "png", subdirectory: "Resources"),
+           let rep = NSImageRep.imageReps(withContentsOf: url2x)?.first {
+            rep.size = NSSize(width: 18, height: 18)
+            image.addRepresentation(rep)
+        }
+        image.size = NSSize(width: 18, height: 18)
+        image.isTemplate = true
+        image.accessibilityDescription = "swoop"
+        return image
     }
 }

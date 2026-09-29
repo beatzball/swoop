@@ -11,6 +11,9 @@ so here.
 
 ### Changed
 
+- **The owl in the menu bar.** The frame's menu bar item shows swoop's
+  owl as a one-colour mark that takes the bar's colour, light or dark,
+  instead of a stock bird symbol.
 - **The owl is the logo.** The site's header, hero, touch icon and favicon
   carry it, cut from the drawing with the background removed; the hero
   shows it mirrored and large, larger still on a phone.
