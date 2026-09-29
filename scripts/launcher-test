@@ -481,7 +481,7 @@ esac
             L.press("\x1b", lambda s: s["query"] == "" and not has(s, "\tap"), what="the bar cleared in Define")
             # Esc comes back to the whole root, with an empty bar, not the
             # keyword, which would only open Define again.
-            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), settles=True, what="the whole root list after Define")
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the whole root list after Define")
             L.press("fk plain", lambda s: s["query"] == "fk plain" and s["matchCount"] == 1 and "Fake Plain Row" in cur(s),
                     what="only the fake extension's plain row for 'fk plain'")
             L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the whole root list back after Esc")
