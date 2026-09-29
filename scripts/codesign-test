@@ -1,0 +1,112 @@
+#!/usr/bin/env bash
+# codesign-test: scripts/codesign-identity and scripts/sign-frame against
+# a pretend keychain. A fake security keeps what the real one would (is
+# there a swoop-dev certificate, is it trusted for code signing) in a
+# state directory, and fake openssl and codesign log what they are asked.
+# The login keychain and the real tools are never touched.
+#
+# What it holds them to: the first run makes one certificate and trusts
+# it, the second finds it and makes nothing, a certificate left untrusted
+# is trusted and not made again, and the frame is signed with swoop-dev
+# and dev.swoop.shell when the identity is there, and left ad-hoc when not.
+#
+# It runs everywhere, in seconds, as part of `make test`.
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/swoop-codesign-test.XXXXXX")"
+trap 'rm -rf "$tmp"' EXIT
+export HOME="$tmp/home"
+mkdir -p "$HOME" "$tmp/bin" "$tmp/keychain"
+log="$tmp/log"
+: > "$log"
+# In the keychain dir: cert (made), trusted (trusted for code signing).
+export SWOOP_TEST_LOG="$log" SWOOP_TEST_KEYCHAIN="$tmp/keychain"
+
+cat > "$tmp/bin/security" <<'EOF'
+#!/usr/bin/env bash
+echo "security $*" >> "$SWOOP_TEST_LOG"
+k="$SWOOP_TEST_KEYCHAIN"
+case "$1" in
+  find-identity)
+    if [ -f "$k/cert" ] && [ -f "$k/trusted" ]; then
+      echo '  1) 0123456789ABCDEF0123456789ABCDEF01234567 "swoop-dev"'
+      echo '     1 valid identities found'
+    else
+      echo '     0 valid identities found'
+    fi ;;
+  find-certificate)
+    [ -f "$k/cert" ] || exit 44
+    echo '-----BEGIN CERTIFICATE-----' ;;
+  import)
+    [ ! -f "$k/cert" ] || { echo "already there" >&2; exit 1; }
+    touch "$k/cert" ;;
+  add-trusted-cert)
+    [ -z "${SWOOP_TEST_CANCEL:-}" ] || exit 1
+    touch "$k/trusted" ;;
+  *) exit 2 ;;
+esac
+EOF
+cat > "$tmp/bin/openssl" <<'EOF'
+#!/usr/bin/env bash
+echo "openssl $*" >> "$SWOOP_TEST_LOG"
+EOF
+cat > "$tmp/bin/codesign" <<'EOF'
+#!/usr/bin/env bash
+echo "codesign $*" >> "$SWOOP_TEST_LOG"
+EOF
+cat > "$tmp/bin/uname" <<'EOF'
+#!/usr/bin/env bash
+echo Darwin
+EOF
+chmod +x "$tmp/bin/"*
+export PATH="$tmp/bin:$PATH"
+
+fail() { echo "codesign-test: $*" >&2; echo "--- log:" >&2; cat "$log" >&2; exit 1; }
+count() { grep -c "$1" "$log" || true; }
+identity="$root/scripts/codesign-identity"
+sign="$root/scripts/sign-frame"
+touch "$tmp/frame"
+
+# No identity: the frame keeps the linker's ad-hoc signature.
+out="$("$sign" "$tmp/frame")" || fail "sign-frame failed with no identity: $out"
+[ "$(count '^codesign')" = 0 ] || fail "signed with no identity"
+case "$out" in *ad-hoc*) ;; *) fail "sign-frame, no identity, said: $out" ;; esac
+
+# First run: make it, import it once, trust it for code signing.
+: > "$log"
+out="$("$identity")" || fail "first run failed: $out"
+[ "$out" = swoop-dev ] || fail "first run printed: $out"
+[ "$(count '^openssl req')" = 1 ] || fail "first run did not make one certificate"
+[ "$(count '^security import')" = 1 ] || fail "first run did not import it once"
+grep -q '^security import .* -T /usr/bin/codesign' "$log" || fail "codesign was not given the key"
+grep -q '^security add-trusted-cert .*-p codeSign' "$log" || fail "not trusted for code signing"
+# No partition list: that would ask for the keychain password as well.
+[ "$(count '^security set-key-partition-list')" = 0 ] || fail "asked for the keychain password"
+
+# Second run: found, nothing made, nothing asked.
+: > "$log"
+out="$("$identity")" || fail "second run failed: $out"
+[ "$out" = swoop-dev ] || fail "second run printed: $out"
+[ "$(count '^openssl')" = 0 ] || fail "second run made another certificate"
+[ "$(count '^security import')" = 0 ] || fail "second run imported again"
+[ "$(count '^security add-trusted-cert')" = 0 ] || fail "second run asked for trust again"
+
+# The identity is there: signed with it, under the fixed identifier.
+: > "$log"
+out="$("$sign" "$tmp/frame")" || fail "sign-frame failed: $out"
+grep -q "^codesign -f -s swoop-dev -i dev.swoop.shell $tmp/frame\$" "$log" || fail "not signed as swoop-dev, dev.swoop.shell"
+
+# The prompt was cancelled: the run fails, and the next one trusts the
+# certificate already there instead of making a second.
+rm -f "$tmp/keychain/"*
+: > "$log"
+if out="$(SWOOP_TEST_CANCEL=1 "$identity" 2>&1)"; then fail "a cancelled trust prompt passed: $out"; fi
+[ -f "$tmp/keychain/cert" ] || fail "cancelled run left no certificate"
+: > "$log"
+out="$("$identity")" || fail "run after a cancel failed: $out"
+[ "$(count '^openssl')" = 0 ] || fail "run after a cancel made a second certificate"
+[ "$(count '^security import')" = 0 ] || fail "run after a cancel imported again"
+[ "$(count '^security add-trusted-cert')" = 1 ] || fail "run after a cancel did not trust it"
+
+echo "codesign-test: ok"

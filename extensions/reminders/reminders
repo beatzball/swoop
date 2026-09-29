@@ -233,6 +233,11 @@ case "${1:-}" in
       perm)
         echo 'swoop asks Reminders through osascript. Turn on Reminders'
         echo 'for the app swoop runs in, under Privacy & Security.'
+        echo
+        # A switch that shows on may hold a grant for an earlier build.
+        # The Reminders pane has no minus button, so the reset is tccutil.
+        echo 'Already on? A new build needs a new grant: run'
+        echo 'tccutil reset Reminders, then allow it again when asked.'
         ;;
       add:*)
         parsed=$(swoop-tasks parse "${id#add:}")

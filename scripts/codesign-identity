@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+# codesign-identity: make sure this Mac has swoop-dev, a self-signed
+# code-signing certificate in the login keychain, and print its name.
+# `make shell-mac` signs the frame with it (scripts/sign-frame).
+#
+# Why: a frame signed ad-hoc, as the linker leaves it, is a new program
+# to macOS on every build, and an Accessibility grant belongs to that one
+# build. The switch in System Settings still shows on, but every check
+# fails. Signed with one certificate and one identifier, dev.swoop.shell,
+# every build is the same program to macOS, and the grant carries over.
+#
+# The first run makes the certificate and asks macOS to trust it for code
+# signing, for this user only. That shows one password prompt. Every run
+# after that finds it and changes nothing. A certificate left untrusted
+# (the prompt was cancelled) is trusted on the next run, not made again.
+# The certificate names nothing but swoop-dev.
+#
+# Written for the bash macOS ships, 3.2.
+set -euo pipefail
+
+name=swoop-dev
+keychain="$HOME/Library/Keychains/login.keychain-db"
+
+[ "$(uname -s)" = Darwin ] || { echo "codesign-identity: only macOS signs the frame" >&2; exit 1; }
+
+# A valid identity is a certificate with its key, trusted for code signing.
+# grep to /dev/null, not grep -q: -q stops reading at the first match,
+# security dies writing the rest, and pipefail calls that a failure.
+valid() { security find-identity -v -p codesigning "$keychain" 2>/dev/null | grep "\"$name\"" >/dev/null; }
+
+if valid; then
+  echo "$name"
+  exit 0
+fi
+
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/swoop-codesign.XXXXXX")"
+trap 'rm -rf "$tmp"' EXIT
+
+if security find-certificate -c "$name" -p "$keychain" > "$tmp/cert.pem" 2>/dev/null; then
+  : # made on an earlier run; only the trust is missing
+else
+  # A leaf for code signing only: not a CA, a digital signature, the
+  # code-signing extended key use. Ten years, so it outlives the checkout.
+  cat > "$tmp/req.cnf" <<EOF
+[req]
+distinguished_name = dn
+x509_extensions = ext
+prompt = no
+[dn]
+CN = $name
+[ext]
+basicConstraints = critical,CA:false
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,codeSigning
+EOF
+  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 -config "$tmp/req.cnf" \
+    -keyout "$tmp/key.pem" -out "$tmp/cert.pem" 2>/dev/null
+  # The key travels as a .p12 with a throwaway password, deleted with the
+  # temp directory. SHA-1 and 3DES because that is what security reads:
+  # it refuses the OpenSSL 3 defaults, and LibreSSL takes these too.
+  openssl pkcs12 -export -name "$name" -inkey "$tmp/key.pem" -in "$tmp/cert.pem" \
+    -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 \
+    -passout pass:swoop -out "$tmp/id.p12"
+  # -T lets codesign use the key without asking, every build. No
+  # set-key-partition-list: the key's partition is apple-tool:, which
+  # /usr/bin/codesign is in, and setting one asks for the keychain's
+  # password on the terminal, a second prompt for nothing.
+  security import "$tmp/id.p12" -k "$keychain" -P swoop -T /usr/bin/codesign >/dev/null
+fi
+
+# Trust it for code signing, for this user. This is the password prompt.
+security add-trusted-cert -r trustRoot -p codeSign -k "$keychain" "$tmp/cert.pem"
+
+valid || { echo "codesign-identity: $name is in the keychain but not trusted for code signing" >&2; exit 1; }
+echo "$name"

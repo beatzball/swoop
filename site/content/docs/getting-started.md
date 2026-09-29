@@ -60,6 +60,11 @@ The bird in the menu bar has the same: Restart, and Quit, which keeps it
 down until the next login or `swoop start`. After an upgrade the frame
 restarts itself, once the panel is hidden.
 
+Releases are not signed yet, so macOS takes each upgraded frame for a new
+program: after `brew upgrade` or a new release, remove swoop-shell-mac from
+System Settings, Privacy & Security, Accessibility with the minus button and
+add it again. The switch shows on either way; only a new grant works.
+
 ## From a checkout
 
 ```sh
@@ -69,6 +74,11 @@ git clone https://github.com/beatzball/swoop.git && cd swoop && make install
 The same two agents, pointed at the checkout. You need Go, fzf, and Xcode's
 tools. `make install` again after a pull restarts them on the new build;
 `make uninstall` removes them and keeps your history.
+
+The first `make install` also makes `swoop-dev`, a code-signing certificate
+in your login keychain, and signs the frame with it, so macOS sees every
+build as the same program and an Accessibility grant survives the next
+install. Trusting it shows one macOS password prompt, the first time only.
 
 ## Try it in any terminal
 
