@@ -75,6 +75,18 @@ jobs:
       - name: launcher test
         if: runner.os != 'Windows'
         run: scripts/launcher-test
+      # The frame's build directory, libghostty and all, so a run with the
+      # same dependencies does an incremental build (about 20 s) instead
+      # of a full one (about 70 s). Keyed on the resolved dependencies and
+      # the sources; a source change still restores the dependencies.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        if: runner.os == 'macOS'
+        with:
+          path: shell/mac/.build
+          key: swift-${{ runner.os }}-${{ hashFiles('shell/mac/Package.resolved') }}-${{ hashFiles('shell/mac/Sources/**') }}
+          restore-keys: |
+            swift-${{ runner.os }}-${{ hashFiles('shell/mac/Package.resolved') }}-
+            swift-${{ runner.os }}-
       # The macOS frame is a Swift package; only the macOS runner can build
       # it. Release mode, because that is what ships.
       - name: build the macOS frame
@@ -99,15 +111,15 @@ jobs:
           fi
           scripts/release-gate check
 
-  # Cut the tag once a VERSION lands on main with no tag behind it. Runs on
-  # every push to main and is idempotent: a merge that did not bump VERSION
-  # finds the tag already there and stops. It needs the tests green first,
-  # because a tag is the one thing here that is awkward to take back.
-  # A tag pushed with the workflow token starts no workflow, so this job
-  # starts release.yml on the new tag itself; that needs actions: write.
+  # A push to main whose VERSION has no tag yet gets one; every other push
+  # finds the tag already there and stops. It does not wait for the tests
+  # above: the pull request ran the same tests on the same tree, and the
+  # ruleset on main requires them green before a merge, so a cut reaches
+  # the release a few minutes sooner. The tests still run here, as a
+  # report. The step starts release.yml on the new tag itself; that needs
+  # actions: write.
   tag:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    needs: [test]
     runs-on: ubuntu-latest
     permissions:
       contents: write
