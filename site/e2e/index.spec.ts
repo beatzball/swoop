@@ -38,6 +38,97 @@ test('home renders page-home component', async ({ page }) => {
   await expect(page.locator('page-home')).toBeVisible();
 });
 
+/**
+ * The landing page is the supernova recipe's: a hero, feature rows, steps and
+ * keys, panes, a footer and a status line. Every one of them expanded on the
+ * server, rather than reaching the reader as an empty tag.
+ */
+test('home renders the landing page sections', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForSelector('page-home');
+  const root = page.locator('page-home');
+  await expect(root.locator('starlight-header')).toHaveCount(1);
+  await expect(root.locator('litro-hero-nova')).toHaveCount(1);
+  await expect(root.locator('.hero h1')).toBeVisible();
+  await expect(root.locator('litro-feature-row')).toHaveCount(3);
+  await expect(root.locator('litro-steps')).toHaveCount(1);
+  await expect(root.locator('litro-key-hints')).toHaveCount(1);
+  await expect(root.locator('litro-pane-grid')).toHaveCount(2);
+  await expect(root.locator('litro-site-footer')).toHaveCount(1);
+  await expect(root.locator('litro-status-line')).toHaveCount(1);
+});
+
+/**
+ * The landing page must read with JavaScript off. This reads the HTML the
+ * server sends directly, so nothing a client script does can make it pass.
+ * Each line names content that only that component renders, so a bare tag
+ * cannot satisfy it.
+ */
+test('landing page copy is in the server HTML', async ({ request }) => {
+  const response = await request.get('/');
+  expect(response.status()).toBe(200);
+  const body = await response.text();
+
+  expect(body).toContain('A launcher one key away, built the Unix way.');
+  expect(body).toContain('brew install beatzball/tap/swoop');
+  expect(body).toContain('/docs/getting-started');
+  expect(body).toContain('Start the panel');             // litro-steps
+  expect(body).toContain('<kbd>');                       // litro-key-hints
+  expect(body).toContain('Time in Tokyo');               // litro-term-window
+  expect(body).toContain('does the finding');            // litro-pane
+  expect(body).toContain('class="site-title"');          // starlight-header
+  expect(body).toContain('class="cell mode"');           // litro-status-line
+  // The bird is slotted as the hero's mark. The recipe's own drawing stays in
+  // the markup as the slot's fallback, which a slotted mark hides, so this
+  // looks for the bird rather than for the fallback's absence.
+  expect(body).toMatch(/<svg slot="mark"[^>]*>[\s\S]*?rotate\(-32\)/);
+});
+
+/**
+ * With clipboard permission the copy button says "Copied". Without it, it
+ * selects the command instead and says "Selected": a page must not claim a
+ * copy it did not make.
+ */
+test('the install command copies, and says so', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/');
+  await page.waitForSelector('litro-outlet[data-litro-settled]');
+
+  const button = page.locator('litro-install-command').first().locator('button');
+  await button.click();
+  await expect(button).toHaveText('Copied');
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    'brew install beatzball/tap/swoop',
+  );
+});
+
+test('the install command selects the text when the clipboard is refused', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForSelector('litro-outlet[data-litro-settled]');
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'clipboard', { value: undefined, configurable: true });
+  });
+
+  const button = page.locator('litro-install-command').first().locator('button');
+  await button.click();
+  await expect(button).toHaveText('Selected');
+});
+
+/** The header carries the logo, the site links and GitHub as an icon. */
+test('the header carries the logo, the links and GitHub', async ({ page }) => {
+  await page.goto('/');
+  await page.waitForSelector('page-home');
+  const header = page.locator('page-home starlight-header');
+
+  await expect(header.locator('.site-title')).toHaveAttribute('href', '/');
+  await expect(header.locator('.site-logo')).toHaveAttribute('src', '/logo.webp');
+  await expect(header.locator('nav a[href="/docs/getting-started"]')).toHaveText('Docs');
+  await expect(header.locator('a.github-link')).toHaveAttribute(
+    'href',
+    'https://github.com/beatzball/swoop',
+  );
+});
+
 // `.first()` here and not on `page-home`: against the BUILT output
 // `litro-outlet` briefly holds a second, hidden `page-docs-slug` alongside the
 // prerendered one while it hydrates, so a bare locator trips Playwright's
@@ -112,8 +203,15 @@ test('every prerendered route hydrates without a browser error', async ({ page }
 // server/routes/[...].ts now canonicalize the path, and nginx.conf redirects
 // it. So this asserts on what a reader would see, the page's own h1, which
 // getByRole skips when the page is hidden.
+//
+// It waits for the outlet to settle first. Against the built output the outlet
+// briefly holds the prerendered page and the hydrated one side by side, both
+// visible, so an h1 lookup made in that moment finds two and trips strict
+// mode. Once settled there is exactly one. A blank page still fails: settling
+// does not make a hidden page visible.
 test('/docs/getting-started/ with a trailing slash shows the page', async ({ page }) => {
   await page.goto('/docs/getting-started/');
+  await page.waitForSelector('litro-outlet[data-litro-settled]');
   await expect(page.getByRole('heading', { level: 1, name: 'Getting Started' })).toBeVisible({
     timeout: 30_000,
   });

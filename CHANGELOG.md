@@ -9,6 +9,13 @@ so here.
 
 ## [Unreleased]
 
+### Changed
+
+- The site at swoop.sh is rebuilt on litro's supernova recipe: a new
+  landing page with the install command to copy, the keys worth knowing,
+  and what swoop is built on. The docs pages and their addresses are the
+  same.
+
 ## [0.9.0] - 2026-09-29
 
 Keywords that scope the bar, a docs site, a Snippets pane, and a

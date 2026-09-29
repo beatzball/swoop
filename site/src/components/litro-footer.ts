@@ -1,14 +1,16 @@
 import { LitElement, html, css } from 'lit';
-import { customElement, property } from 'lit/decorators.js';
+import { customElement } from 'lit/decorators.js';
+import { pageReset } from '@beatzball/litro/runtime/page-reset.js';
 
 /**
- * Site footer crediting the framework the site was scaffolded with.
- *
  * <litro-footer recipe="starlight"></litro-footer>
  *
- * Deliberately quiet: a credit line should sit at the bottom of the page and
- * be findable, not compete with the content above it. Delete the element from
- * the page templates if you would rather not carry it.
+ * Credits the framework this project was scaffolded with. The `recipe` value
+ * is filled in at scaffold time by create-litro.
+ *
+ * Deliberately quiet: a credit line belongs at the bottom of the page and
+ * should be findable, not compete with the content above it. Delete the
+ * element from your pages if you would rather not carry it.
  */
 @customElement('litro-footer')
 export class LitroFooter extends LitElement {
@@ -16,17 +18,21 @@ export class LitroFooter extends LitElement {
     recipe: { type: String },
   };
 
-  static override styles = css`
+  /* Falls back to plain greys so this looks right in a recipe that defines no
+     --sl-* design tokens, and picks them up automatically in one that does. */
+  static override styles = [
+    pageReset,
+    css`
     :host {
       display: block;
     }
 
     footer {
-      border-top: 1px solid var(--sl-color-border, #e8e8e8);
+      border-top: 1px solid var(--sl-color-border, #e5e5e5);
       padding: 1.5rem;
       text-align: center;
       font-size: var(--sl-text-sm, 0.875rem);
-      color: var(--sl-color-gray-4, #757575);
+      color: var(--sl-color-gray-4, #6b7280);
     }
 
     a {
@@ -40,13 +46,12 @@ export class LitroFooter extends LitElement {
     }
 
     .recipe {
-      /* The separator is decorative; a screen reader gets the comma in the
-         visually-hidden text instead. */
       white-space: nowrap;
     }
-  `;
+  `,
+  ];
 
-  /** Recipe the site was scaffolded from, e.g. "starlight". */
+  /** Recipe this project was scaffolded from, e.g. "starlight". */
   recipe = '';
 
   override render() {
