@@ -301,6 +301,13 @@ func TestEditWritesOnceAndLands(t *testing.T) {
 	if len(have) != 2 {
 		t.Fatalf("New snippet should add one file: %+v", have)
 	}
+	if out := capture(t, func() error { return actions("signature.md") }); !strings.Contains(out, "edit\tterminal\t") {
+		t.Errorf("ctrl-k should offer Edit as a terminal row: %q", out)
+	}
+	t.Setenv("EDITOR", "false")
+	if err := run("signature.md", "edit"); err == nil {
+		t.Error("Edit runs the editor: with `false` as the editor it should fail")
+	}
 }
 
 // The Snippets row is always at the root; its pane leads with New

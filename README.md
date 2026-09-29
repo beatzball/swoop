@@ -258,8 +258,18 @@ Best,
 {cursor}
 ```
 
-`{date}`, `{time}`, `{clipboard}` and `{uuid}` are filled when you paste,
-and `{cursor}` is where the caret ends up. To bring snippets from another
+Placeholders are filled when you paste:
+
+| write | you get |
+|---|---|
+| `{date}` | today, `2026-09-29` |
+| `{time}` | now, `21:15` |
+| `{clipboard}` | whatever you copied last |
+| `{uuid}` | a fresh id |
+| `{cursor}` | nothing; the caret ends up here after the paste |
+
+Anything else in braces stays as written. ctrl-k on a snippet edits it in
+your editor, copies it, makes a new one, or deletes it. To bring snippets from another
 launcher, or write one from the shell:
 
 ```sh

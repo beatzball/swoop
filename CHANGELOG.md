@@ -11,6 +11,10 @@ so here.
 
 ### Fixed
 
+- **Snippets: Edit on ctrl-k, and the placeholders explained.** Edit
+  opens the snippet's file in your editor. The how-to that the Snippets
+  and New snippet rows preview, and the README, say what each of
+  `{date}`, `{time}`, `{clipboard}`, `{uuid}` and `{cursor}` becomes.
 - **A Snippets row, always.** Once a snippet existed, `snippets` matched
   nothing: each snippet is a row named after itself. Now a Snippets row
   opens a pane, New snippet first, then every snippet, filtered as you
