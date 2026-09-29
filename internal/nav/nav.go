@@ -28,6 +28,9 @@
 //     The bar there is a prompt, not a filter: Enter sends it to the
 //     conversation under the cursor, or to a new one, and the answer
 //     arrives on the right. Tab inside the pane does nothing.
+//   - A keyword and a space at the start of the root bar scope it to one
+//     extension: "def ap" opens Define with "ap" typed, "win l" shows
+//     only Window's rows for "l". See Change.
 //
 // The functions here return fzf action strings. They do no I/O of their
 // own except through Load and Save, so they can be tested without fzf.
@@ -246,6 +249,11 @@ func Ask(st *State, query string, pos int) string {
 		return "ignore"
 	}
 	st.Stack = append(st.Stack, Frame{Kind: "ai", View: AIView, Title: AITitle, Query: query, Pos: pos})
+	return askPane()
+}
+
+// askPane is what opening the Ask AI pane does, from Tab or its keyword.
+func askPane() string {
 	return strings.Join([]string{
 		"disable-search",
 		Wrap("change-prompt", AITitle+" > "),
@@ -383,17 +391,67 @@ func popActions(st *State) string {
 	}, "+")
 }
 
+// Keyed is what a keyword at the start of the root bar names: "def ap"
+// names Define, with "ap" left over. cmd/swoop-nav finds the extension
+// and asks it for its rows; this package decides what that means.
+type Keyed struct {
+	// Rest is the bar's text after the keyword and its space.
+	Rest string
+	// View is the id of the extension's one row when that row is a view,
+	// Define Word for Define, or AIView for the Ask AI pane. "" when the
+	// extension lists anything else: several rows, or rows that depend on
+	// the text, like Calculator's.
+	View  string
+	Title string // that view row's title, the pane's prompt
+}
+
 // Change decides what typing does: ask for new rows, everywhere. Inside a
 // pane the extension filters, or the launcher does for an actions pane. At
 // the root the apps come from the cache and the extensions are asked with
 // the text, which is how a calculator row appears for "2+2" while fzf
 // keeps matching the apps itself. In the Ask AI pane the bar is the
 // prompt being written, and the list does not change under it.
-func Change(st *State) string {
-	if top := st.Top(); top != nil && top.Kind == "ai" {
+//
+// A keyword at the root, k not nil, scopes the bar to one extension.
+// When its one row is a view, the view opens as if Enter had been pressed
+// on it, with the rest of the bar as its text: "def ap" is the Define
+// pane with "ap" typed. Otherwise the root shows that extension's rows
+// alone, and fzf's own matching goes off, because the bar still holds
+// the keyword and no row's title does; swoop-nav filters them on the
+// rest instead. Every other keystroke at the root turns fzf's matching
+// back on, so deleting the space undoes the scope.
+//
+// The frame a keyword pushes keeps an empty bar, not the keyword: Esc
+// comes back to the whole root list, and a keyword given back to the bar
+// would only open the pane again.
+func Change(st *State, k *Keyed) string {
+	top := st.Top()
+	if top != nil && top.Kind == "ai" {
 		return "ignore"
 	}
-	return "reload-sync(swoop-nav rows {q})"
+	if top != nil {
+		return "reload-sync(swoop-nav rows {q})"
+	}
+	if k == nil {
+		return "enable-search+reload-sync(swoop-nav rows {q})"
+	}
+	// change-query fires fzf's change event again; by then the pane is
+	// on the stack, and that Change only reloads it.
+	switch k.View {
+	case "":
+		return "disable-search+reload-sync(swoop-nav rows {q})"
+	case AIView:
+		st.Stack = append(st.Stack, Frame{Kind: "ai", View: AIView, Title: AITitle, Pos: 1})
+		return Wrap("change-query", k.Rest) + "+" + askPane()
+	}
+	st.Stack = append(st.Stack, Frame{Kind: "view", View: k.View, Title: k.Title, Pos: 1})
+	return strings.Join([]string{
+		Wrap("change-query", k.Rest),
+		"disable-search",
+		Wrap("change-prompt", k.Title+" > "),
+		"reload-sync(swoop-nav rows {q})",
+		"first",
+	}, "+")
 }
 
 // Wrap returns "action<open>arg<close>" with the first delimiter pair that

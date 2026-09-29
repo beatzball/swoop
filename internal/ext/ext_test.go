@@ -284,3 +284,83 @@ func TestListTimeoutIsAnError(t *testing.T) {
 		t.Fatalf("want a timeout error, got %v", err)
 	}
 }
+
+func TestSplitKeyword(t *testing.T) {
+	cases := []struct {
+		query, kw, rest string
+		ok              bool
+	}{
+		{"def ap", "def", "ap", true},
+		{"def ", "def", "", true},
+		{"def   ap  x", "def", "ap  x", true},
+		{"win left half", "win", "left half", true},
+		// The word alone is still on its way to an app's name.
+		{"def", "", "", false},
+		{"", "", "", false},
+		// A leading space is no keyword.
+		{" def ap", "", "", false},
+	}
+	for _, c := range cases {
+		kw, rest, ok := SplitKeyword(c.query)
+		if kw != c.kw || rest != c.rest || ok != c.ok {
+			t.Errorf("SplitKeyword(%q) = %q, %q, %v; want %q, %q, %v", c.query, kw, rest, ok, c.kw, c.rest, c.ok)
+		}
+	}
+}
+
+func TestByKeywordReadsTheFileBesideTheExtension(t *testing.T) {
+	skipOnWindows(t)
+	dir := t.TempDir()
+	fake(t, dir, "define", "exit 0\n")
+	fake(t, dir, "plain", "exit 0\n")
+	fake(t, dir, "second", "exit 0\n")
+	write := func(name, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name, KeywordFile), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Only the first word of the first line counts.
+	write("define", "  def  extra\nignored\n")
+	write("second", "DEF\n")
+	exts := Discover([]string{dir})
+	if got := exts[0].Keyword(); got != "def" {
+		t.Fatalf("Keyword() = %q", got)
+	}
+	if got := exts[1].Keyword(); got != "" {
+		t.Fatalf("no file is no keyword: %q", got)
+	}
+	// Case is ignored, and the first by name wins a shared keyword.
+	e, ok := ByKeyword(exts, "Def")
+	if !ok || e.Name != "define" {
+		t.Fatalf("ByKeyword(Def) = %+v, %v", e, ok)
+	}
+	if _, ok := ByKeyword(exts, "plain"); ok {
+		t.Fatal("a name is not a keyword")
+	}
+}
+
+// TestBundledKeywords holds the keywords the repository's extensions ship
+// with, so a missing or renamed file is caught here and not by a user.
+func TestBundledKeywords(t *testing.T) {
+	skipOnWindows(t)
+	want := map[string]string{
+		"ai": "ai", "calc": "calc", "clipboard": "clip", "define": "def",
+		"emoji": "emoji", "files": "files", "links": "links", "notes": "notes",
+		"reminders": "rem", "settings": "settings", "snippets": "snip",
+		"stats": "stats", "tasks": "tasks", "window": "win",
+	}
+	got := map[string]string{}
+	for _, e := range DiscoverAll([]string{filepath.Join("..", "..", "extensions")}) {
+		if k := e.Keyword(); k != "" {
+			got[e.Name] = k
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %v\nwant %v", got, want)
+	}
+	for name, k := range want {
+		if got[name] != k {
+			t.Errorf("%s: keyword %q, want %q", name, got[name], k)
+		}
+	}
+}

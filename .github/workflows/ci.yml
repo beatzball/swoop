@@ -52,7 +52,7 @@ jobs:
         if: runner.os == 'Linux'
         # Every shell file: the launcher, the extensions, and the scripts
         # that say they are bash. scripts/launcher-test is Python.
-        run: shellcheck bin/swoop extensions/*/* $(grep -Il -e '^#!/usr/bin/env bash' -e '^# shellcheck shell=bash' scripts/*)
+        run: shellcheck bin/swoop $(grep -Il -e '^#!/usr/bin/env bash' -e '^# shellcheck shell=bash' extensions/*/* scripts/*)
       - name: release-gate tests
         if: runner.os == 'Linux'
         run: scripts/release-gate-test

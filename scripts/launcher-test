@@ -322,6 +322,9 @@ case "$1" in
   run) echo "$2 ${{3:-}}" > '{marker}' ;;
 esac
 """)
+    # Its keyword, which scopes the root to its two rows.
+    with open(os.path.join(ext_dir, "keyword"), "w") as f:
+        f.write("fk\n")
     # A quicklink with an argument, and a fake `open` (and xdg-open, for
     # Linux) ahead of the real one on PATH that records what it was asked
     # to open instead of opening it.
@@ -473,6 +476,31 @@ esac
             # before Tab).
             L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), settles=True, what="the root list after Esc from Ask AI")
         check("Ask AI", ask)
+
+        # 4b. keywords: "def ap" opens Define with "ap" typed, and shows
+        # only its rows; "fk plain" scopes the root to the fake extension,
+        # which lists two rows and no view of its own to open.
+        def keywords():
+            # Every row a word from Define's view, none of them the root's
+            # Define Word row: that one is the list from before the pane
+            # opened, still on screen while its reload is in flight.
+            def define_words(s):
+                rows = s["matches"]
+                if not os.path.exists("/usr/share/dict/words"):
+                    return s["matchCount"] == 0
+                return s["matchCount"] > 0 and all(
+                    m["text"].startswith("ext/define/") and m["text"].split("\t")[1] == "word"
+                    and m["text"].split("\t")[3].lower().startswith("ap") for m in rows)
+            L.press("def ap", lambda s: s["query"] == "ap" and define_words(s), screen=r"Define Word > ",
+                    what="the Define pane with 'ap' typed, and only its words")
+            L.press("\x1b", lambda s: s["query"] == "" and not has(s, "\tap"), what="the bar cleared in Define")
+            # Esc comes back to the whole root, with an empty bar, not the
+            # keyword, which would only open Define again.
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), settles=True, what="the whole root list after Define")
+            L.press("fk plain", lambda s: s["query"] == "fk plain" and s["matchCount"] == 1 and "Fake Plain Row" in cur(s),
+                    what="only the fake extension's plain row for 'fk plain'")
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the whole root list back after Esc")
+        check("keywords", keywords)
 
         # 5. the divider keys write the width
         def divider():

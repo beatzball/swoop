@@ -121,6 +121,16 @@ there too (`width`, `height`). A bird in the menu bar opens the launcher,
 opens the settings folder, and quits; `SWOOP_NO_MENU_BAR=1` leaves it
 out.
 
+## Keywords
+
+Type an extension's keyword and a space to ask only that extension.
+`def ap` opens Define with `ap` typed; `clip` and a space opens Clipboard
+History; `win l` lists only the window rows for `l`. Esc goes back to the
+whole list. The word alone does nothing special, so `calc` still finds
+Calculator. The bundled keywords: `def`, `calc`, `clip`, `files`, `ai`,
+`links`, `emoji`, `snip`, `win`, `notes`, `tasks`, `rem`, `stats`,
+`settings`.
+
 ## Ask AI
 
 Press Tab from anywhere. The pane opens with whatever you had typed still
@@ -367,6 +377,10 @@ on Enter and the pane stays, reloaded: that is how Tasks ticks a task. A
 row or action of kind `terminal` gets the whole terminal while it runs, and
 the launcher comes back after, reloaded, the preview redrawn: that is how
 Notes opens an editor.
+
+A file called `keyword` beside the program, holding one word, gives the
+extension a keyword: `hello` and a space in the bar then asks only it. When
+its `list` is one row of kind `view`, the keyword opens that view.
 
 A result line is five fields separated by tabs. Only the last three are shown:
 
