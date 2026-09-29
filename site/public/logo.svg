@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- The swoop: the path the bird has just flown, down and back up. -->
+  <path d="M48 96 C 90 380, 250 440, 350 318" fill="none" stroke="#a78bfa" stroke-opacity="0.45" stroke-width="34" stroke-linecap="round"/>
+  <!-- The bird, climbing out of it: two swept wings meeting at the body. -->
+  <path transform="translate(372 256) rotate(-32) scale(1.15)" d="M-110 -40 C -50 -72 -10 -44 0 8 C 10 -44 50 -72 110 -40 C 60 -40 26 -10 12 42 L -12 42 C -26 -10 -60 -40 -110 -40 Z" fill="#a78bfa"/>
+</svg>

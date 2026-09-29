@@ -1,0 +1,118 @@
+name: site
+
+# The docs site at https://swoop.sh, from site/. Built and tested on every
+# pull request that touches it; deployed on every push to main that does.
+# A change to the launcher alone cannot alter what the site serves, so it
+# does not spend a build.
+on:
+  push:
+    branches: [main]
+    paths: ['site/**', '.github/workflows/site.yml']
+  pull_request:
+    paths: ['site/**', '.github/workflows/site.yml']
+
+# Actions are pinned to a commit, with the tag in a comment, because a tag can
+# be moved and a commit cannot. Nothing here writes to the repository.
+permissions:
+  contents: read
+
+jobs:
+  # litro build, then the Playwright suite against both renderers: `litro dev`
+  # and the prerendered dist/static that nginx serves. See site/AGENTS.md.
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413  # v6.1.0
+        with:
+          package_json_file: site/package.json
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020  # v7.0.0
+        with:
+          node-version: '22'
+          cache: pnpm
+          cache-dependency-path: site/pnpm-lock.yaml
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Build
+        run: pnpm build
+      - name: Install the browser for the e2e suite
+        run: pnpm exec playwright install --with-deps chromium
+      - name: e2e, dev and preview
+        run: pnpm test:e2e
+
+  # The exact image Coolify deploys, run and probed over HTTP. "The site
+  # builds" and "the container serves it" are two different claims.
+  image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - name: Build the image
+        run: docker build --build-arg GIT_SHA=${{ github.sha }} -t swoop-docs:ci site
+      - name: Run it
+        run: docker run -d --rm -p 8080:80 --name swoop-docs swoop-docs:ci
+      - name: Probe it
+        run: |
+          for i in $(seq 1 30); do
+            curl -fsS -o /dev/null http://127.0.0.1:8080/ && break
+            sleep 1
+          done
+          for path in / /docs/getting-started /docs/writing-an-extension /swoop.webp; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:8080$path")
+            echo "$code $path"
+            [ "$code" = 200 ] || exit 1
+          done
+          # A trailing slash is redirected, never served: see site/nginx.conf.
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:8080/docs/getting-started/)
+          echo "$code /docs/getting-started/"
+          [ "$code" = 301 ] || exit 1
+          curl -fsS http://127.0.0.1:8080/version.json | grep -q '${{ github.sha }}'
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [build, image]
+    runs-on: ubuntu-latest
+    steps:
+      # ================================================================
+      # DEPLOY HOOK. Needs the owner's Coolify credentials, as two
+      # repository secrets:
+      #
+      #   COOLIFY_WEBHOOK_URL   the application's deploy webhook, from
+      #                         Coolify: the app, Webhooks, Deploy Webhook
+      #   COOLIFY_API_TOKEN     a Coolify API token allowed to deploy
+      #
+      # The Coolify application builds site/Dockerfile with Base
+      # Directory /site, and serves https://swoop.sh.
+      #
+      # Until both are set this step says so and succeeds, so a push to
+      # main is not red for want of a secret.
+      # ================================================================
+      - name: Trigger the Coolify deploy
+        id: hook
+        env:
+          COOLIFY_WEBHOOK_URL: ${{ secrets.COOLIFY_WEBHOOK_URL }}
+          COOLIFY_API_TOKEN: ${{ secrets.COOLIFY_API_TOKEN }}
+        run: |
+          if [ -z "$COOLIFY_WEBHOOK_URL" ] || [ -z "$COOLIFY_API_TOKEN" ]; then
+            echo "::warning::COOLIFY_WEBHOOK_URL or COOLIFY_API_TOKEN is not set; not deploying."
+            echo "sent=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          curl -fsSL -X POST -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" "$COOLIFY_WEBHOOK_URL"
+          echo "sent=true" >> "$GITHUB_OUTPUT"
+      # The webhook only queues a build. Wait until the live site reports
+      # this commit, or a failed deploy would pass against the old container.
+      - name: Wait for swoop.sh to serve this commit
+        if: steps.hook.outputs.sent == 'true'
+        run: |
+          for i in $(seq 1 60); do
+            if curl -fsS https://swoop.sh/version.json | grep -q '${{ github.sha }}'; then
+              echo "swoop.sh serves ${{ github.sha }}"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::swoop.sh did not serve ${{ github.sha }} within ten minutes"
+          exit 1
