@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/beatzball/swoop/internal/settings"
 )
 
 func TestOutcome(t *testing.T) {
@@ -46,5 +48,55 @@ func TestOllamaLineKeepsTheAnswerClean(t *testing.T) {
 	}
 	if !strings.HasSuffix(got, " ornith-1.5:9b") {
 		t.Errorf("the model last: %q", got)
+	}
+}
+
+func TestPickOllama(t *testing.T) {
+	listed := []string{"qwen3:8b", "llama3.2:latest"}
+	for _, c := range []struct {
+		named, model, why string
+	}{
+		{"", "qwen3:8b", "the newest pulled"},
+		{"llama3.2", "llama3.2:latest", "named in settings"},
+		{"llama3.2:latest", "llama3.2:latest", "named in settings"},
+		{"mistral", "qwen3:8b", "mistral is not pulled"},
+	} {
+		model, why := pickOllama(listed, c.named)
+		if model != c.model || !strings.Contains(why, c.why) || !strings.Contains(why, model) {
+			t.Errorf("named %q: got %q, %q; want %q, a note saying %q and the model", c.named, model, why, c.model, c.why)
+		}
+	}
+	if model, why := pickOllama(nil, "llama3.2"); model != "" || why != "" {
+		t.Errorf("no models, no pick: %q %q", model, why)
+	}
+}
+
+func TestStartNoteSaysBoth(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	p := provider{note: "ollama qwen3:8b, the newest pulled"}
+	if got := startNote(p); got != p.note {
+		t.Errorf("web off: only the pick: %q", got)
+	}
+	if err := settings.Set(settings.Web, "on"); err != nil {
+		t.Fatal(err)
+	}
+	if got := startNote(p); !strings.Contains(got, "qwen3:8b") || !strings.Contains(got, "cannot search the web") {
+		t.Errorf("web on, a model that cannot: both notes in one line: %q", got)
+	}
+	if got := startNote(provider{canSearch: true}); got != "" {
+		t.Errorf("nothing to say: %q", got)
+	}
+}
+
+func TestCopyRowsSayWhatIsMissing(t *testing.T) {
+	rows := conversationActions("")
+	if rows[0].Subtitle != "Enter" {
+		t.Errorf("copy works: the key: %q", rows[0].Subtitle)
+	}
+	rows = conversationActions("no clipboard tool: install wl-clipboard or xclip")
+	for _, r := range rows[:2] {
+		if !strings.Contains(r.Subtitle, "xclip") {
+			t.Errorf("%s: the reason copy cannot work belongs in the row: %q", r.Title, r.Subtitle)
+		}
 	}
 }

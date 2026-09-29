@@ -54,6 +54,11 @@ const (
 // the line in ~/.config/swoop/ai, then the defaults.
 const AI = "ai"
 
+// Ollama names the ollama model the defaults use when they fall through
+// to ollama, and when ai is plain "ollama": `ollama = llama3.2`. Unset,
+// or not pulled, they take the newest model ollama lists.
+const Ollama = "ollama"
+
 // AIURL and AIKey are for the API kind of model, openai:<model> and
 // lmstudio:<model>: the base URL ending in /v1, and the key. The file
 // is mode 600, the user's alone, which is where a key belongs on a

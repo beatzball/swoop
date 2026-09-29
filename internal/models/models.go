@@ -44,15 +44,8 @@ func Choices(query string) []Choice {
 			cs = append(cs, Choice{Value: tool.name, Title: tool.name, Note: tool.missing})
 		}
 	}
-	if out, err := exec.Command("ollama", "list").Output(); err == nil {
-		for i, line := range strings.Split(string(out), "\n") {
-			if i == 0 {
-				continue
-			}
-			if f := strings.Fields(line); len(f) > 0 && !strings.Contains(f[0], "embed") {
-				cs = append(cs, Choice{Value: "ollama:" + f[0], Title: "ollama " + f[0], Note: "local, streamed; no web"})
-			}
-		}
+	for _, m := range Ollama() {
+		cs = append(cs, Choice{Value: "ollama:" + m, Title: "ollama " + m, Note: "local, streamed; no web"})
 	}
 	for _, m := range LMStudio() {
 		cs = append(cs, Choice{Value: "lmstudio:" + m, Title: "lmstudio " + m, Note: "local, streamed; no web"})
@@ -62,6 +55,32 @@ func Choices(query string) []Choice {
 		Choice{Value: "", Title: "The line in ~/.config/swoop/ai", Note: "a command of your own; or the defaults when there is none"},
 	)
 	return cs
+}
+
+// Ollama lists the models `ollama list` prints, newest pulled first, the
+// way it prints them; nothing when ollama is not installed. Embedding
+// models are left out: they cannot answer.
+func Ollama() []string {
+	out, err := exec.Command("ollama", "list").Output()
+	if err != nil {
+		return nil
+	}
+	return parseOllamaList(string(out))
+}
+
+// parseOllamaList takes the model names out of `ollama list`: the first
+// column, after the header line.
+func parseOllamaList(out string) []string {
+	var names []string
+	for i, line := range strings.Split(out, "\n") {
+		if i == 0 {
+			continue
+		}
+		if f := strings.Fields(line); len(f) > 0 && !strings.Contains(f[0], "embed") {
+			names = append(names, f[0])
+		}
+	}
+	return names
 }
 
 // Current is the ai setting in words: the value, or what the defaults

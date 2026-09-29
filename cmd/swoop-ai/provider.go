@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/beatzball/swoop/internal/models"
 	"github.com/beatzball/swoop/internal/settings"
 )
 
@@ -27,6 +28,9 @@ type provider struct {
 	// Whether this provider can search the web when the switch is on. When
 	// it cannot, the status line says so.
 	canSearch bool
+	// note is said in the status line before the model says anything: for
+	// a default that picked a model, which one and why.
+	note string
 }
 
 const (
@@ -37,7 +41,7 @@ const (
 // resolve reads the ai setting and turns it into a provider: a preset by
 // name, a preset with a model after a colon, or a line of the user's own.
 // With no setting, the line in ~/.config/swoop/ai, then claude if it is
-// on PATH, then ollama's first model.
+// on PATH, then ollama with the model pickOllama chooses.
 func resolve() (provider, error) {
 	web := settings.Get(settings.Web, settings.WebDefault) == "on"
 	choice := strings.TrimSpace(settings.Get(settings.AI, ""))
@@ -51,8 +55,8 @@ func resolve() (provider, error) {
 			return provider{name: "claude", line: claudeLine(), canSearch: true}, nil
 		}
 		if onPath("ollama") {
-			if model := firstOllamaModel(); model != "" {
-				return provider{name: "ollama", line: ollamaLine(model)}, nil
+			if model, why := pickOllama(models.Ollama(), settings.Get(settings.Ollama, "")); model != "" {
+				return provider{name: "ollama", line: ollamaLine(model), note: why}, nil
 			}
 		}
 		return provider{}, errors.New("no AI command found. Pick a model in Settings, or put one line in " + configPath() + ", for example: claude -p")
@@ -66,6 +70,16 @@ func resolve() (provider, error) {
 			return provider{}, errors.New("codex is not installed; npm install -g @openai/codex")
 		}
 		return provider{name: "codex", line: codexLine(web), canSearch: true}, nil
+	case choice == "ollama":
+		// ollama with no model named: the same pick as the defaults.
+		if !onPath("ollama") {
+			return provider{}, errors.New("ollama is not installed; see https://ollama.com")
+		}
+		model, why := pickOllama(models.Ollama(), settings.Get(settings.Ollama, ""))
+		if model == "" {
+			return provider{}, errors.New("ollama has no models; ollama pull one, for example: ollama pull llama3.2")
+		}
+		return provider{name: "ollama", line: ollamaLine(model), note: why}, nil
 	case kind == "ollama" && rest != "":
 		if !onPath("ollama") {
 			return provider{}, errors.New("ollama is not installed; see https://ollama.com")
@@ -97,6 +111,19 @@ func webNote(p provider) string {
 		return ""
 	}
 	return "this model cannot search the web"
+}
+
+// startNote is the status line before the model says anything: the
+// provider's own note and the web note, whichever there are. One line,
+// since the pane shows only the last thing said.
+func startNote(p provider) string {
+	var notes []string
+	for _, n := range []string{p.note, webNote(p)} {
+		if n != "" {
+			notes = append(notes, n)
+		}
+	}
+	return strings.Join(notes, " · ")
 }
 
 func isOpenAIHost(base string) bool {

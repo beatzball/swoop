@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -34,6 +33,7 @@ import (
 	"github.com/beatzball/swoop/internal/markdown"
 	"github.com/beatzball/swoop/internal/models"
 	"github.com/beatzball/swoop/internal/nav"
+	"github.com/beatzball/swoop/internal/paste"
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
 	"github.com/beatzball/swoop/internal/usage"
@@ -249,11 +249,23 @@ func actions(id string) error {
 		}
 		return protocol.Write(os.Stdout, items)
 	}
-	return protocol.Write(os.Stdout, []protocol.Item{
-		{ID: "copy", Kind: "action", Icon: "", Title: "Copy last answer", Subtitle: "Enter"},
-		{ID: "copy-all", Kind: "action", Icon: "", Title: "Copy conversation", Subtitle: ""},
+	return protocol.Write(os.Stdout, conversationActions(paste.Missing()))
+}
+
+// conversationActions is the ctrl-k menu on a conversation. missing is
+// why this system cannot copy, from paste.Missing; when it says
+// something, both copy rows say it, so the reason is on screen before
+// Enter rather than lost on a stderr nobody sees.
+func conversationActions(missing string) []protocol.Item {
+	copyNote, copyAllNote := "Enter", ""
+	if missing != "" {
+		copyNote, copyAllNote = missing, missing
+	}
+	return []protocol.Item{
+		{ID: "copy", Kind: "action", Icon: "", Title: "Copy last answer", Subtitle: copyNote},
+		{ID: "copy-all", Kind: "action", Icon: "", Title: "Copy conversation", Subtitle: copyAllNote},
 		{ID: "delete", Kind: "refresh", Icon: "", Title: "Delete", Subtitle: ""},
-	})
+	}
 }
 
 func run(store chat.Store, id, action string) error {
@@ -273,30 +285,13 @@ func run(store chat.Store, id, action string) error {
 	}
 	switch action {
 	case "", "copy":
-		return copyText(c.Answer())
+		return paste.Copy(c.Answer())
 	case "copy-all":
-		return copyText(c.Transcript())
+		return paste.Copy(c.Transcript())
 	case "delete":
 		return store.Delete(id)
 	}
 	return fmt.Errorf("unknown action %q", action)
-}
-
-// copyText puts text on the clipboard with whatever this system has.
-func copyText(text string) error {
-	var cmd *exec.Cmd
-	switch {
-	case runtime.GOOS == "darwin":
-		cmd = exec.Command("pbcopy")
-	case runtime.GOOS == "windows":
-		cmd = exec.Command("clip")
-	case exec.Command("wl-copy").Err == nil && os.Getenv("WAYLAND_DISPLAY") != "":
-		cmd = exec.Command("wl-copy")
-	default:
-		cmd = exec.Command("xclip", "-selection", "clipboard")
-	}
-	cmd.Stdin = strings.NewReader(text)
-	return cmd.Run()
 }
 
 // send records the prompt on the conversation, or on a new one, and
