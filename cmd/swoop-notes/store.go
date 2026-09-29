@@ -252,9 +252,18 @@ func path(file string) (string, error) {
 	return p, nil
 }
 
+// now is the clock, a variable so a test can set it.
+var now = time.Now
+
+// stamp is the title of a note made with nothing typed: the one thing
+// known about it is when it was made. The file name is the same with a
+// dash for the space and no colon, so it sorts by time in any listing.
+func stamp() string { return now().Format("2006-01-02 15:04") }
+
 // create writes a new note whose first line is title, as a heading, and
 // returns its path. The file is named after the title and never replaces
-// one already there.
+// one already there. With no title the heading is the date and time,
+// so the list never fills with rows called untitled.
 func create(d, title string) (string, error) {
 	if d == "" {
 		return "", errors.New("no data directory")
@@ -263,10 +272,10 @@ func create(d, title string) (string, error) {
 		return "", err
 	}
 	title = strings.NewReplacer("\r", " ", "\n", " ").Replace(strings.TrimSpace(title))
-	body := "\n"
-	if title != "" {
-		body = "# " + title + "\n\n"
+	if title == "" {
+		title = stamp()
 	}
+	body := "# " + title + "\n\n"
 	base := slug(title)
 	for n := 1; ; n++ {
 		name := base + ext
@@ -316,7 +325,9 @@ func slug(title string) string {
 		}
 	}
 	if b.Len() == 0 {
-		return "untitled"
+		// Only a title of nothing but punctuation gets here; create
+		// gives an empty one the date and time first.
+		return "note"
 	}
 	return b.String()
 }

@@ -146,9 +146,23 @@ func TestCreate(t *testing.T) {
 	if data, _ := os.ReadFile(p); string(data) != "# Call the bank: re/mortgage\n\n" {
 		t.Errorf("the first was changed: %q", data)
 	}
+	// Nothing typed: the date and time name it, and a second one in the
+	// same minute gets a number.
+	now = func() time.Time { return time.Date(2026, 9, 28, 21, 15, 0, 0, time.Local) }
+	defer func() { now = time.Now }()
 	p3, err := create(d, "")
-	if err != nil || filepath.Base(p3) != "untitled.md" {
-		t.Errorf("untitled: %s %v", p3, err)
+	if err != nil || filepath.Base(p3) != "2026-09-28-21-15.md" {
+		t.Errorf("no title: %s %v", p3, err)
+	}
+	if data, _ := os.ReadFile(p3); string(data) != "# 2026-09-28 21:15\n\n" {
+		t.Errorf("the heading should be the date and time: %q", data)
+	}
+	p4, err := create(d, "")
+	if err != nil || filepath.Base(p4) != "2026-09-28-21-15-2.md" {
+		t.Errorf("the second in the minute: %s %v", p4, err)
+	}
+	if p5, _ := create(d, "???"); filepath.Base(p5) != "note.md" {
+		t.Errorf("punctuation only: %s", p5)
 	}
 }
 
