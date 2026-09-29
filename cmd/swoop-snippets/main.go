@@ -19,9 +19,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/beatzball/swoop/internal/settings"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/beatzball/swoop/internal/paste"
 	"github.com/beatzball/swoop/internal/protocol"
@@ -86,7 +89,7 @@ func list() error {
 		return err
 	}
 	if len(snippets) == 0 {
-		return protocol.Write(os.Stdout, []protocol.Item{{ID: helpID, Kind: "snippet", Icon: icon, Title: "Snippets", Subtitle: "none yet: Enter for how to add one"}})
+		return protocol.Write(os.Stdout, []protocol.Item{{ID: helpID, Kind: "terminal", Icon: icon, Title: "Snippets", Subtitle: "none yet: Enter makes your first one in the editor"}})
 	}
 	items := make([]protocol.Item, len(snippets))
 	for i, s := range snippets {
@@ -105,6 +108,7 @@ func howTo() string {
 		"  Signature\n  keyword: ;sig\n\n  Best,\n  {cursor}\n\n"+
 		"The first line is the name, the keyword line is optional, the rest is\n"+
 		"the text. Enter pastes it into the app you came from.\n\n"+
+		"Enter here makes this example and opens it in your editor.\n\n"+
 		"Placeholders: {date} {time} {clipboard} {uuid}, and {cursor} for\n"+
 		"where the caret ends up.\n\n"+
 		"Or: swoop-snippets import export.json (name, text, keyword)\n", tilde(dir()))
@@ -150,17 +154,22 @@ func actions(id string) error {
 	return protocol.Write(os.Stdout, []protocol.Item{
 		{ID: "paste", Kind: "action", Icon: icon, Title: "Paste", Subtitle: "Enter"},
 		{ID: "copy", Kind: "action", Icon: icon, Title: "Copy", Subtitle: "to the clipboard"},
+		{ID: "new", Kind: "terminal", Icon: icon, Title: "New snippet", Subtitle: "a new file, opened in the editor"},
 		{ID: "delete", Kind: "refresh", Icon: "", Title: "Delete", Subtitle: "Remove the snippet's file"},
 	})
 }
 
 func run(id, action string) error {
 	if id == helpID {
-		if err := os.MkdirAll(dir(), 0o700); err != nil {
-			return err
-		}
-		paste.Tell(howTo())
-		return nil
+		// The first snippet: the example from the how-to, opened in the
+		// editor here in the panel. Quit, and it is a row.
+		return edit(Snippet{Name: "Signature", Keyword: ";sig", Text: "Best,\n{cursor}"})
+	}
+	if action == "new" {
+		// A file named by the date and time, like a New note with
+		// nothing typed; the first line is the name, so the editor is
+		// where it gets a real one.
+		return edit(Snippet{Name: time.Now().Format("2006-01-02 15:04")})
 	}
 	s, err := read(id)
 	if err != nil {
@@ -184,6 +193,46 @@ func run(id, action string) error {
 		paste.Tell(note)
 	}
 	return nil
+}
+
+// edit writes s as a file, unless a snippet of that name is already
+// there (put replaces by name, and an edited example must stay edited),
+// opens it in the editor, and asks the launcher to come back on its row
+// (see nav.Back, SWOOP_LAND).
+func edit(s Snippet) error {
+	find := func() (string, error) {
+		have, err := heads()
+		if err != nil {
+			return "", err
+		}
+		for _, h := range have {
+			if h.Name == oneLine(s.Name) {
+				return h.File, nil
+			}
+		}
+		return "", nil
+	}
+	file, err := find()
+	if err != nil {
+		return err
+	}
+	if file == "" {
+		if err := put([]Snippet{s}); err != nil {
+			return err
+		}
+		if file, err = find(); err != nil {
+			return err
+		}
+	}
+	if file == "" {
+		return errors.New("the snippet was not written")
+	}
+	if land := os.Getenv("SWOOP_LAND"); land != "" {
+		if err := os.WriteFile(land, []byte(file+"\n"), 0o600); err != nil {
+			return err
+		}
+	}
+	return settings.Edit(filepath.Join(dir(), file))
 }
 
 // add writes one snippet, its text read from stdin.
