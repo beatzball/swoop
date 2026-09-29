@@ -164,8 +164,10 @@ func main() {
 		if len(os.Args) > 2 {
 			q = os.Args[2]
 		}
-		q = strings.TrimSpace(q)
+		// Untrimmed: "def " with its space is a keyword, "def" is not
+		// (see rows); the landing below matches on the trimmed text.
 		items, err := rows(st, q)
+		q = strings.TrimSpace(q)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, "swoop-nav:", err)
 			os.Exit(1)
@@ -390,12 +392,12 @@ func keyed(st *nav.State, query string) *nav.Keyed {
 // starts with the keyword, so the filtering is done here, the way the
 // actions pane does it. No apps and no recent group: the keyword asked
 // for one extension.
-func scoped(e ext.Extension, rest string) error {
+func scoped(e ext.Extension, rest string) ([]protocol.Item, error) {
 	items, err := e.List(strings.TrimSpace(rest))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return protocol.Write(os.Stdout, matching(items, rest))
+	return matching(items, rest), nil
 }
 
 // matching keeps the items whose title holds every word of query,
