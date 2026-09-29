@@ -7,7 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
+	"github.com/beatzball/swoop/internal/width"
 )
 
 func TestHotkeyChoicesTakeWhatWasTyped(t *testing.T) {
@@ -159,5 +161,59 @@ func TestEditorChoicesAreWhatIsOnPath(t *testing.T) {
 	}
 	if cs := editorChoices("notthere"); len(cs) != 3 {
 		t.Fatalf("a typed command not on PATH is not offered: %+v", cs)
+	}
+}
+
+// Every row the pane shows has an icon exactly one cell wide, so the
+// titles after it sit in one column (#150): the root row, the settings,
+// the extensions on and off, and every setting's choices, with and
+// without something typed.
+func TestEveryIconIsOneCell(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("PATH", t.TempDir())
+	dir := t.TempDir()
+	for _, name := range []string{"alpha", "settings"} {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("SWOOP_EXTENSIONS", dir)
+	check := func(pane string, items []protocol.Item) {
+		t.Helper()
+		if len(items) == 0 {
+			t.Errorf("%s: no rows", pane)
+		}
+		for _, it := range items {
+			if w := width.String(it.Icon); w != 1 {
+				t.Errorf("%s: %q has icon %q, %d cells wide", pane, it.Title, it.Icon, w)
+			}
+		}
+	}
+	check("root", []protocol.Item{root})
+	get := func(id, query string) []protocol.Item {
+		t.Helper()
+		items, err := rows(id, query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return items
+	}
+	check("settings", get("settings", ""))
+	check("extensions", get(extensionsID, ""))
+	if err := run("extension/alpha"); err != nil {
+		t.Fatal(err)
+	}
+	check("extensions, one off", get(extensionsID, ""))
+	for _, s := range all {
+		check(s.key, get(s.key, ""))
+	}
+	for key, typed := range map[string]string{
+		settings.Hotkey: "ctrl+alt+k",
+		settings.AIURL:  "http://localhost:8080/v1",
+	} {
+		check(key+", typed", get(key, typed))
 	}
 }

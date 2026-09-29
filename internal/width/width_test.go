@@ -20,6 +20,9 @@ func TestString(t *testing.T) {
 		{"👍🏽", 4}, // two wide runes, as most terminals draw the pair
 		{"tab\there", 7},
 		{"─────", 5},
+		{"✋", 2}, // wide by default, though below the emoji blocks
+		{"⭐ ok", 5},
+		{"✓", 1}, // a check mark that is text, not emoji
 	}
 	for _, c := range cases {
 		if got := String(c.in); got != c.want {

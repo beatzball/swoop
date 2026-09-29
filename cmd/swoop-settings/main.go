@@ -130,7 +130,7 @@ var all = []setting{
 		},
 	},
 	{
-		key: settings.EditorKey, title: "Editor", icon: "",
+		key: settings.EditorKey, title: "Editor", icon: "󰏫",
 		explain: "What a note opens in, and the task list, and a text file from Search\nFiles: inside the panel, with the whole terminal, and quitting it brings\nthe list back. Empty means $EDITOR, and with neither, nano. Type a\ncommand to use it: emacs -nw, or anything on your PATH.",
 		value:   editorValue,
 		choices: editorChoices,
@@ -144,7 +144,7 @@ var all = []setting{
 		},
 	},
 	{
-		key: settings.Skin, title: "Emoji skin tone", icon: "✋",
+		key: settings.Skin, title: "Emoji skin tone", icon: "󱠫",
 		explain: "The skin tone Enter pastes, for an emoji that takes one. ctrl-k on an\nemoji offers all six for one use.",
 		value: func() string {
 			n := atoi(settings.Get(settings.Skin, settings.SkinDefault), 0)
@@ -188,6 +188,15 @@ var skinTones = []choice{
 // The row that opens the config folder: not a setting, a door.
 const folderID = "folder"
 
+// root is the Settings row at the root.
+var root = protocol.Item{ID: "settings", Kind: "view", Icon: "󰒓", Title: "Settings", Subtitle: "hotkey, AI model, editor, preview width, extensions"}
+
+// Every row has an icon exactly one cell wide, the width of the Nerd Font
+// glyphs the settings use. The launcher shows "icon title", so an empty
+// icon, or an emoji two cells wide, moves that row's title out of the
+// column. blank is the icon for a row with nothing to show.
+const blank = " "
+
 // The Extensions row's view, and the prefix of the ids of its rows, one
 // per extension: "extension/reminders".
 const (
@@ -214,7 +223,7 @@ func main() {
 	var err error
 	switch os.Args[1] {
 	case "list":
-		err = protocol.Write(os.Stdout, []protocol.Item{{ID: "settings", Kind: "view", Icon: "", Title: "Settings", Subtitle: "hotkey, AI model, editor, preview width, extensions"}})
+		err = protocol.Write(os.Stdout, []protocol.Item{root})
 	case "view":
 		err = view(arg(2), strings.TrimSpace(arg(3)))
 	case "preview":
@@ -250,10 +259,19 @@ func find(key string) *setting {
 	return nil
 }
 
-// view prints the pane's rows: the settings, or one setting's choices.
-// The query filters the settings by title; for choices it may also be a
-// value of the user's own, which the setting decides.
+// view prints the pane's rows.
 func view(id, query string) error {
+	items, err := rows(id, query)
+	if err != nil {
+		return err
+	}
+	return protocol.Write(os.Stdout, items)
+}
+
+// rows are the pane's rows: the settings, the extensions, or one
+// setting's choices. The query filters the settings by title; for choices
+// it may also be a value of the user's own, which the setting decides.
+func rows(id, query string) ([]protocol.Item, error) {
 	if id == "settings" {
 		var items []protocol.Item
 		for _, s := range all {
@@ -266,16 +284,16 @@ func view(id, query string) error {
 			items = append(items, protocol.Item{ID: extensionsID, Kind: "view", Icon: "󰏗", Title: "Extensions", Subtitle: extensionsValue()})
 		}
 		if query == "" || strings.Contains("open the config folder", strings.ToLower(query)) {
-			items = append(items, protocol.Item{ID: folderID, Kind: "command", Icon: "", Title: "Open the config folder", Subtitle: settings.Dir()})
+			items = append(items, protocol.Item{ID: folderID, Kind: "command", Icon: "󰉋", Title: "Open the config folder", Subtitle: settings.Dir()})
 		}
-		return protocol.Write(os.Stdout, items)
+		return items, nil
 	}
 	if id == extensionsID {
-		return protocol.Write(os.Stdout, extensionRows(query))
+		return extensionRows(query), nil
 	}
 	s := find(id)
 	if s == nil {
-		return fmt.Errorf("no setting %q", id)
+		return nil, fmt.Errorf("no setting %q", id)
 	}
 	current := settings.Get(s.key, "")
 	var items []protocol.Item
@@ -292,9 +310,9 @@ func view(id, query string) error {
 		}
 		// Kind refresh: Enter sets the value and returns to the Settings
 		// pane, reloaded, so the subtitle shows the new value.
-		items = append(items, protocol.Item{ID: s.key + "=" + c.value, Kind: "refresh", Icon: "", Title: c.title, Subtitle: note})
+		items = append(items, protocol.Item{ID: s.key + "=" + c.value, Kind: "refresh", Icon: blank, Title: c.title, Subtitle: note})
 	}
-	return protocol.Write(os.Stdout, items)
+	return items, nil
 }
 
 func preview(id string) error {
