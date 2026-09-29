@@ -78,10 +78,10 @@ test('landing page copy is in the server HTML', async ({ request }) => {
   expect(body).toContain('does the finding');            // litro-pane
   expect(body).toContain('class="site-title"');          // starlight-header
   expect(body).toContain('class="cell mode"');           // litro-status-line
-  // The bird is slotted as the hero's mark. The recipe's own drawing stays in
+  // The owl is slotted as the hero's mark. The recipe's own drawing stays in
   // the markup as the slot's fallback, which a slotted mark hides, so this
-  // looks for the bird rather than for the fallback's absence.
-  expect(body).toMatch(/<svg slot="mark"[^>]*>[\s\S]*?rotate\(-32\)/);
+  // looks for the owl rather than for the fallback's absence.
+  expect(body).toMatch(/<img slot="mark"[^>]*src="\/logo\.webp"/);
 });
 
 /**
