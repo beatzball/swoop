@@ -41,11 +41,13 @@ enum Paster {
     private static func send(_ request: Request) {
         // The prompt option: the first time, macOS shows its dialog,
         // pointing at swoop-shell-mac. Until the switch is on, copy only.
+        // A switch that shows on may hold a grant for an earlier build,
+        // which this check cannot tell from none, so the note says both.
         // The key is kAXTrustedCheckOptionPrompt, spelled out: the global
         // is a mutable C variable, which Swift's concurrency checks refuse.
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         guard AXIsProcessTrustedWithOptions(options) else {
-            notify("Copied \(short(request.text)), not pasted: turn on swoop-shell-mac in System Settings > Privacy & Security > Accessibility, and swoop pastes for you.")
+            notify("Copied \(short(request.text)), not pasted: turn on swoop-shell-mac in System Settings > Privacy & Security > Accessibility, and swoop pastes for you. Already on? Remove it with the minus button and add it again: a new build needs a new grant.")
             return
         }
         guard focusTakesText() else {

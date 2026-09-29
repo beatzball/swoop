@@ -28,8 +28,10 @@ const icon = ""
 
 // errNotTrusted is what a call says without the permission. It names the
 // app to switch on: macOS asks of the app that started this process, the
-// swoop frame, or a terminal when swoop runs in one.
-var errNotTrusted = errors.New("moving windows needs Accessibility: in System Settings, Privacy & Security, Accessibility, turn on swoop (or the terminal swoop runs in), then try again")
+// swoop frame, or a terminal when swoop runs in one. A switch that shows
+// on can still be stale, a grant to an earlier build, and this check
+// cannot tell the two apart, so the message covers both.
+var errNotTrusted = errors.New("moving windows needs Accessibility: in System Settings, Privacy & Security, Accessibility, turn on swoop-shell-mac (or the terminal swoop runs in), then try again. Already on? Remove it with the minus button and add it again: a new build needs a new grant")
 
 func main() {
 	if len(os.Args) < 2 {
@@ -89,8 +91,11 @@ func preview(id string) error {
 		fmt.Println("windows only once you switch it on.")
 		fmt.Println()
 		fmt.Println("Enter opens System Settings, Privacy & Security,")
-		fmt.Println("Accessibility. Turn on swoop (or the terminal swoop runs")
-		fmt.Println("in), then try again.")
+		fmt.Println("Accessibility. Turn on swoop-shell-mac (or the terminal")
+		fmt.Println("swoop runs in), then try again.")
+		fmt.Println()
+		fmt.Println("Already on? Remove it with the minus button and add it")
+		fmt.Println("again: a new build needs a new grant.")
 		return nil
 	}
 	w, to, d, n, err := plan(id)

@@ -53,6 +53,15 @@ so here.
   checklist tick two tasks, and letters typed right after Esc all reach
   the bar. Before, the launcher ignored keys until the new list had
   landed, so the second Enter and the first letters were lost.
+- **Accessibility survives a rebuild.** A checkout install makes
+  `swoop-dev`, a self-signed code-signing certificate in the login
+  keychain (one macOS password prompt, the first time), and `make
+  shell-mac` signs the frame with it as `dev.swoop.shell`. Before, every
+  build was signed ad-hoc, a new program to macOS, and window rows and
+  pastes were refused although the switch still showed on. The permission
+  messages now say what to do then: remove swoop-shell-mac with the minus
+  button and add it again. Releases are not signed yet, so after an
+  upgrade that step is still needed once.
 
 ## [0.8.0] - 2026-09-28
 

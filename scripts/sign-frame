@@ -1,0 +1,24 @@
+#!/usr/bin/env bash
+# sign-frame: sign the built frame with swoop-dev, the certificate
+# scripts/codesign-identity makes, under the identifier dev.swoop.shell.
+# `make shell-mac` runs it on every build.
+#
+#   scripts/sign-frame FRAME
+#
+# With one certificate and one identifier, macOS sees every build as the
+# same program, and an Accessibility grant survives a rebuild. Without
+# swoop-dev (CI, or a Mac that never ran the installer) the frame keeps
+# the ad-hoc signature the linker gave it, as before.
+#
+# Written for the bash macOS ships, 3.2.
+set -euo pipefail
+
+frame="${1:?usage: sign-frame FRAME}"
+name=swoop-dev
+
+if security find-identity -v -p codesigning 2>/dev/null | grep "\"$name\"" >/dev/null; then
+  codesign -f -s "$name" -i dev.swoop.shell "$frame"
+  echo "signed $frame as $name"
+else
+  echo "signed $frame ad-hoc; scripts/codesign-identity makes $name"
+fi

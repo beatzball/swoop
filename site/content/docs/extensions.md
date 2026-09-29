@@ -195,8 +195,10 @@ so the app you came from is the one that moves. The preview names the window
 and the frame it will get.
 
 On macOS this needs Accessibility. The first time, Enter opens System
-Settings, Privacy & Security, Accessibility: turn on swoop (or the terminal
-swoop runs in), and run the row again. Other systems come with their frames.
+Settings, Privacy & Security, Accessibility: turn on swoop-shell-mac (or the
+terminal swoop runs in), and run the row again. Already on and still refused?
+Remove it with the minus button and add it again: a new build needs a new
+grant. Other systems come with their frames.
 
 ## Used recently, and Stats
 

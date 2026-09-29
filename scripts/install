@@ -24,6 +24,13 @@ command -v fzf >/dev/null || { echo "install: fzf is not on PATH; brew install f
 command -v go >/dev/null || { echo "install: go is not on PATH" >&2; exit 1; }
 command -v swift >/dev/null || { echo "install: swift is not on PATH; install Xcode or its command line tools" >&2; exit 1; }
 
+# The certificate the frame is signed with, so an Accessibility grant
+# survives the next install. Made once; the first time, macOS asks for
+# your password to trust it.
+echo "signing identity (the first time only, macOS asks for your password to trust it)"
+identity="$("$root/scripts/codesign-identity")"
+echo "signing as $identity"
+
 echo "building"
 make -C "$root" build shell-mac >/dev/null
 

@@ -93,6 +93,10 @@ class Swoop < Formula
       After that, swoop restart, swoop stop, swoop start, swoop status;
       the bird in the menu bar has Restart and Quit.
 
+      After each upgrade, remove swoop-shell-mac from System Settings,
+      Privacy & Security, Accessibility and add it again: releases are
+      not signed yet, so a new version needs a new grant.
+
       The service sees Homebrew's PATH only. If your AI command lives
       elsewhere, name it in full in ~/.config/swoop/ai, for example:
         ~/.local/bin/claude -p

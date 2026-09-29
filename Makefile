@@ -12,8 +12,11 @@ build:
 
 # The macOS frame: a floating panel with swoop in it, no Ghostty.app needed.
 # Run it with bin/ on PATH, or SWOOP_LAUNCHER pointing at bin/swoop.
+# Signed with swoop-dev when this Mac has it, so an Accessibility grant
+# survives the rebuild; see scripts/sign-frame.
 shell-mac:
 	swift build -c release --package-path shell/mac
+	@scripts/sign-frame shell/mac/.build/release/swoop-shell-mac
 	@echo "built shell/mac/.build/release/swoop-shell-mac"
 
 # Daily driver: the frame and the clipboard watcher at login, through launchd.
@@ -29,6 +32,7 @@ test:
 	go test ./...
 	scripts/launchd-test
 	scripts/reminders-test
+	scripts/codesign-test
 
 # The launcher end to end: bin/swoop driven through a pseudo-terminal with
 # a fake extension and a fake AI command. Needs fzf and python3.
