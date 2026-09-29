@@ -9,6 +9,15 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **Keywords**: an extension's keyword and a space ask only that
+  extension. `def ap` opens Define with `ap` typed, `win l` shows only the
+  window rows for `l`. An extension declares its keyword in a `keyword`
+  file beside it; the bundled ones are `def`, `calc`, `clip`, `files`,
+  `ai`, `links`, `emoji`, `snip`, `win`, `notes`, `tasks`, `rem`, `stats`
+  and `settings`.
+
 ### Changed
 
 - **Ask AI loose ends.** With no model picked, ollama runs the model named

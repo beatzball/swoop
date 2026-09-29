@@ -129,7 +129,7 @@ func main() {
 	case "esc":
 		fmt.Println(nav.Esc(st, query))
 	case "change":
-		fmt.Println(nav.Change(st))
+		fmt.Println(nav.Change(st, keyed(st, query)))
 	case "rows":
 		q := ""
 		if len(os.Args) > 2 {
@@ -212,12 +212,19 @@ func actionsFor(id string) []protocol.Item {
 
 // rows prints the current pane. At the root that is the cached built-in
 // rows plus whatever the extensions answer for the text, in one order by
-// title, so a calculator's row for "2+2" sits in the same list as the apps.
+// title, so a calculator's row for "2+2" sits in the same list as the apps;
+// with a keyword first, only that extension's rows (see scoped).
 // Inside a view it is whatever the view's extension answers. In an actions
 // pane it is the target's actions, filtered by the text.
 func rows(st *nav.State, query string) error {
-	query = strings.TrimSpace(query)
 	top := st.Top()
+	if top == nil {
+		// Before the trim: "def " is a keyword, "def" is not.
+		if e, rest, ok := scope(query); ok {
+			return scoped(e, rest)
+		}
+	}
+	query = strings.TrimSpace(query)
 	if top == nil {
 		items, err := cachedApps()
 		if err != nil {
@@ -262,6 +269,76 @@ func rows(st *nav.State, query string) error {
 		return err
 	}
 	return protocol.Write(os.Stdout, items)
+}
+
+// scope finds the extension a keyword at the start of the root bar names,
+// and the text after it. Nothing is read from the disk for a bar without
+// a space in it: most keystrokes.
+func scope(query string) (ext.Extension, string, bool) {
+	kw, rest, ok := ext.SplitKeyword(query)
+	if !ok {
+		return ext.Extension{}, "", false
+	}
+	e, found := ext.ByKeyword(ext.Discover(ext.Dirs()), kw)
+	return e, rest, found
+}
+
+// keyed is what Change needs to know about a keyword at the root: the
+// text after it, and the extension's view row when its list is that one
+// row, which is what the keyword then opens. The Ask AI extension lists
+// nothing at the root; its keyword opens the pane Tab opens.
+func keyed(st *nav.State, query string) *nav.Keyed {
+	if st.Top() != nil {
+		return nil
+	}
+	e, rest, ok := scope(query)
+	if !ok {
+		return nil
+	}
+	k := &nav.Keyed{Rest: rest}
+	if name, _, _ := ext.Route(nav.AIView); e.Name == name {
+		k.View, k.Title = nav.AIView, nav.AITitle
+		return k
+	}
+	if items, err := e.List(""); err == nil && len(items) == 1 && items[0].Kind == "view" {
+		k.View, k.Title = items[0].ID, items[0].Title
+	}
+	return k
+}
+
+// scoped prints the root scoped to one extension by its keyword: its rows
+// for the rest of the bar, and only those whose title holds every word of
+// it. fzf's matching is off here (see nav.Change), because the bar still
+// starts with the keyword, so the filtering is done here, the way the
+// actions pane does it. No apps and no recent group: the keyword asked
+// for one extension.
+func scoped(e ext.Extension, rest string) error {
+	items, err := e.List(strings.TrimSpace(rest))
+	if err != nil {
+		return err
+	}
+	return protocol.Write(os.Stdout, matching(items, rest))
+}
+
+// matching keeps the items whose title holds every word of query,
+// ignoring case.
+func matching(items []protocol.Item, query string) []protocol.Item {
+	words := strings.Fields(strings.ToLower(query))
+	var kept []protocol.Item
+	for _, it := range items {
+		title := strings.ToLower(it.Title)
+		all := true
+		for _, w := range words {
+			if !strings.Contains(title, w) {
+				all = false
+				break
+			}
+		}
+		if all {
+			kept = append(kept, it)
+		}
+	}
+	return kept
 }
 
 // cachedApps reads the rows bin/swoop cached at startup. Without the cache

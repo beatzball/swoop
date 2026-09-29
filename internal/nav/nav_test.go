@@ -113,10 +113,57 @@ func TestEscFromActionsReturnsToTheViewBelow(t *testing.T) {
 }
 
 func TestChangeReloadsEverywhere(t *testing.T) {
-	for _, st := range []*State{{}, {Stack: []Frame{{Kind: "view", View: "x"}}}} {
-		if got := Change(st); got != "reload-sync(swoop-nav rows {q})" {
-			t.Fatalf("got %q", got)
-		}
+	// At the root fzf's matching goes back on with every keystroke, so
+	// deleting a keyword's space undoes the scope.
+	if got := Change(&State{}, nil); got != "enable-search+reload-sync(swoop-nav rows {q})" {
+		t.Fatalf("root: got %q", got)
+	}
+	st := &State{Stack: []Frame{{Kind: "view", View: "x"}}}
+	if got := Change(st, nil); got != "reload-sync(swoop-nav rows {q})" {
+		t.Fatalf("view: got %q", got)
+	}
+	// Inside a pane a keyword means nothing: cmd/swoop-nav never finds
+	// one there, and a stray one is ignored.
+	if got := Change(st, &Keyed{Rest: "ap", View: "ext/define/define", Title: "Define Word"}); got != "reload-sync(swoop-nav rows {q})" || len(st.Stack) != 1 {
+		t.Fatalf("view with a keyword: got %q, stack %+v", got, st.Stack)
+	}
+}
+
+func TestKeywordWithAViewOpensItWithTheRest(t *testing.T) {
+	st := &State{}
+	got := Change(st, &Keyed{Rest: "ap", View: "ext/define/define", Title: "Define Word"})
+	want := "change-query(ap)+disable-search+change-prompt(Define Word > )+reload-sync(swoop-nav rows {q})+first"
+	if got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+	// The frame keeps an empty bar, so Esc comes back to the whole root.
+	if len(st.Stack) != 1 || st.Stack[0] != (Frame{Kind: "view", View: "ext/define/define", Title: "Define Word", Pos: 1}) {
+		t.Fatalf("stack: %+v", st.Stack)
+	}
+	if got := Esc(st, ""); !strings.Contains(got, "enable-search") || !strings.Contains(got, "change-query()") {
+		t.Fatalf("Esc: got %q", got)
+	}
+}
+
+func TestKeywordWithoutAViewScopesTheRoot(t *testing.T) {
+	st := &State{}
+	if got := Change(st, &Keyed{Rest: "left"}); got != "disable-search+reload-sync(swoop-nav rows {q})" {
+		t.Fatalf("got %q", got)
+	}
+	if len(st.Stack) != 0 {
+		t.Fatalf("nothing is pushed: %+v", st.Stack)
+	}
+}
+
+func TestAIKeywordOpensTheAskPaneWithTheRest(t *testing.T) {
+	st := &State{}
+	got := Change(st, &Keyed{Rest: "why is the sky blue", View: AIView, Title: AITitle})
+	want := "change-query(why is the sky blue)+disable-search+change-prompt(Ask AI > )+change-preview-window(right,58%,border-left,wrap,follow)+reload-sync(swoop-nav rows)+first"
+	if got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+	if len(st.Stack) != 1 || st.Stack[0].Kind != "ai" || st.Stack[0].Query != "" {
+		t.Fatalf("stack: %+v", st.Stack)
 	}
 }
 
@@ -173,7 +220,7 @@ func TestTabOpensTheAIPaneAndKeepsTheText(t *testing.T) {
 	if got := Ask(st, "", 1); got != "ignore" {
 		t.Fatalf("Tab inside the pane does nothing: got %q", got)
 	}
-	if got := Change(st); got != "ignore" {
+	if got := Change(st, nil); got != "ignore" {
 		t.Fatalf("typing in the pane must not reload: got %q", got)
 	}
 }

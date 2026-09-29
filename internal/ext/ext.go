@@ -147,6 +147,53 @@ func Find(name string) (Extension, bool) {
 	return Extension{}, false
 }
 
+// KeywordFile names the file beside an extension's executable that holds
+// its keyword: one word on the first line, "def" for Define. A file, not
+// a line inside the script, because an extension may be a compiled
+// program with no comments to read, and because the launcher reads it
+// without running anything. It is read only when the root bar has a word
+// and a space in it, so a keystroke without one never touches the disk.
+const KeywordFile = "keyword"
+
+// Keyword returns the extension's keyword, or "" without one.
+func (e Extension) Keyword() string {
+	data, err := os.ReadFile(filepath.Join(e.Dir, KeywordFile))
+	if err != nil {
+		return ""
+	}
+	line, _, _ := strings.Cut(string(data), "\n")
+	fields := strings.Fields(line)
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
+}
+
+// SplitKeyword splits the root bar's text into a keyword and the rest.
+// The keyword is the first word, and only once a space follows it: "def
+// ap" is "def" and "ap", "def " is "def" and "". The word alone is not a
+// keyword yet, because it is also the start of an app's name: "calc" is
+// on its way to Calculator, "notes" may be Notes itself. Text that starts
+// with a space has no keyword.
+func SplitKeyword(query string) (kw, rest string, ok bool) {
+	kw, rest, found := strings.Cut(query, " ")
+	if !found || kw == "" {
+		return "", "", false
+	}
+	return kw, strings.TrimLeft(rest, " "), true
+}
+
+// ByKeyword returns the extension whose keyword is kw, ignoring case.
+// When two claim the same keyword, the first by name wins.
+func ByKeyword(exts []Extension, kw string) (Extension, bool) {
+	for _, e := range exts {
+		if k := e.Keyword(); k != "" && strings.EqualFold(k, kw) {
+			return e, true
+		}
+	}
+	return Extension{}, false
+}
+
 // Route splits an id of the form "ext/<name>/<id>" into its parts. ok is
 // false for any other id, which then belongs to a built-in source.
 func Route(id string) (name, rawID string, ok bool) {
