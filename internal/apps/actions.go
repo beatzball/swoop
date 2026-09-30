@@ -3,7 +3,7 @@ package apps
 import "github.com/beatzball/swoop/internal/protocol"
 
 // Actions are what an app row can do besides open. The ids are what
-// swoop-run gets as its second argument. Every one of these ends the
+// swoop-apps run gets as its second argument. Every one of these ends the
 // launcher, so all are kind "action"; a "refresh" action would run and
 // return to the list instead. RevealTitle is per OS, in the apps_*.go
 // files, because the file manager it opens is.

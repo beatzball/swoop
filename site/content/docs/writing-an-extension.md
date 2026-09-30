@@ -596,15 +596,54 @@ slow sixty times a second.
 - Cap a view's rows. Nobody reads the thousandth
 - `swoop-match` filters a few thousand rows in a few milliseconds. The
   cost is in making the rows, so make them once and cache them
+- A long list that does not depend on the bar, and does not change while
+  the launcher is open, can be listed once per launch: see below
 - A script is fine. When one grows, the bundled extensions keep a short shell
   script as the entry point and put the work in a compiled tool: `emoji`,
   `notes` and `tasks` do this
+
+## Files beside the program
+
+A few things the launcher must know before it runs anything. Each is a
+small file in the extension's folder, beside the program, with one word on
+its first line.
+
+| file | word | what it asks for |
+|---|---|---|
+| `keyword` | yours, `clock` | that word and a space in the bar asks only this extension. When its `list` is one row of kind `view`, the keyword opens that view |
+| `cache` | `run` | `list` runs once per launch, with no text, and the rows are kept until the launcher closes |
+| `icons` | `id` | each row's id is the path of a file, and the row shows that file's icon in place of the glyph. Needs `cache` |
+
+Without `cache`, the main list asks `list` again on every keystroke, with
+the text in the bar as `$2`: that is how the calculator answers `2+2`.
+With it, `list` is asked once, when the launcher opens, side by side with
+the other extensions, and typing only filters the rows kept. Use it for a
+list that is long and fixed for the moment: the bundled `apps` extension
+lists the applications this way.
+
+```sh
+echo run > ~/.config/swoop/extensions/clock/cache
+```
+
+A kept list is a list the launcher does not ask about again, so a change
+shows the next time the launcher opens. With a keyword typed, the scoped
+list still asks `list` with the text, each time.
+
+`icons` is for rows that stand for a file with a picture of its own. Print
+the glyph as the fallback: a terminal that draws no pictures shows it, and
+so does the first launch, while the pictures are made ready in the
+background. Today the launcher can take the icon of an application bundle
+on a Mac; any other file keeps its glyph.
+
+```sh
+echo id > ~/.config/swoop/extensions/clock/icons
+```
 
 ## Where to go next
 
 - [Issue #2](https://github.com/beatzball/swoop/issues/2): the contract,
   every verb, kind and file, and why each one was added
-- `extensions/` in the repository: fifteen working extensions. `system` is
+- `extensions/` in the repository: sixteen working extensions. `system` is
   the smallest; `define` is the smallest with a view; `files` has a
   `terminal` action
 - [Extensions](/docs/extensions): what ships, to see what each kind feels

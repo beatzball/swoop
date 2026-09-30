@@ -231,3 +231,54 @@ func mark(subtitle string) string {
 	}
 	return subtitle + "  \x1b[2m" + Mark + "\x1b[22m"
 }
+
+// Adopt gives the opens logged under an id with no extension prefix to
+// the extension whose prefix is given, "ext/<name>/": each such id gets
+// the prefix put before it. Before every row was an extension's, the
+// launcher's own rows were logged under bare ids; the extension that
+// lists those rows now calls this, so their counts and their place in
+// Used recently carry over. The log is rewritten only when there is
+// something to adopt, whole or not at all.
+func Adopt(prefix string) error {
+	path := Path()
+	if path == "" || prefix == "" {
+		return nil
+	}
+	entries, err := Load()
+	if err != nil {
+		return err
+	}
+	found := false
+	for i, e := range entries {
+		if !strings.HasPrefix(e.ID, "ext/") {
+			entries[i].ID = prefix + e.ID
+			found = true
+		}
+	}
+	if !found {
+		return nil
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".usage.*")
+	if err != nil {
+		return err
+	}
+	w := bufio.NewWriter(tmp)
+	for _, e := range entries {
+		line, _ := json.Marshal(e)
+		w.Write(append(line, '\n'))
+	}
+	err = w.Flush()
+	if cerr := tmp.Close(); err == nil {
+		err = cerr
+	}
+	if err == nil {
+		err = os.Chmod(tmp.Name(), 0o600)
+	}
+	if err == nil {
+		err = os.Rename(tmp.Name(), path)
+	}
+	if err != nil {
+		os.Remove(tmp.Name())
+	}
+	return err
+}

@@ -21,17 +21,13 @@
 package main
 
 import (
-	"bufio"
-	"bytes"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/beatzball/swoop/internal/apps"
 	"github.com/beatzball/swoop/internal/ext"
 	"github.com/beatzball/swoop/internal/match"
 	"github.com/beatzball/swoop/internal/nav"
@@ -44,12 +40,6 @@ const envState = "SWOOP_STATE"
 
 // recentCount is how many recent rows lead the root list.
 const recentCount = 5
-
-// envApps names the file bin/swoop filled at startup with the built-in
-// rows, pictures included. Root reloads read it instead of listing apps
-// again: they do not change while the launcher is open, and a reload
-// happens on every keystroke.
-const envApps = "SWOOP_APPS"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -262,10 +252,10 @@ func main() {
 // safe.
 func runCommand(statePath, kind, title string) func(target, action string) string {
 	return func(target, action string) string {
-		// The state file, fzf's socket beside it, the apps cache, and the
-		// land file.
+		// The state file, fzf's socket beside it, the rows kept for the
+		// run, and the land file.
 		run := "rm -f " + nav.ShellQuote(statePath) + " " + nav.ShellQuote(statePath+".sock")
-		for _, env := range []string{envApps, envLand} {
+		for _, env := range []string{envOnce, envLand} {
 			if f := os.Getenv(env); f != "" {
 				run += " " + nav.ShellQuote(f)
 			}
@@ -377,25 +367,21 @@ func send(id, text string) error {
 	return nil
 }
 
-// actionsFor is the menu for a row: the launcher's own three for an app,
-// the extension's answer for one of its rows, nothing for the rest.
+// actionsFor is the menu for a row: its extension's answer, or nothing.
 func actionsFor(id string) []protocol.Item {
 	if name, raw, ok := ext.Route(id); ok {
 		if e, found := ext.Find(name); found {
 			return e.Actions(raw)
 		}
-		return nil
-	}
-	if strings.HasSuffix(id, ".app") {
-		return apps.Actions()
 	}
 	return nil
 }
 
-// rows lists the current pane. At the root that is the cached built-in
-// rows plus whatever the extensions answer for the text, in one order by
-// title, so a calculator's row for "2+2" sits in the same list as the apps;
-// with a keyword first, only that extension's rows (see scoped).
+// rows lists the current pane. At the root that is the rows kept for the
+// run plus whatever the other extensions answer for the text (rootRows),
+// in one order by title, so a calculator's row for "2+2" sits in the same
+// list as the rest; with a keyword first, only that extension's rows (see
+// scoped).
 // Inside a view it is whatever the view's extension answers. In an actions
 // pane it is the target's actions, filtered by the text.
 func rows(st *nav.State, query string) ([]protocol.Item, error) {
@@ -408,11 +394,7 @@ func rows(st *nav.State, query string) ([]protocol.Item, error) {
 	}
 	query = strings.TrimSpace(query)
 	if top == nil {
-		items, err := cachedApps()
-		if err != nil {
-			return nil, err
-		}
-		items = append(items, ext.ListAll(ext.Discover(ext.Dirs()), query)...)
+		items := rootRows(query)
 		sort.SliceStable(items, func(i, j int) bool {
 			return strings.ToLower(items[i].Title) < strings.ToLower(items[j].Title)
 		})
@@ -485,8 +467,8 @@ func keyed(st *nav.State, query string) *nav.Keyed {
 // for the rest of the bar, and only those that match every word of it,
 // best first. fzf's matching is off here (see nav.Change), because the bar still
 // starts with the keyword, so the filtering is done here, the way the
-// actions pane does it. No apps and no recent group: the keyword asked
-// for one extension.
+// actions pane does it. No other rows and no recent group: the keyword
+// asked for one extension.
 func scoped(e ext.Extension, rest string) ([]protocol.Item, error) {
 	items, err := e.List(strings.TrimSpace(rest))
 	if err != nil {
@@ -500,29 +482,4 @@ func scoped(e ext.Extension, rest string) ([]protocol.Item, error) {
 // (internal/match).
 func matching(items []protocol.Item, query string) []protocol.Item {
 	return match.Items(match.New(query), items)
-}
-
-// cachedApps reads the rows bin/swoop cached at startup. Without the cache
-// (swoop-nav run by hand) it lists the apps directly, without pictures.
-func cachedApps() ([]protocol.Item, error) {
-	path := os.Getenv(envApps)
-	var data []byte
-	var err error
-	if path != "" {
-		data, err = os.ReadFile(path)
-	} else {
-		data, err = exec.Command("swoop-list").Output()
-	}
-	if err != nil {
-		return nil, err
-	}
-	var items []protocol.Item
-	sc := bufio.NewScanner(bytes.NewReader(data))
-	sc.Buffer(make([]byte, 0, 64<<10), 1<<20)
-	for sc.Scan() {
-		if it, err := protocol.Parse(sc.Text()); err == nil {
-			items = append(items, it)
-		}
-	}
-	return items, nil
 }

@@ -2,7 +2,7 @@
 
 // Package bundle reads what a macOS application bundle says about itself:
 // its name, version, identifier, and icon. It is imported by swoop-preview
-// only. swoop-list must stay lean, so the plist and icns decoders live here
+// only. swoop-apps list must stay lean, so the plist and icns decoders live here
 // and not in the apps package.
 package bundle
 

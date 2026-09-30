@@ -37,8 +37,8 @@ func run(target, action string) string {
 
 func TestEnterOnActionRowBecomesRun(t *testing.T) {
 	st := &State{}
-	got := Enter(st, "/Applications/Safari.app", "app", "Safari", "saf", 1, ext.Pane{}, run)
-	if got != "become:cleanup; swoop-run '/Applications/Safari.app'" {
+	got := Enter(st, "ext/files//tmp/report.pdf", "file", "report.pdf", "rep", 1, ext.Pane{}, run)
+	if got != "become:cleanup; swoop-run 'ext/files//tmp/report.pdf'" {
 		t.Fatalf("got %q", got)
 	}
 	if len(st.Stack) != 0 {
@@ -116,9 +116,9 @@ func TestEnterOnRefreshActionRunsAndReturnsToTheViewBelow(t *testing.T) {
 }
 
 func TestEnterOnExitingActionBecomesRunWithTheAction(t *testing.T) {
-	st := &State{Stack: []Frame{{Kind: "actions", View: "/Applications/Safari.app", Title: "Safari", Query: "saf", Pos: 1}}}
+	st := &State{Stack: []Frame{{Kind: "actions", View: "ext/files//tmp/report.pdf", Title: "report.pdf", Query: "rep", Pos: 1}}}
 	got := Enter(st, "reveal", "action", "Reveal in Finder", "", 2, ext.Pane{}, run)
-	if got != "become:cleanup; swoop-run '/Applications/Safari.app' 'reveal'" {
+	if got != "become:cleanup; swoop-run 'ext/files//tmp/report.pdf' 'reveal'" {
 		t.Fatalf("got %q", got)
 	}
 }
@@ -511,18 +511,18 @@ func TestTerminalActionPopsBackToThePaneBelow(t *testing.T) {
 func TestLandedPlacesTheCursorOnceAndUnbinds(t *testing.T) {
 	st := &State{Land: &Landing{Query: "de", Pos: 3, Refresh: true}}
 	// The row landed on may be a header, so a step follows the pos.
-	if got := Landed(st, "de", "app", 1); got != "pos(3)+transform(swoop-nav step down {2} 0)+refresh-preview+unbind(result-final)" {
+	if got := Landed(st, "de", "word", 1); got != "pos(3)+transform(swoop-nav step down {2} 0)+refresh-preview+unbind(result-final)" {
 		t.Fatalf("got %q", got)
 	}
 	if st.Land != nil {
 		t.Fatal("a landing happens once")
 	}
-	if got := Landed(st, "de", "app", 3); got != "unbind(result-final)" || st.Rest != 3 {
+	if got := Landed(st, "de", "word", 3); got != "unbind(result-final)" || st.Rest != 3 {
 		t.Fatalf("nothing pending: %q, rest %d", got, st.Rest)
 	}
 	// Typed since the chain: the user has moved on, the cursor stays.
 	st.Land = &Landing{Query: "de", Pos: 3}
-	if got := Landed(st, "dex", "app", 1); got != "unbind(result-final)" || st.Land != nil {
+	if got := Landed(st, "dex", "word", 1); got != "unbind(result-final)" || st.Land != nil {
 		t.Fatalf("typed after: %q %+v", got, st.Land)
 	}
 }

@@ -364,3 +364,54 @@ func TestBundledKeywords(t *testing.T) {
 		}
 	}
 }
+
+// The files beside an extension that ask the launcher for something: only
+// the first word of the first line counts, and icons need the cache.
+func TestOnceAndIconsReadTheFilesBesideTheExtension(t *testing.T) {
+	skipOnWindows(t)
+	dir := t.TempDir()
+	for _, n := range []string{"both", "cached", "icons", "plain", "other"} {
+		fake(t, dir, n, "exit 0\n")
+	}
+	write := func(name, file, body string) {
+		if err := os.WriteFile(filepath.Join(dir, name, file), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("both", CacheFile, "  run  extra\nignored\n")
+	write("both", IconsFile, "id\n")
+	write("cached", CacheFile, "run\n")
+	// Pictures go to the terminal once, at the start: no cache, no icons.
+	write("icons", IconsFile, "id\n")
+	// A word this version does not know asks for nothing.
+	write("other", CacheFile, "day\n")
+	write("other", IconsFile, "id\n")
+	want := map[string][2]bool{
+		"both": {true, true}, "cached": {true, false}, "icons": {false, false},
+		"plain": {false, false}, "other": {false, false},
+	}
+	for _, e := range Discover([]string{dir}) {
+		if got := [2]bool{e.Once(), e.IconsByID()}; got != want[e.Name] {
+			t.Errorf("%s: Once, IconsByID = %v, want %v", e.Name, got, want[e.Name])
+		}
+	}
+}
+
+// TestBundledOnce holds which of the repository's extensions are listed
+// once per launch, so a missing file is caught here and not as a slow
+// keystroke.
+func TestBundledOnce(t *testing.T) {
+	skipOnWindows(t)
+	var got []string
+	for _, e := range DiscoverAll([]string{filepath.Join("..", "..", "extensions")}) {
+		if e.Once() {
+			got = append(got, e.Name)
+			if !e.IconsByID() {
+				t.Errorf("%s: no icons file", e.Name)
+			}
+		}
+	}
+	if strings.Join(got, ",") != "apps" {
+		t.Fatalf("listed once: %v, want apps", got)
+	}
+}

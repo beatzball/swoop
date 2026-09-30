@@ -36,6 +36,28 @@ so here.
   longer knows either by name: Tab, alt+, (cmd+, in the frame), the prompt
   bar and the transcript's preview come from the `key` and `views` files
   beside them. Nothing on the screen changes.
+- **The apps are an extension.** The list of applications was the one part
+  of the list the launcher made itself. It is `extensions/apps` now, on the
+  same contract as the rest: it shows, opens, and offers its actions and
+  icons as before, and it can be turned off in Settings, under Extensions.
+  What you opened before still counts: the usage log's entries for apps are
+  moved to the extension's ids the first time the launcher opens. With no
+  extension at all, the launcher opens to an empty list and works.
+- **Two files an extension can put beside its program.** `cache`, holding
+  the word `run`, has its `list` asked once per launch, with no text, and
+  the rows kept until the launcher closes. `icons`, holding the word `id`,
+  says each row's id is the path of a file whose icon the row shows; it
+  needs `cache`. Both add to the contract and change nothing for an
+  extension without them.
+- The kept list and the other extensions are now listed side by side when
+  the launcher opens, so the first paint waits for the slowest one and not
+  for the apps and then the rest.
+
+### Removed
+
+- `swoop-list`. `swoop-apps list` prints the same lines. `swoop-run` and
+  `swoop-preview` take an extension's row only: an app's id is
+  `ext/apps/<path>`.
 
 ## [0.10.1] - 2026-09-30
 

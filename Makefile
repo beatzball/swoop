@@ -40,19 +40,19 @@ e2e: build
 	scripts/launcher-test
 
 bench: build
-	hyperfine --warmup 5 -N 'bin/swoop-list'
-	hyperfine --warmup 5 'bin/swoop-list | fzf --filter saf --delimiter "\t" --with-nth "{3} {4}" --nth 1'
-	hyperfine --warmup 5 -N 'bin/swoop-preview /Applications/Safari.app'
-	hyperfine --warmup 5 'bin/swoop-list | bin/swoop-icons -out /dev/null'
+	hyperfine --warmup 5 -N 'bin/swoop-apps list'
+	hyperfine --warmup 5 'bin/swoop-apps list | fzf --filter saf --delimiter "\t" --with-nth "{3} {4}" --nth 1'
+	SWOOP_EXTENSIONS=extensions hyperfine --warmup 5 -N 'bin/swoop-preview ext/apps//Applications/Safari.app'
+	hyperfine --warmup 5 'bin/swoop-apps list | bin/swoop-icons -out /dev/null'
 	SWOOP_EXTENSIONS=extensions hyperfine --warmup 5 -N 'extensions/define/define view define de'
 	hyperfine --warmup 5 -N 'bin/swoop-dict swoop'
-	SWOOP_EXTENSIONS=extensions hyperfine --warmup 5 -N 'bin/swoop-nav rows 2+2'
+	SWOOP_EXTENSIONS=extensions hyperfine --warmup 5 -N 'bin/swoop-nav rows' 'bin/swoop-nav rows 2+2'
 	hyperfine --warmup 5 -N 'bin/swoop-clipd list'
 	hyperfine --warmup 5 -N 'bin/swoop-emoji list' 'bin/swoop-emoji view emoji rocket'
 	hyperfine --warmup 5 -N 'bin/swoop-snippets list'
 	hyperfine --warmup 5 -N 'bin/swoop-notes view notes' 'bin/swoop-notes view notes word'
 	hyperfine --warmup 5 -N 'bin/swoop-tasks list'
-	hyperfine --warmup 5 'bin/swoop-list | bin/swoop-match saf'
+	hyperfine --warmup 5 'bin/swoop-apps list | bin/swoop-match saf'
 	go test ./internal/match -run '^$$' -bench .
 
 clean:

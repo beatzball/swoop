@@ -702,12 +702,12 @@ type Keyed struct {
 
 // Change decides what typing does: ask for new rows, everywhere. Inside a
 // pane the extension filters, or the launcher does for an actions pane. At
-// the root the apps come from the cache and the extensions are asked with
-// the text, which is how a calculator row appears for "2+2" while fzf
-// keeps matching the apps itself. Inside a pane the cursor goes to the
-// first row, as it does at the root, where fzf's own matching moves it.
-// In a pane whose bar is a prompt the text is being written to be sent,
-// and the list does not change under it.
+// the root the rows kept for the run come from their file and the other
+// extensions are asked with the text, which is how a calculator row appears
+// for "2+2" while fzf keeps matching the kept rows itself. Inside a pane the
+// cursor goes to the first row, as it does at the root, where fzf's own
+// matching moves it. In a pane whose bar is a prompt the text is being
+// written to be sent, and the list does not change under it.
 //
 // A keyword at the root, k not nil, scopes the bar to one extension.
 // When it names a view, the view opens as if Enter had been pressed on

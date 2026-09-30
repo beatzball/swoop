@@ -78,10 +78,10 @@ def down_to(ln, text, what, most=10):
 class Launcher:
     """One swoop in a pseudo-terminal."""
 
-    def __init__(self, env, cols=120, rows=30):
+    def __init__(self, env, cols=120, rows=30, script=None):
         self.pid, self.fd = pty.fork()
         if self.pid == 0:
-            os.execvpe(os.path.join(ROOT, "bin", "swoop"), ["swoop"], env)
+            os.execvpe(script or os.path.join(ROOT, "bin", "swoop"), ["swoop"], env)
         import fcntl
         import struct
         import termios
@@ -266,7 +266,7 @@ class Launcher:
 def main():
     if not shutil.which("fzf"):
         fail("fzf is not on PATH")
-    for tool in ("swoop-nav", "swoop-ai", "swoop-list", "swoop-icons"):
+    for tool in ("swoop-nav", "swoop-ai", "swoop-apps", "swoop-icons"):
         if not os.path.exists(os.path.join(ROOT, "bin", tool)):
             fail(f"bin/{tool} is not built; run make build")
 
@@ -353,6 +353,22 @@ esac
     opened = os.path.join(tmp, "opened")
     for name in ("open", "xdg-open"):
         write_exe(os.path.join(fakebin, name), f"""#!/usr/bin/env bash
+printf '%s\\n' "$@" > '{opened}'
+""")
+
+    # A fake application, for the apps extension: a bundle in the home's
+    # Applications on a Mac, a .desktop file in the data home on Linux.
+    # Its name is in no other row, and no other step's text matches it.
+    # A fake gio beside the fake open, which is how Linux launches one.
+    if sys.platform == "darwin":
+        fake_app = os.path.join(home, "Applications", "Quokka.app")
+        os.makedirs(fake_app)
+    else:
+        fake_app = os.path.join(home, ".data", "applications", "quokka.desktop")
+        os.makedirs(os.path.dirname(fake_app))
+        with open(fake_app, "w") as f:
+            f.write("[Desktop Entry]\nType=Application\nName=Quokka\nExec=true\n")
+    write_exe(os.path.join(fakebin, "gio"), f"""#!/usr/bin/env bash
 printf '%s\\n' "$@" > '{opened}'
 """)
 
@@ -1060,6 +1076,85 @@ esac
                 ninth.kill()
         if sys.platform == "darwin":
             check("reminders", reminders)
+
+        # 15. the apps are an extension: its row, its actions, Enter opens
+        # it and the open is logged under the extension's id; an open
+        # logged under the bare path, from before, still puts the app in
+        # Used recently; turned off, its rows are gone
+        def apps():
+            usage_log = os.path.join(home, ".state", "swoop", "usage.jsonl")
+            if os.path.exists(opened):
+                os.remove(opened)
+            a = Launcher(env)
+            a.key = key
+            try:
+                a.wait_state(lambda s: s["totalCount"] > 3, what="the launcher's list")
+                a.press("quokka", lambda s: s["query"] == "quokka" and s["matchCount"] == 1 and "Quokka" in cur(s), what="the fake app's row")
+                a.press("\x0b", lambda s: s["totalCount"] == 3 and has(s, "Open") and has(s, "Copy path"), screen=r"Quokka actions > ", what="the app's three actions")
+                a.press("\x1b", lambda s: s["query"] == "quokka" and "Quokka" in cur(s), what="the app's row again after Esc")
+                a.send("\r")
+                code = a.wait_exit()
+                if not os.path.exists(opened):
+                    fail(f"the app was not opened (exit {code})", a.buf)
+                with open(opened) as f:
+                    if fake_app not in f.read().splitlines():
+                        fail("the app's run did not get its path", a.buf)
+                with open(usage_log) as f:
+                    if "ext/apps/" + fake_app not in f.read():
+                        fail("the usage log does not name the app under its extension", "")
+            finally:
+                a.kill()
+            # The log as an older version left it: one open, the bare path.
+            with open(usage_log, "w") as f:
+                f.write(json.dumps({"t": datetime.datetime.now().astimezone().isoformat(), "id": fake_app, "kind": "app", "title": "Quokka"}) + "\n")
+            b = Launcher(env)
+            b.key = key
+            try:
+                st = b.wait_state(lambda s: s["totalCount"] > 3 and s.get("current"), what="the launcher's list")
+                if "Quokka" not in cur(st) or "recent" not in cur(st):
+                    fail(f"the app opened before the change should lead, marked: {cur(st)!r}", b.buf)
+            finally:
+                b.kill()
+            with open(config) as f:
+                saved = f.read()
+            with open(config, "w") as f:
+                f.write("".join(l for l in saved.splitlines(True) if not l.startswith("off")) + "off = apps\n")
+            c = Launcher(env)
+            c.key = key
+            try:
+                c.wait_state(lambda s: s["totalCount"] > 3, what="the launcher's list")
+                c.press("quokka", lambda s: s["query"] == "quokka" and s["matchCount"] == 0, what="no app row with apps turned off")
+            finally:
+                c.kill()
+                with open(config, "w") as f:
+                    f.write(saved)
+        check("apps: an extension, with its actions, its history, and off", apps)
+
+        # 16. the toolkit alone: a copy of bin/swoop beside an empty
+        # extensions folder, and no extension anywhere else. An empty
+        # list and an empty bar; typing works; Esc closes with no error
+        def bare():
+            root = os.path.join(tmp, "bare")
+            os.makedirs(os.path.join(root, "bin"))
+            os.makedirs(os.path.join(root, "extensions"))
+            os.makedirs(os.path.join(root, "config"))
+            script = os.path.join(root, "bin", "swoop")
+            shutil.copy(os.path.join(ROOT, "bin", "swoop"), script)
+            d = Launcher(dict(env, SWOOP_EXTENSIONS=os.path.join(root, "extensions"), XDG_CONFIG_HOME=os.path.join(root, "config")), script=script)
+            d.key = key
+            try:
+                d.wait_state(lambda s: s["totalCount"] == 0 and s["query"] == "" and not s.get("current"), what="an empty list and an empty bar")
+                d.press("x", lambda s: s["query"] == "x" and s["totalCount"] == 0, what="the letter in the bar, and still no rows")
+                d.press("\x1b", lambda s: s["query"] == "", what="the bar cleared")
+                d.send("\x1b")
+                code = d.wait_exit()
+                if code != 0:
+                    fail(f"the empty launcher exited {code}", d.buf)
+                if "swoop-nav:" in d.buf or "swoop:" in d.buf:
+                    fail("the empty launcher printed an error", d.buf)
+            finally:
+                d.kill()
+        check("no extensions: an empty launcher that works", bare)
     finally:
         L.kill()
         # The worker may still be around on a fast failure.

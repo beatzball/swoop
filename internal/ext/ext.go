@@ -195,7 +195,8 @@ func ByKeyword(exts []Extension, kw string) (Extension, bool) {
 }
 
 // Route splits an id of the form "ext/<name>/<id>" into its parts. ok is
-// false for any other id, which then belongs to a built-in source.
+// false for any other id, which is then nobody's: every row is an
+// extension's.
 func Route(id string) (name, rawID string, ok bool) {
 	rest, found := strings.CutPrefix(id, Prefix)
 	if !found {

@@ -468,6 +468,14 @@ views    ask bar=prompt preview=wrap,follow   # what that view's pane is like
   percent, `wrap` for prose, `follow` to keep the end of a growing text in
   view. It holds while the pane is open
 
+Two more files beside the program are for a long list that does not change
+while the launcher is open. `cache`, holding the word `run`, has `list`
+asked once per launch and the rows kept for the run, instead of on every
+keystroke. `icons`, holding the word `id`, says each row's id is the path
+of a file, and the row shows that file's icon in place of its glyph; it
+needs `cache`. `extensions/apps` uses both: the apps are an extension like
+the rest, and can be turned off in Settings.
+
 A result line is five fields separated by tabs. Only the last three are shown:
 
 ```
