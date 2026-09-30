@@ -49,6 +49,10 @@ type choice struct {
 	value string // what goes in the file
 	title string
 	note  string
+	// typed marks a row the setting made from the text in the bar. The
+	// pane always shows it: its title need not repeat that text, and its
+	// note is free to say anything (#160).
+	typed bool
 }
 
 var all = []setting{
@@ -107,7 +111,7 @@ var all = []setting{
 				{value: "https://api.groq.com/openai/v1", title: "Groq", note: "fast hosted models"},
 			}
 			if q := strings.TrimSpace(query); strings.HasPrefix(q, "http") {
-				cs = append([]choice{{value: q, title: q, note: "what you typed"}}, cs...)
+				cs = append([]choice{{value: q, title: q, note: "what you typed", typed: true}}, cs...)
 			}
 			return cs
 		},
@@ -124,7 +128,7 @@ var all = []setting{
 		choices: func(query string) []choice {
 			cs := []choice{{value: "", title: "None", note: "use OPENAI_API_KEY from the environment, if any"}}
 			if q := strings.TrimSpace(query); len(q) >= 8 {
-				cs = append([]choice{{value: q, title: "Use what you typed", note: strconv.Itoa(len(q)) + " characters"}}, cs...)
+				cs = append([]choice{{value: q, title: "Use what you typed", note: strconv.Itoa(len(q)) + " characters", typed: true}}, cs...)
 			}
 			return cs
 		},
@@ -301,7 +305,7 @@ func rows(id, query string) ([]protocol.Item, error) {
 		// The pane's own matching is off inside a view, so the choices
 		// filter on what was typed themselves; a row the setting made
 		// from the typed text is always shown.
-		if query != "" && c.note != "what you typed" && !strings.Contains(strings.ToLower(c.title), strings.ToLower(query)) {
+		if query != "" && !c.typed && !strings.Contains(strings.ToLower(c.title), strings.ToLower(query)) {
 			continue
 		}
 		note := c.note
@@ -394,7 +398,7 @@ func hotkeyChoices(query string) []choice {
 				return cs
 			}
 		}
-		cs = append([]choice{{value: q, title: q, note: "what you typed"}}, cs...)
+		cs = append([]choice{{value: q, title: q, note: "what you typed", typed: true}}, cs...)
 	}
 	return cs
 }
@@ -463,7 +467,7 @@ func editorChoices(query string) []choice {
 		}
 	}
 	if typed != "" && onPath(typed) {
-		cs = append([]choice{{value: typed, title: typed, note: "what you typed"}}, cs...)
+		cs = append([]choice{{value: typed, title: typed, note: "what you typed", typed: true}}, cs...)
 	}
 	return cs
 }
@@ -473,7 +477,7 @@ func aiValue() string { return models.Current() }
 func aiChoices(query string) []choice {
 	var cs []choice
 	for _, m := range models.Choices(query) {
-		cs = append(cs, choice{value: m.Value, title: m.Title, note: m.Note})
+		cs = append(cs, choice{value: m.Value, title: m.Title, note: m.Note, typed: m.Typed})
 	}
 	return cs
 }

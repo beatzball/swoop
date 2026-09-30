@@ -17,11 +17,13 @@ import (
 )
 
 // Choice is one thing to pick: the value the ai setting takes, a title,
-// and a note for the subtitle.
+// and a note for the subtitle. Typed marks the one made from the bar's
+// text, which a pane shows whatever its own filter says.
 type Choice struct {
 	Value string
 	Title string
 	Note  string
+	Typed bool
 }
 
 // Choices lists what is actually here: claude and codex when on PATH
@@ -32,7 +34,7 @@ type Choice struct {
 func Choices(query string) []Choice {
 	var cs []Choice
 	if q := strings.TrimSpace(query); strings.HasPrefix(q, "openai:") && len(q) > len("openai:") {
-		cs = append(cs, Choice{Value: q, Title: q, Note: "what you typed"})
+		cs = append(cs, Choice{Value: q, Title: q, Note: "what you typed", Typed: true})
 	}
 	for _, tool := range []struct{ name, note, missing string }{
 		{"claude", "claude -p, streamed; searches the web when that is on", "not installed"},
