@@ -359,7 +359,9 @@ Type `settings` and press Enter, or cmd+, in the frame (alt+, in a
 terminal). One row per setting, the current value beside it; Enter on a row
 to change it: the hotkey, the preview width, the AI model, whether the model
 may search the web, the editor notes and tasks open in, the day the week starts on, what
-draws the transcript. Extensions lists every
+draws the transcript. Typing filters the rows by words, in any order, in a
+title or a value: `key api` finds API key, `nvim` finds Editor when that is
+the editor. Extensions lists every
 extension with a box for on or off; Enter turns one off, and its rows leave
 the root until you turn it back on (`off = reminders, tasks` in the file;
 Settings itself cannot be turned off). Every value is one line in

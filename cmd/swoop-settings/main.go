@@ -42,6 +42,9 @@ type setting struct {
 	title   string
 	icon    string
 	explain string
+	// words are extra words the filter matches, never shown: what a person
+	// types for this row that neither its title nor its value holds.
+	words   string
 	value   func() string // the subtitle: the current value, in words
 	choices func(query string) []choice
 }
@@ -95,7 +98,7 @@ var all = []setting{
 		},
 	},
 	{
-		key: settings.AIURL, title: "API URL", icon: "󰖟",
+		key: settings.AIURL, title: "API URL", icon: "󰖟", words: "ai",
 		explain: "Where openai:<model> and lmstudio:<model> send their requests: the base\nURL ending in /v1. OpenAI's own, LM Studio's, or any server with that\nAPI: OpenRouter, Groq, vLLM. Type one to use it.",
 		value: func() string {
 			if v := settings.Get(settings.AIURL, ""); v != "" {
@@ -118,7 +121,7 @@ var all = []setting{
 		},
 	},
 	{
-		key: settings.AIKey, title: "API key", icon: "󰌆",
+		key: settings.AIKey, title: "API key", icon: "󰌆", words: "ai",
 		explain: "The key for the API URL. Type it in the bar and press Enter on the row\nthat repeats it. It is kept in the settings file, mode 600, yours\nalone; OPENAI_API_KEY in the environment is used when this is empty.",
 		value: func() string {
 			if v := settings.Get(settings.AIKey, ""); v != "" {
@@ -286,22 +289,44 @@ func view(id, query string) error {
 	return protocol.Write(os.Stdout, items)
 }
 
+// matches reports whether every word of the query is in one of the texts,
+// whatever the case and the order: "key api" finds API key, and "nvim"
+// finds the Editor row whose value is nvim (#196). A word must sit inside
+// one text; it cannot run from the end of one into the next. An empty
+// query matches everything.
+func matches(query string, texts ...string) bool {
+	for i, t := range texts {
+		texts[i] = strings.ToLower(t)
+	}
+	for _, word := range strings.Fields(strings.ToLower(query)) {
+		if !slices.ContainsFunc(texts, func(t string) bool { return strings.Contains(t, word) }) {
+			return false
+		}
+	}
+	return true
+}
+
 // rows are the pane's rows: the settings, the extensions, or one
-// setting's choices. The query filters the settings by title; for choices
-// it may also be a value of the user's own, which the setting decides.
+// setting's choices. The query filters each of them by words, in the
+// title or the subtitle; for choices it may also be a value of the user's
+// own, which the setting decides.
 func rows(id, query string) ([]protocol.Item, error) {
 	if id == "settings" {
 		var items []protocol.Item
 		for _, s := range all {
-			if query != "" && !strings.Contains(strings.ToLower(s.title), strings.ToLower(query)) {
+			value := s.value()
+			if !matches(query, s.title, value, s.words) {
 				continue
 			}
-			items = append(items, protocol.Item{ID: s.key, Kind: "view", Icon: s.icon, Title: s.title, Subtitle: s.value()})
+			items = append(items, protocol.Item{ID: s.key, Kind: "view", Icon: s.icon, Title: s.title, Subtitle: value})
 		}
-		if query == "" || strings.Contains("extensions", strings.ToLower(query)) {
-			items = append(items, protocol.Item{ID: extensionsID, Kind: "view", Icon: "󰏗", Title: "Extensions", Subtitle: extensionsValue()})
+		if value := extensionsValue(); matches(query, "Extensions", value) {
+			items = append(items, protocol.Item{ID: extensionsID, Kind: "view", Icon: "󰏗", Title: "Extensions", Subtitle: value})
 		}
-		if query == "" || strings.Contains("open the config folder", strings.ToLower(query)) {
+		// The folder row matches on its title alone. Its subtitle is a
+		// path, not a value, and the letters of a home folder's name would
+		// bring the row up for words that have nothing to do with it.
+		if matches(query, "Open the config folder") {
 			items = append(items, protocol.Item{ID: folderID, Kind: "command", Icon: "󰉋", Title: "Open the config folder", Subtitle: settings.Dir()})
 		}
 		return items, nil
@@ -316,15 +341,16 @@ func rows(id, query string) ([]protocol.Item, error) {
 	current := settings.Get(s.key, "")
 	var items []protocol.Item
 	for _, c := range s.choices(query) {
-		// The pane's own matching is off inside a view, so the choices
-		// filter on what was typed themselves; a row the setting made
-		// from the typed text is always shown.
-		if query != "" && !c.typed && !strings.Contains(strings.ToLower(c.title), strings.ToLower(query)) {
-			continue
-		}
 		note := c.note
 		if c.value == current || (current == "" && c.value == "" && s.key != settings.AI) {
 			note = strings.TrimSpace("current  " + note)
+		}
+		// The pane's own matching is off inside a view, so the choices
+		// filter on what was typed themselves, by words in the title or
+		// the note; a row the setting made from the typed text is always
+		// shown.
+		if !c.typed && !matches(query, c.title, note) {
+			continue
 		}
 		// Kind refresh: Enter sets the value and returns to the Settings
 		// pane, reloaded, so the subtitle shows the new value.
@@ -515,16 +541,13 @@ func extensionsValue() string {
 }
 
 // extensionRows is the Extensions view: every extension found, on or off,
-// by name, filtered by name on what was typed. Each row is kind toggle:
+// by name, filtered on what was typed by words in the name or the
+// subtitle. Each row is kind toggle:
 // Enter flips it and the view stays, reloaded, with the new mark.
 func extensionRows(query string) []protocol.Item {
 	off := settings.OffList()
-	q := strings.ToLower(query)
 	var items []protocol.Item
 	for _, e := range ext.DiscoverAll(ext.Dirs()) {
-		if q != "" && !strings.Contains(strings.ToLower(e.Name), q) {
-			continue
-		}
 		it := protocol.Item{ID: extensionPrefix + e.Name, Kind: "toggle", Icon: iconOn, Title: e.Name, Subtitle: purpose(e.Name, e.Exe)}
 		switch {
 		case e.Name == settings.AlwaysOn:
@@ -534,6 +557,9 @@ func extensionRows(query string) []protocol.Item {
 			// the glyph.
 			it.Icon = iconOff
 			it.Subtitle = strings.TrimSuffix("off · "+it.Subtitle, " · ")
+		}
+		if !matches(query, it.Title, it.Subtitle) {
+			continue
 		}
 		items = append(items, it)
 	}

@@ -115,8 +115,19 @@ func TestExtensionsTurnOnAndOff(t *testing.T) {
 	if got := settings.Get(settings.Off, ""); got != "alpha, gamma" {
 		t.Fatalf("off = %q", got)
 	}
-	if got := marks("a"); got != "alpha=off:off · the first one|beta=on:wraps in the middle|gamma=off:off" {
-		t.Fatalf("after two flips, filtered by a: %s", got)
+	if got := marks("mm"); got != "gamma=off:off" {
+		t.Fatalf("after two flips, filtered by name: %s", got)
+	}
+	// The filter takes words in any order, in the name or the subtitle
+	// (#196): "off" is only ever in a subtitle.
+	if got := marks("off"); got != "alpha=off:off · the first one|gamma=off:off" {
+		t.Fatalf("filtered by off: %s", got)
+	}
+	if got := marks("FIRST alp"); got != "alpha=off:off · the first one" {
+		t.Fatalf("filtered by two words: %s", got)
+	}
+	if got := marks("alpha beta"); got != "" {
+		t.Fatalf("a word no row has: %s", got)
 	}
 	if got := extensionsValue(); got != "2 on, 2 off" {
 		t.Fatalf("the Extensions row: %q", got)
@@ -266,6 +277,114 @@ func TestTypedValueRowIsShown(t *testing.T) {
 		}
 		if !found {
 			t.Errorf("%s: typed %q, and no row sets it: %+v", s.key, text, items)
+		}
+	}
+}
+
+// The filter splits the bar's text on spaces, and a row matches when
+// every word is in one of its texts, whatever the case and the order
+// (#196).
+func TestMatches(t *testing.T) {
+	for _, c := range []struct {
+		query string
+		texts []string
+		want  bool
+	}{
+		{"", []string{"API key"}, true},
+		{"   ", []string{"API key"}, true},
+		{"api key", []string{"API key", "not set"}, true},
+		{"key api", []string{"API key", "not set"}, true},
+		{"KEY  Api", []string{"API key", "not set"}, true},
+		{"ai key", []string{"API key", "not set"}, false},
+		{"ai key", []string{"API key", "not set", "ai"}, true},
+		{"nvim", []string{"Editor", "nvim"}, true},
+		{"edit nv", []string{"Editor", "nvim"}, true},
+		{"editor vim emacs", []string{"Editor", "nvim"}, false},
+		// A word sits inside one text, not across two.
+		{"ornv", []string{"Editor", "nvim"}, false},
+	} {
+		if got := matches(c.query, c.texts...); got != c.want {
+			t.Errorf("matches(%q, %q) = %v, want %v", c.query, c.texts, got, c.want)
+		}
+	}
+}
+
+// The rows of the Settings view for the words a person types (#196): the
+// API rows answer to "ai" though neither title holds it, and a row is
+// found by its value.
+func TestSettingsFilterByWords(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("SWOOP_EXTENSIONS", t.TempDir())
+	t.Setenv("EDITOR", "")
+	if err := run("editor=nvim"); err != nil {
+		t.Fatal(err)
+	}
+	titles := func(id, query string) string {
+		t.Helper()
+		items, err := rows(id, query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, it := range items {
+			out = append(out, it.Title)
+		}
+		return strings.Join(out, "|")
+	}
+	for query, want := range map[string]string{
+		"ai key":    "API key",
+		"key api":   "API key",
+		"api key":   "API key",
+		"ai url":    "API URL",
+		"ai":        "AI model|Web search for AI|API URL|API key",
+		"nvim":      "Editor",
+		"NVIM edit": "Editor",
+		"folder":    "Open the config folder",
+		"ext":       "Extensions",
+		"key nvim":  "",
+	} {
+		if got := titles("settings", query); got != want {
+			t.Errorf("settings, %q: %q, want %q", query, got, want)
+		}
+	}
+	if got := titles("settings", ""); strings.Count(got, "|") != len(all)+1 {
+		t.Errorf("an empty bar shows every row: %q", got)
+	}
+}
+
+// A choices pane filters by words the same way, in the title or the note,
+// and the row made from the typed text still shows (#160, #196).
+func TestChoicesFilterByWords(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	titles := func(id, query string) string {
+		t.Helper()
+		items, err := rows(id, query)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, it := range items {
+			out = append(out, it.Title)
+		}
+		return strings.Join(out, "|")
+	}
+	for _, c := range []struct{ id, query, want string }{
+		// Default's note names LM Studio too.
+		{settings.AIURL, "studio lm", "Default|LM Studio"},
+		// "local" is only in a note.
+		{settings.AIURL, "LOCAL studio", "LM Studio"},
+		{settings.AIURL, "local", "LM Studio"},
+		{settings.AIURL, "MODELS router", "OpenRouter"},
+		{settings.AIURL, "groq studio", ""},
+		{settings.Hotkey, "space ctrl alt", "ctrl+alt+space"},
+		{settings.Week, "saturday", "Sunday"},
+		// The typed row shows though no word of the bar is in it, and the
+		// other rows still filter.
+		{settings.AIKey, "sk-test-0123456789", "Use what you typed"},
+		{settings.AIURL, "http://localhost:8080/v1", "http://localhost:8080/v1"},
+	} {
+		if got := titles(c.id, c.query); got != c.want {
+			t.Errorf("%s, %q: %q, want %q", c.id, c.query, got, c.want)
 		}
 	}
 }

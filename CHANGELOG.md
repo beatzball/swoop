@@ -22,6 +22,11 @@ so here.
   where This week ends. Monday is the default.
 - **A `group` row kind for extensions.** A row of kind `group` is a
   header: Enter on it does nothing.
+- **Settings filters by words.** The text in the bar is split on spaces,
+  and a row shows when every word is in its title or in the value beside
+  it, in any order: `key api` finds API key, and `nvim` finds Editor when
+  that is the editor. `ai` finds the API URL and API key rows too.
+  Extensions and each setting's choices filter the same way.
 
 ### Fixed
 
