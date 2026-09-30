@@ -7,9 +7,9 @@ name: site
 on:
   push:
     branches: [main]
-    paths: ['site/**', '.github/workflows/site.yml']
+    paths: ['site/**', 'VERSION', '.github/workflows/site.yml']
   pull_request:
-    paths: ['site/**', '.github/workflows/site.yml']
+    paths: ['site/**', 'VERSION', '.github/workflows/site.yml']
 
 # Actions are pinned to a commit, with the tag in a comment, because a tag can
 # be moved and a commit cannot. Nothing here writes to the repository.
@@ -50,7 +50,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
       - name: Build the image
-        run: docker build --build-arg GIT_SHA=${{ github.sha }} -t swoop-docs:ci site
+        run: docker build --build-arg GIT_SHA=${{ github.sha }} -t swoop-docs:ci -f site/Dockerfile .
       - name: Run it
         run: docker run -d --rm -p 8080:80 --name swoop-docs swoop-docs:ci
       - name: Probe it
@@ -83,8 +83,9 @@ jobs:
       #                         Coolify: the app, Webhooks, Deploy Webhook
       #   COOLIFY_API_TOKEN     a Coolify API token allowed to deploy
       #
-      # The Coolify application builds site/Dockerfile with Base
-      # Directory /site, and serves https://swoop.sh.
+      # The Coolify application builds site/Dockerfile from the repository
+      # root (Base Directory /, Dockerfile Location /site/Dockerfile), and
+      # serves https://swoop.sh.
       #
       # Until both are set this step says so and succeeds, so a push to
       # main is not red for want of a secret.

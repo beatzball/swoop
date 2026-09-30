@@ -1,5 +1,11 @@
 # Build the static site, then serve it with nginx.
-# Coolify: set Base Directory to /site and Dockerfile Location to /site/Dockerfile.
+#
+# Built from the REPOSITORY ROOT, not from site/: `docker build -f
+# site/Dockerfile .`, and in Coolify Base Directory `/` with Dockerfile
+# Location `/site/Dockerfile`. The root is the context so that the image
+# can read the commit from .git and the version from VERSION itself, and
+# not depend on a build argument the deployer may or may not pass. The
+# root .dockerignore keeps the context to site/, .git and VERSION.
 
 # Stage 1: Build
 FROM node:22-slim AS builder
@@ -7,10 +13,10 @@ FROM node:22-slim AS builder
 RUN corepack enable
 
 WORKDIR /app
-COPY package.json pnpm-lock.yaml ./
+COPY site/package.json site/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
-COPY . .
+COPY site/ .
 
 # Drop nitro's build manifest before it can be copied anywhere. `nitro build`
 # writes dist/static/nitro.json -- a build timestamp, the nitro version and an
@@ -36,20 +42,36 @@ RUN pnpm build && rm -f dist/static/nitro.json
 FROM nginx:alpine
 
 COPY --from=builder /app/dist/static /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+COPY site/nginx.conf /etc/nginx/conf.d/default.conf
 
-# Which commit is actually being served.
+# Which commit, and which version, is actually being served.
 #
 # A static site has no /api/health to ask, so bake the answer in. Without it a
 # post-deploy probe cannot tell the new container from the old one: it passes
 # against whatever is still running and a failed deploy looks green.
 #
-# Prefer an explicit --build-arg GIT_SHA; fall back to SOURCE_COMMIT, which
-# Coolify sets automatically on every deploy.
+# An explicit --build-arg GIT_SHA wins (CI passes it). Otherwise the commit
+# is read from the checkout's own .git: HEAD names a ref, the ref is a loose
+# file or a line in packed-refs. No git in this image, so a shell does it.
+# Coolify passed neither GIT_SHA nor SOURCE_COMMIT, which is why the site
+# once said "unknown".
 ARG GIT_SHA
-ARG SOURCE_COMMIT
-RUN printf '{"commit":"%s"}\n' "${GIT_SHA:-${SOURCE_COMMIT:-unknown}}" \
-      > /usr/share/nginx/html/version.json
+COPY .git /tmp/git
+COPY VERSION /tmp/VERSION
+RUN set -e; \
+    sha="$GIT_SHA"; \
+    if [ -z "$sha" ] && [ -f /tmp/git/HEAD ]; then \
+      head="$(cat /tmp/git/HEAD)"; \
+      case "$head" in \
+        ref:*) ref="${head#ref: }"; \
+               if [ -f "/tmp/git/$ref" ]; then sha="$(cat "/tmp/git/$ref")"; \
+               elif [ -f /tmp/git/packed-refs ]; then sha="$(grep " $ref\$" /tmp/git/packed-refs | cut -c1-40)"; fi ;; \
+        *) sha="$head" ;; \
+      esac; \
+    fi; \
+    printf '{"commit":"%s","version":"%s"}\n' "${sha:-unknown}" "$(tr -d '[:space:]' < /tmp/VERSION)" \
+      > /usr/share/nginx/html/version.json; \
+    rm -rf /tmp/git /tmp/VERSION
 
 EXPOSE 80
 
