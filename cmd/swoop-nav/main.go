@@ -8,6 +8,8 @@
 //	swoop-nav esc                     fzf: transform on Esc
 //	swoop-nav change                  fzf: transform on typing
 //	swoop-nav click [id kind title]   fzf: transform on a click on a row
+//	swoop-nav key name                fzf: transform on a key an extension claims
+//	swoop-nav keys [status]           those keys, for bin/swoop to bind; who has which
 //	swoop-nav landed [kind]           fzf: transform on result-final, once armed
 //	swoop-nav step up|down [kind [from [turned]]]
 //	                                  fzf: transform after a move of the cursor
@@ -51,13 +53,17 @@ const envApps = "SWOOP_APPS"
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|click|ai|settings|esc|change|landed|step|back|rows|window|divider ...")
+		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|click|key|keys|esc|change|landed|step|back|rows|window|divider ...")
 		os.Exit(2)
 	}
 	nav.PreviewPercent = settings.PreviewPercent()
 	if os.Args[1] == "window" {
 		// bin/swoop's --preview-window at start. No state needed.
-		fmt.Println(nav.Window(false))
+		fmt.Println(nav.Window(ext.Pane{}))
+		return
+	}
+	if os.Args[1] == "keys" {
+		keys(len(os.Args) > 2 && os.Args[2] == "status")
 		return
 	}
 	path := os.Getenv(envState)
@@ -84,7 +90,7 @@ func main() {
 	}
 
 	switch os.Args[1] {
-	case "enter", "actions", "click", "ai", "settings":
+	case "enter", "actions", "click", "key":
 		// These read the row under the cursor, or remember its number. A
 		// chain's cursor still to be placed is placed first, and the key
 		// done again there; see nav.LandEvent. A click is done again as
@@ -95,6 +101,14 @@ func main() {
 			again += " {1} {2} {4}"
 		case "click":
 			again = "swoop-nav enter {1} {2} {4}"
+		case "key":
+			// A key's name goes into a shell command as it is, so only
+			// the names an extension may claim get that far.
+			if !ext.ValidKey(arg(1)) {
+				fmt.Println("ignore")
+				return
+			}
+			again += " " + arg(1)
 		}
 		if acts := nav.Settle(st, query, again); acts != "" {
 			fmt.Println(acts)
@@ -130,36 +144,42 @@ func main() {
 			fmt.Println(nav.Actions(st, id, kind, title, query, pos))
 			break
 		}
-		if target, ok := nav.AISendTarget(st, id, query); ok {
-			// The Ask AI pane: send first, and only then clear the bar.
-			// A send that fails, because the last answer is still being
-			// written, leaves the text where it is.
-			send := exec.Command("swoop-ai", "send", target, query)
-			send.Stderr = os.Stderr
-			if err := send.Run(); err != nil {
+		if nav.Sends(st, id, query) {
+			// A pane whose bar is a prompt: send first, and only then
+			// clear the bar. A send that fails, because the last answer
+			// is still being written, leaves the text where it is.
+			if err := send(id, query); err != nil {
 				fmt.Println("ignore")
 				break
 			}
-			fmt.Println(nav.AfterSend(st))
+			fmt.Println(nav.AfterSend(st, landed(id), pos))
 			break
 		}
-		fmt.Println(nav.Enter(st, id, kind, title, query, pos, runCommand(path, kind, title)))
-	case "ai":
-		// With the ai extension turned off in Settings, Tab has no pane
-		// to open, and does nothing.
-		if name, _, _ := ext.Route(nav.AIView); !installed(name) {
+		var pane ext.Pane
+		if kind == "view" {
+			pane = paneOf(id)
+		}
+		fmt.Println(nav.Enter(st, id, kind, title, query, pos, pane, runCommand(path, kind, title)))
+	case "key":
+		// Among the extensions that are on: one turned off gives its key
+		// to the next that claims it, and with none the key does nothing.
+		e, claim, ok := ext.ByKey(ext.Discover(ext.Dirs()), arg(1))
+		if !ok {
 			fmt.Println("ignore")
 			return
 		}
-		fmt.Println(nav.Ask(st, query, pos))
-	case "settings":
-		fmt.Println(nav.Settings(st, query, pos))
+		fmt.Println(nav.Key(st, ext.Prefix+e.Name+"/"+claim.View, claim.Title, e.Pane(claim.View), query, pos))
 	case "divider":
 		// +5 gives the preview more, -5 gives the list more. The new
 		// width is saved first, so the next run opens the same way.
 		delta := 0
 		if len(os.Args) > 2 {
 			delta, _ = strconv.Atoi(os.Args[2])
+		}
+		// A pane with a width of its own does not show the user's.
+		if nav.OwnWidth(st) {
+			fmt.Println("ignore")
+			return
 		}
 		nav.PreviewPercent = settings.ClampPreview(nav.PreviewPercent + delta)
 		if err := settings.Set(settings.Preview, strconv.Itoa(nav.PreviewPercent)); err != nil {
@@ -309,10 +329,52 @@ func landed(ran string) string {
 	return id
 }
 
-// installed says whether the extension called name is there and on.
-func installed(name string) bool {
-	_, found := ext.Find(name)
-	return found
+// keys prints the keys the extensions claim, one per line, for bin/swoop
+// to bind at start. Every extension's, on or off: one turned on while the
+// launcher is open has its key at once, and a key whose extensions are
+// all off does nothing (see the key command). With status it prints who
+// has which instead, for `swoop status`.
+func keys(status bool) {
+	if !status {
+		for _, k := range ext.Keys(ext.DiscoverAll(ext.Dirs())) {
+			fmt.Println(k)
+		}
+		return
+	}
+	for _, line := range ext.KeyReport(ext.Discover(ext.Dirs())) {
+		fmt.Println("key:     " + line)
+	}
+}
+
+// paneOf is what the view row id's view says about its pane, in its
+// extension's views file.
+func paneOf(id string) ext.Pane {
+	name, raw, ok := ext.Route(id)
+	if !ok {
+		return ext.Pane{}
+	}
+	e, found := ext.Find(name)
+	if !found {
+		return ext.Pane{}
+	}
+	return e.Pane(raw)
+}
+
+// send hands the bar's text to the row id, through its extension.
+func send(id, text string) error {
+	name, raw, ok := ext.Route(id)
+	if !ok {
+		return fmt.Errorf("%q is not an extension's row", id)
+	}
+	e, found := ext.Find(name)
+	if !found {
+		return fmt.Errorf("extension %q is not installed", name)
+	}
+	if err := e.Send(raw, text); err != nil {
+		fmt.Fprintln(os.Stderr, "swoop-nav:", err)
+		return err
+	}
+	return nil
 }
 
 // actionsFor is the menu for a row: the launcher's own three for an app,
@@ -375,7 +437,7 @@ func rows(st *nav.State, query string) ([]protocol.Item, error) {
 	if !found {
 		return nil, fmt.Errorf("extension %q is not installed", name)
 	}
-	if top.Kind == "ai" {
+	if top.Pane.Prompt {
 		// The bar there is the prompt being written, not a filter.
 		query = ""
 	}
@@ -395,9 +457,9 @@ func scope(query string) (ext.Extension, string, bool) {
 }
 
 // keyed is what Change needs to know about a keyword at the root: the
-// text after it, and the extension's view row when its list is that one
-// row, which is what the keyword then opens. The Ask AI extension lists
-// nothing at the root; its keyword opens the pane Tab opens.
+// text after it, and the view the keyword opens: the one the extension's
+// key opens, when it claims one, since such an extension may list nothing
+// at the root; else its view row when its list is that one row.
 func keyed(st *nav.State, query string) *nav.Keyed {
 	if st.Top() != nil {
 		return nil
@@ -407,12 +469,14 @@ func keyed(st *nav.State, query string) *nav.Keyed {
 		return nil
 	}
 	k := &nav.Keyed{Rest: rest}
-	if name, _, _ := ext.Route(nav.AIView); e.Name == name {
-		k.View, k.Title = nav.AIView, nav.AITitle
-		return k
+	for _, c := range e.Claims() {
+		if ext.ValidKey(c.Key) {
+			k.View, k.Title, k.Pane = ext.Prefix+e.Name+"/"+c.View, c.Title, e.Pane(c.View)
+			return k
+		}
 	}
 	if items, err := e.List(""); err == nil && len(items) == 1 && items[0].Kind == "view" {
-		k.View, k.Title = items[0].ID, items[0].Title
+		k.View, k.Title, k.Pane = items[0].ID, items[0].Title, paneOf(items[0].ID)
 	}
 	return k
 }

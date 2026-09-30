@@ -17,6 +17,12 @@ newest first. Move to one to read it. ctrl-k on it offers Copy last answer,
 Copy conversation, and Delete. Esc brings the launcher back with the text you
 had before Tab.
 
+Tab is Ask AI's because the extension claims it, in a file beside it. Turn
+Ask AI off in [Settings](/docs/settings), under Extensions, and Tab is
+free for another extension to have. [Writing an
+Extension](/docs/writing-an-extension) shows how one claims a key and
+builds a pane like this one.
+
 ## Pick a model
 
 swoop does not know what a model is. It runs one command with the

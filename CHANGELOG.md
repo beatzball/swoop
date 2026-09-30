@@ -9,6 +9,34 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **An extension can claim a key.** A file called `key` beside the
+  program, one claim per line: the key, the view it opens, and the view's
+  title. The key opens that view from anywhere, as Enter on its row would.
+  The keys to claim are `tab`, `shift-tab`, `f1` to `f12`, and `alt-` with
+  a letter, a digit, `,`, `.` or `/`. When two extensions claim one key
+  the first by name has it, and `swoop status` lists who has which and
+  every claim that lost. An extension turned off gives its keys up: with
+  Ask AI off, Tab goes to the next extension that claims it.
+- **A view's bar can be a prompt.** `bar=prompt` on the view's line in a
+  file called `views`: typing does not filter or reload the rows, and
+  Enter runs the extension's new `send <id> <text>` verb with the row
+  under the cursor. Exit 0 clears the bar and lists the rows again, with
+  the cursor on the row named in `$SWOOP_LAND` if there is one; any other
+  exit leaves the text in the bar. A worker the extension leaves running
+  redraws the pane through fzf's socket, `$FZF_SOCK` and `$FZF_API_KEY`.
+- **A view can have a preview of its own.** `preview=` on its line in
+  `views`: a width in percent, `wrap`, `follow`. It holds while the view
+  is open.
+
+### Changed
+
+- **Ask AI and Settings are extensions like any other.** The launcher no
+  longer knows either by name: Tab, alt+, (cmd+, in the frame), the prompt
+  bar and the transcript's preview come from the `key` and `views` files
+  beside them. Nothing on the screen changes.
+
 ## [0.10.1] - 2026-09-30
 
 Every view matches the way the root does: a few letters in order are enough.

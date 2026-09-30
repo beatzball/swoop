@@ -302,6 +302,47 @@ esac
     # Its keyword, which scopes the root to its two rows.
     with open(os.path.join(ext_dir, "keyword"), "w") as f:
         f.write("fk\n")
+    # A second extension, with what the contract gives any extension and
+    # the launcher knows of none by name: a key of its own (alt-p, and Tab,
+    # which another extension has first), a view whose bar is a prompt,
+    # and a preview width for that view. Its send leaves a worker behind,
+    # which waits for the gate file, writes an answer, and asks fzf
+    # through its socket to list and draw again. It lists nothing at the
+    # root, so no step that reads the root sees it.
+    prompter_dir = os.path.join(tmp, "ext", "prompter")
+    os.makedirs(prompter_dir)
+    sent = os.path.join(tmp, "sent")
+    sends = os.path.join(tmp, "sends")
+    viewed = os.path.join(tmp, "viewed")
+    answered = os.path.join(tmp, "answered")
+    gate = os.path.join(tmp, "gate")
+    write_exe(os.path.join(prompter_dir, "prompter"), f"""#!/usr/bin/env bash
+# prompter: a pane that sends the text in the bar to a row.
+row() {{ printf '%s\\t%s\\t%s\\t%s\\t%s\\n' "$1" "$2" "$3" "$4" "$5"; }}
+case "$1" in
+  list) ;;
+  view)
+    echo "$3" >> '{viewed}'
+    row inbox box '' 'Prompter Inbox' "$(cat '{sent}' 2>/dev/null || echo 'nothing sent')"
+    row other box '' 'Prompter Other' "$(cat '{answered}' 2>/dev/null)" ;;
+  preview) echo "preview of $2, $FZF_PREVIEW_COLUMNS columns" ;;
+  send)
+    echo "$2 got $3" >> '{sends}'
+    [ "$3" != refuse ] || exit 1
+    echo "$2 got $3" > '{sent}'
+    echo other > "$SWOOP_LAND"
+    ( n=0
+      while [ ! -e '{gate}' ] && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n + 1)); done
+      echo "answer to $3" > '{answered}'
+      curl -s --unix-socket "$FZF_SOCK" -H "x-api-key: $FZF_API_KEY" \\
+        --data-binary 'reload(swoop-nav rows)+refresh-preview' http://fzf/
+    ) > /dev/null 2>&1 & ;;
+esac
+""")
+    with open(os.path.join(prompter_dir, "key"), "w") as f:
+        f.write("alt-p ask Prompter\ntab ask Prompter\n")
+    with open(os.path.join(prompter_dir, "views"), "w") as f:
+        f.write("ask bar=prompt preview=40%,wrap\n")
     # A quicklink with an argument, and a fake `open` (and xdg-open, for
     # Linux) ahead of the real one on PATH that records what it was asked
     # to open instead of opening it.
@@ -385,6 +426,35 @@ esac
     env.pop("SWOOP_SHELL_PID", None)
     env.pop("SWOOP_PASTE", None)
     config = os.path.join(home, ".config", "swoop", "config")
+
+    def flip_extension(L, config, name, want_off):
+        """Settings, Extensions: Enter on the row of the extension `name`
+        turns it off or on, and then back out to the root."""
+        row = f"extension/{name}\t"
+        L.press("\x1b,", lambda s: s["query"] == "" and has(s, "Extensions"), screen=r"Settings > ", what="the Settings pane")  # alt-,
+        L.press("ext", lambda s: s["query"] == "ext" and s["matchCount"] == 1 and "Extensions" in cur(s), what="the Extensions row")
+        L.press("\r", lambda s: s["query"] == "" and has(s, row), screen=r"Extensions > ", what="the Extensions pane")
+        # Its own name puts its row first, and for fake leaves it alone.
+        L.press(name, lambda s: s["query"] == name and row in cur(s) and (name != "fake" or s["matchCount"] == 1), what=f"the {name} extension's row")
+        # A toggle stays: the same pane, the bar cleared, the mark
+        # flipped on the row.
+        mark = "off" if want_off else "on"
+
+        def flipped(s):
+            rows = [m["text"] for m in s["matches"] if row in m["text"]]
+            return s["query"] == "" and rows and (("\toff" in rows[0]) == want_off)
+        L.press("\r", flipped, what=f"the {name} row showing {mark}")
+        with open(config) as f:
+            text = f.read()
+        if want_off != (f"off = {name}" in text):
+            fail(f"the config after turning {name} {mark}:\n{text}", L.buf)
+        L.press("\x1b", lambda s: s["query"] == "ext" and "Extensions" in cur(s), what="back in Settings")  # pops to Settings, 'ext' back in the bar
+        L.press("\x1b", lambda s: s["query"] == "" and has(s, "Extensions"), what="the bar cleared in Settings")  # clears 'ext'
+        # pops to the root. The wait is on the root's own rows, not
+        # an empty bar, which Settings had too: typed before the
+        # pop lands, "fake" is read as alt-f, or eaten by the
+        # pop's clear-query.
+        L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the root list after Settings")
 
     def check(name, fn):
         print(f"  {name} ...", end="", flush=True)
@@ -551,29 +621,7 @@ esac
                 fail(f"the root list for 'fake' never came; last state {L.state()}", L.buf)
 
             def flip(want_off):
-                L.press("\x1b,", lambda s: s["query"] == "" and has(s, "Extensions"), screen=r"Settings > ", what="the Settings pane")  # alt-,
-                L.press("ext", lambda s: s["query"] == "ext" and s["matchCount"] == 1 and "Extensions" in cur(s), what="the Extensions row")
-                L.press("\r", lambda s: s["query"] == "" and has(s, "extension/fake"), screen=r"Extensions > ", what="the Extensions pane")
-                L.press("fake", lambda s: s["query"] == "fake" and s["matchCount"] == 1 and "extension/fake" in cur(s), what="the fake extension's row")
-                # A toggle stays: the same pane, the bar cleared, the mark
-                # flipped on the row.
-                mark = "off" if want_off else "on"
-
-                def flipped(s):
-                    rows = [m["text"] for m in s["matches"] if "extension/fake" in m["text"]]
-                    return s["query"] == "" and rows and (("\toff" in rows[0]) == want_off)
-                L.press("\r", flipped, what=f"the fake row showing {mark}")
-                with open(config) as f:
-                    text = f.read()
-                if want_off != ("off = fake" in text):
-                    fail(f"the config after turning fake {mark}:\n{text}", L.buf)
-                L.press("\x1b", lambda s: s["query"] == "ext" and "Extensions" in cur(s), what="back in Settings")  # pops to Settings, 'ext' back in the bar
-                L.press("\x1b", lambda s: s["query"] == "" and has(s, "Extensions"), what="the bar cleared in Settings")  # clears 'ext'
-                # pops to the root. The wait is on the root's own rows, not
-                # an empty bar, which Settings had too: typed before the
-                # pop lands, "fake" is read as alt-f, or eaten by the
-                # pop's clear-query.
-                L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the root list after Settings")
+                flip_extension(L, config, "fake", want_off)
 
             def type_fake():
                 L.press("fake", lambda s: s["query"] == "fake", what="'fake' in the bar at the root")
@@ -593,6 +641,79 @@ esac
                 fail("the fake rows did not come back with fake turned on", L.buf)
             L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="an empty bar at the root")
         check("Settings, Extensions: off and on", extensions_toggle)
+
+        # 6c. what the contract gives any extension, with one the launcher
+        # has never heard of: a key it claims opens its view; the view's
+        # bar is a prompt, so typing changes nothing in the list and Enter
+        # sends the text to the row under the cursor; the view has a
+        # preview width of its own; and its worker redraws the pane.
+        def prompt_pane():
+            def lines(path):
+                if not os.path.exists(path):
+                    return []
+                with open(path) as f:
+                    return f.read().splitlines()
+
+            def wait_line(path, line, what):
+                end = time.time() + 10
+                while time.time() < end:
+                    if line in lines(path):
+                        return
+                    L.read(0.1)
+                fail(f"never saw {what}: {lines(path)}", L.buf)
+
+            # The key keeps the bar's text: it is the prompt to be sent.
+            L.press("draft", lambda s: s["query"] == "draft", what="text in the bar before the key")
+            L.press("\x1bp", lambda s: s["query"] == "draft" and has(s, "Prompter Inbox") and "ext/prompter/inbox" in cur(s),
+                    screen=r"Prompter > ", what="the pane alt-p opens, the text still in the bar")  # alt-p
+            # The view asks for 40%; the user's width is 70% by now, which
+            # on these 120 columns is over 80 for the preview.
+            m = L.expect(r"preview of inbox, (\d+) columns", what="the preview of the first row")
+            if int(m.group(1)) > 55:
+                fail(f"the view's own preview width was not used: {m.group(1)} columns", L.buf)
+            asked = len(lines(viewed))
+            # Typing is not a filter: both rows stay, and the view is not
+            # asked again. The send's one reload is the next time it is.
+            L.press(" x", lambda s: s["query"] == "draft x" and s["matchCount"] == 2, what="the text in the bar, both rows still there")
+            L.press("\r", lambda s: s["query"] == "" and has(s, "inbox got draft x") and "ext/prompter/other" in cur(s),
+                    what="the text sent to the row under the cursor, the bar cleared, the cursor on the row the send named")
+            if lines(viewed)[asked:] != [""]:
+                fail(f"the view was asked again while typing, or with the text: {lines(viewed)[asked:]}", L.buf)
+            # A send that is refused leaves the text in the bar: the
+            # letter typed after it joins it.
+            L.press("refuse", lambda s: s["query"] == "refuse", what="the text to be refused")
+            L.send("\r")
+            wait_line(sends, "other got refuse", "the refused send")
+            L.press("d", lambda s: s["query"] == "refused", what="the refused text still in the bar")
+            L.press("\x1b", lambda s: s["query"] == "", what="the bar cleared in the pane")
+            # The worker the first send left: with no key pressed, its
+            # answer is in the list once it asks fzf to list again.
+            open(gate, "w").close()
+            L.wait_state(lambda s: has(s, "answer to draft x"), what="the worker's answer in the row, with no keystroke")
+            L.press("\x1b", lambda s: s["query"] == "draft", what="the root with the earlier text back")
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="an empty bar at the root")
+        check("an extension's own key, prompt pane, preview width and worker", prompt_pane)
+
+        # 6d. two extensions claim Tab. The first by name has it, and
+        # `swoop status` says who lost. Turned off, it gives the key to
+        # the next; turned on, it has it back.
+        def shared_key():
+            # The bundled extensions beside the test's, as bin/swoop has them.
+            both = os.path.join(ROOT, "extensions") + os.pathsep + env["SWOOP_EXTENSIONS"]
+            report = subprocess.run([os.path.join(ROOT, "bin", "swoop-nav"), "keys", "status"], env=dict(env, SWOOP_EXTENSIONS=both), capture_output=True, text=True).stdout
+            for line in ("tab opens Ask AI, from ai", "tab: prompter claims it too, and ai has it", "alt-p opens Prompter, from prompter"):
+                if line not in report:
+                    fail(f"the key report lacks {line!r}:\n{report}", L.buf)
+
+            def tab_opens(row, prompt, what):
+                L.press("\t", lambda s: row in cur(s), screen=prompt, what=what)
+                L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the root list after Esc")
+            tab_opens("ext/ai/new", r"Ask AI > ", "Tab opening Ask AI while it is on")
+            flip_extension(L, config, "ai", want_off=True)
+            tab_opens("ext/prompter/inbox", r"Prompter > ", "Tab opening the other extension's pane with Ask AI off")
+            flip_extension(L, config, "ai", want_off=False)
+            tab_opens("ext/ai/new", r"Ask AI > ", "Tab opening Ask AI again once it is back on")
+        check("a key two extensions claim; off frees it", shared_key)
 
         # 7. Enter on a plain row runs it and the launcher exits
         def run():

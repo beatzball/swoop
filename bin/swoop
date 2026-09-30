@@ -152,6 +152,8 @@ _swoop_status() { # how pid path
 case "${1:-}" in
   start|stop|restart|status)
     swoop_service "$1" || status=$?
+    # Which extension has which key, and any claim that lost.
+    [ "$1" != status ] || swoop-nav keys status || true
     exit "$status" ;;
 esac
 
@@ -194,13 +196,14 @@ esac
 #   ctrl-k:      the row's actions as a pane of their own; cmd+K in the
 #                frame is mapped to it. fzf's own ctrl-k is "up", which the
 #                arrow key still does
-#   alt-,:       opens the Settings pane; cmd+, in the frame is this key
-#   tab:         opens the Ask AI pane with what is in the bar; Enter there
-#                sends it, and the answer arrives on the right. See
-#                cmd/swoop-ai
-#   --listen:    fzf's HTTP API on a socket of this run's own, so the
-#                worker that streams an answer can tell fzf to redraw the
-#                preview as it goes. The key keeps anything else out
+#   "$@":        the keys the extensions claim, each in a `key` file beside
+#                its program: the key opens that extension's view, as
+#                Enter on its row would. This script names none of them;
+#                swoop-nav keys lists them, and swoop-nav key decides who
+#                has the key when it is pressed
+#   --listen:    fzf's HTTP API on a socket of this run's own, so a worker
+#                an extension leaves running can tell fzf to redraw the
+#                preview or list again. The key keeps anything else out
 #   enter, esc, change:
 #                all three go through swoop-nav, which prints the actions:
 #                Enter runs a row or opens a view; Esc clears the bar,
@@ -208,7 +211,7 @@ esac
 #                the extension for new rows; typing at the root asks the
 #                extensions with the text while fzf matches the apps
 #   wait+:       at the head of every key that reads the row under the
-#                cursor (Enter, a click, ctrl-k, Tab, alt-,): the key is
+#                cursor (Enter, a click, ctrl-k, a claimed key): the key is
 #                held until the list in flight has landed, so a second
 #                quick Enter ticks the next task, not the one just ticked.
 #                No chain waits; see nav.LandEvent in internal/nav
@@ -235,7 +238,7 @@ export SWOOP_STATE
 # bar cleared: New note names the note it made. See nav.Back.
 SWOOP_LAND="$SWOOP_STATE.land"
 export SWOOP_LAND
-# fzf's API, for the Ask AI worker: a Unix socket beside the state file,
+# fzf's API, for an extension's worker: a Unix socket beside the state file,
 # which fzf exports to its children as FZF_SOCK, or a localhost port on
 # Windows, exported as FZF_PORT. Requests need the key.
 sock="$SWOOP_STATE.sock"
@@ -254,6 +257,15 @@ export FZF_API_KEY
 [ -n "${SWOOP_NO_CLIPD:-}" ] || swoop-clipd start || true
 swoop-list | swoop-icons -out "$icons" > "$SWOOP_APPS"
 swoop-nav rows > "$rows"
+# One binding for each key an extension claims. They go in the positional
+# parameters, which this script does not read past this point: an empty
+# "$@" is safe under set -u in the bash macOS ships, and an empty array is
+# not. A key's name is one of a short list with nothing in it a shell or a
+# binding reads as its own (ext.ValidKey), so it goes in as it is.
+set --
+while IFS= read -r key; do
+  [ -z "$key" ] || set -- "$@" --bind "$key:wait+transform:swoop-nav key $key"
+done < <(swoop-nav keys)
 fzf < "$rows" \
   --ansi \
   --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons' '$rows')+unbind(result-final)" \
@@ -283,8 +295,7 @@ fzf < "$rows" \
   --bind 'scroll-down:down+transform:swoop-nav step down {2}' \
   --bind 'page-down:page-down+transform:swoop-nav step down {2}' \
   --bind 'ctrl-k:wait+transform:swoop-nav actions {1} {2} {4}' \
-  --bind 'tab:wait+transform:swoop-nav ai' \
-  --bind 'alt-,:wait+transform:swoop-nav settings' \
+  "$@" \
   --bind 'result-final:transform:swoop-nav landed {2}' \
   --listen "$listen" \
   --bind 'esc:transform:swoop-nav esc' \

@@ -34,10 +34,15 @@
 //     cursor on that row: New note returns on the note it made, and a
 //     second Enter does not make a second one. See Back.
 //   - Popping restores the text and the cursor row the user left.
-//   - Tab opens the Ask AI pane from anywhere, and keeps the bar's text.
-//     The bar there is a prompt, not a filter: Enter sends it to the
-//     conversation under the cursor, or to a new one, and the answer
-//     arrives on the right. Tab inside the pane does nothing.
+//   - A key an extension claims opens that extension's view from
+//     anywhere, as Enter on its row would. Inside that view the key does
+//     nothing. See Key.
+//   - A view may say its bar is a prompt, not a filter: typing changes
+//     nothing in the list, and Enter sends the text to the row under the
+//     cursor, a question to a conversation. A key that opens such a view
+//     keeps the bar's text, since it is the prompt about to be sent.
+//   - A view may say what preview window it wants: wrapped for prose, a
+//     width of its own. It is put back when the pane is left. See Window.
 //   - A keyword and a space at the start of the root bar scope it to one
 //     extension: "def ap" opens Define with "ap" typed, "win l" shows
 //     only Window's rows for "l". See Change.
@@ -54,20 +59,25 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/beatzball/swoop/internal/ext"
 	"github.com/beatzball/swoop/internal/protocol"
 )
 
 // Frame is one pushed pane.
 type Frame struct {
 	// Kind is "view" for an extension's pane, "actions" for a row's
-	// actions, "ai" for the pane Tab opens.
+	// actions.
 	Kind string `json:"kind"`
 	// View is the id of the row that opened it: the view row for a view,
 	// the target row for an actions pane.
 	View  string `json:"view"`
 	Title string `json:"title"` // its title, used as the prompt
-	Query string `json:"query"` // the bar's text at the moment of Enter; the question, for "ai"
+	Query string `json:"query"` // the bar's text at the moment of Enter
 	Pos   int    `json:"pos"`   // the cursor row at the moment of Enter, 1-based
+	// Pane is what the view says about its own pane, from the extension's
+	// views file: a bar that is a prompt, a preview window of its own.
+	// Zero for a plain list, and for an actions pane.
+	Pane ext.Pane `json:"pane"`
 }
 
 // State is the stack. Empty means the root list.
@@ -176,17 +186,18 @@ const RootPrompt = "  "
 // ignored. runCmd turns a target id and an action into the fzf action
 // that performs it and ends the launcher, prefix and all: become in a
 // plain terminal, execute-silent and abort inside a frame (see
-// cmd/swoop-nav). "" action means the default.
-func Enter(st *State, id, kind, title, query string, pos int, runCmd func(target, action string) string) string {
+// cmd/swoop-nav). "" action means the default. pane is what a view row's
+// view says about its pane; the caller reads it for a view row only.
+func Enter(st *State, id, kind, title, query string, pos int, pane ext.Pane, runCmd func(target, action string) string) string {
 	if id == "" {
 		return "ignore"
 	}
 	if top := st.Top(); top != nil && top.Kind == "actions" {
 		return enterAction(st, top, id, kind, runCmd)
 	}
-	if top := st.Top(); top != nil && top.Kind == "ai" {
-		// The caller sends first; see AISendTarget. Enter here never
-		// runs a row or pushes a pane.
+	if top := st.Top(); top != nil && top.Pane.Prompt {
+		// The bar is a prompt. The caller sends first; see Sends. Enter
+		// here never runs a row or pushes a pane.
 		return "ignore"
 	}
 	if kind == "group" {
@@ -221,26 +232,20 @@ func Enter(st *State, id, kind, title, query string, pos int, runCmd func(target
 	if kind != "view" {
 		return runCmd(id, "")
 	}
-	st.Stack = append(st.Stack, Frame{Kind: "view", View: id, Title: title, Query: query, Pos: pos})
-	return push(title + " > ")
+	return open(st, Frame{Kind: "view", View: id, Title: title, Query: query, Pos: pos, Pane: pane}, false)
 }
 
-// SettingsView is the id of the Settings pane's view, and SettingsTitle
-// its prompt.
-const (
-	SettingsView  = "ext/settings/settings"
-	SettingsTitle = "Settings"
-)
-
-// Settings decides what the settings key does (cmd+, in the frame, alt+,
-// in a terminal): open the Settings pane, as Enter on its row would.
-// Inside it already, nothing.
-func Settings(st *State, query string, pos int) string {
-	if top := st.Top(); top != nil && top.View == SettingsView {
+// Key decides what a key an extension claims does: open the view the
+// claim names, as Enter on its row would. view is that view's id, title
+// its prompt, pane what the view says about its pane. Inside the view
+// already, nothing. A view whose bar is a prompt keeps the bar's text,
+// since it is the prompt about to be sent; any other opens with the bar
+// empty, and gives the text back on the way out.
+func Key(st *State, view, title string, pane ext.Pane, query string, pos int) string {
+	if top := st.Top(); top != nil && top.View == view {
 		return "ignore"
 	}
-	st.Stack = append(st.Stack, Frame{Kind: "view", View: SettingsView, Title: SettingsTitle, Query: query, Pos: pos})
-	return push(SettingsTitle + " > ")
+	return open(st, Frame{Kind: "view", View: view, Title: title, Query: query, Pos: pos, Pane: pane}, pane.Prompt)
 }
 
 // enterAction runs the picked action for the actions pane's target. Kind
@@ -281,76 +286,98 @@ func Actions(st *State, id, kind, title, query string, pos int) string {
 	return push(title+" actions > ") + "+" + Wrap("change-preview", "swoop-preview "+ShellQuote(id))
 }
 
-// AIView is the id of the extension view behind the Ask AI pane, AIPrefix
-// what the launcher puts before that extension's row ids, and AITitle
-// the pane's prompt.
-const (
-	AIView   = "ext/ai/ask"
-	AIPrefix = "ext/ai/"
-	AITitle  = "Ask AI"
-)
-
 // PreviewPercent is the preview window's width, in percent of the
 // whole. cmd/swoop-nav sets it from the settings file at start; the
 // default is what a fresh install shows.
 var PreviewPercent = 58
 
-// Window is fzf's preview window for a pane: on the right, the width
-// from PreviewPercent, a border on its left. The Ask AI pane's is
-// wrapped, because a transcript is prose, and following, so a growing
-// answer keeps its end in view. bin/swoop asks swoop-nav for the plain
-// one at start, and every pane change sets the one it needs.
-func Window(ai bool) string {
-	flags := "nowrap"
-	if ai {
-		flags = "wrap,follow"
+// Window is fzf's preview window for a pane: on the right, a border on
+// its left, the width from PreviewPercent, lines cut at the edge. A view
+// may ask for its own in its views file: wrapped, because a transcript
+// is prose; following, so a growing answer keeps its end in view; a
+// width of its own. bin/swoop asks swoop-nav for the plain one at start,
+// and every pane change sets the one it needs.
+func Window(p ext.Pane) string {
+	percent, flags := PreviewPercent, "nowrap"
+	if p.Percent > 0 {
+		percent = p.Percent
 	}
-	return fmt.Sprintf("right,%d%%,border-left,%s", PreviewPercent, flags)
+	if p.Wrap {
+		flags = "wrap"
+	}
+	if p.Follow {
+		flags += ",follow"
+	}
+	return fmt.Sprintf("right,%d%%,border-left,%s", percent, flags)
+}
+
+// shape is the pane whose preview window is on the screen: the view the
+// user is in, or the one under an actions pane, which keeps the window
+// of the pane it was opened from. The plain one at the root.
+func shape(st *State) ext.Pane {
+	for i := len(st.Stack) - 1; i >= 0; i-- {
+		if st.Stack[i].Kind != "actions" {
+			return st.Stack[i].Pane
+		}
+	}
+	return ext.Pane{}
+}
+
+// OwnWidth says whether the pane on the screen has a preview width of
+// its own. The divider keys move the user's width, which such a pane
+// does not use, so there they do nothing.
+func OwnWidth(st *State) bool {
+	return shape(st).Percent > 0
 }
 
 // Divider decides what moving the divider does: the same window the
 // pane has now, at the new width. The caller has already moved
 // PreviewPercent and saved it.
 func Divider(st *State) string {
-	top := st.Top()
-	return Wrap("change-preview-window", Window(top != nil && top.Kind == "ai"))
+	return Wrap("change-preview-window", Window(shape(st)))
 }
 
-// Ask decides what Tab does: push the Ask AI pane, keeping whatever is in
-// the bar, since it is the prompt about to be sent. Inside the pane Tab
-// does nothing. fzf's own matching goes off because the bar is not a
-// filter, and the preview window changes shape for the transcript.
-func Ask(st *State, query string, pos int) string {
-	if top := st.Top(); top != nil && top.Kind == "ai" {
-		return "ignore"
+// open pushes the view's frame and returns what entering its pane does.
+// The bar is cleared first, unless keep says its text stays, so the
+// reload that follows sees it empty and the pane answers with its
+// "nothing typed yet" rows; then fzf's own matching goes off, because
+// inside a pane the launcher shows exactly what comes back; the preview
+// window changes when the view asks for another than the one on screen;
+// then the cursor goes to the top, because fzf keeps its row index
+// across a reload. Last, LandEvent is armed: the first row may be a
+// header, Past due over the tasks, and the cursor is stepped off it once
+// the rows are there (Landed).
+//
+// A pane whose bar is a prompt is asked for its rows without the text,
+// which is not a filter there, and does not arm LandEvent: its own
+// worker reloads it many times a second while an answer arrives.
+func open(st *State, f Frame, keep bool) string {
+	before := Window(shape(st))
+	st.Stack = append(st.Stack, f)
+	var acts []string
+	if !keep {
+		acts = append(acts, "clear-query")
 	}
-	st.Stack = append(st.Stack, Frame{Kind: "ai", View: AIView, Title: AITitle, Query: query, Pos: pos})
-	return askPane()
-}
-
-// askPane is what opening the Ask AI pane does, from Tab or its keyword.
-func askPane() string {
-	return strings.Join([]string{
-		"disable-search",
-		Wrap("change-prompt", AITitle+" > "),
-		Wrap("change-preview-window", Window(true)),
-		"reload-sync(swoop-nav rows)",
-		"first",
-	}, "+")
-}
-
-// AISendTarget says what Enter in the Ask AI pane should send the bar's
-// text to: the row's conversation, or "new" for the New row. The second
-// result is false when there is nothing to send, no text or no row. The
-// send itself is the caller's, done before the actions below, so that a
-// send that fails (the model is still answering the last prompt) can
-// leave the bar as it was.
-func AISendTarget(st *State, id, query string) (string, bool) {
-	top := st.Top()
-	if top == nil || top.Kind != "ai" || id == "" || strings.TrimSpace(query) == "" {
-		return "", false
+	acts = append(acts, "disable-search", Wrap("change-prompt", f.Title+" > "))
+	if window := Window(f.Pane); window != before {
+		acts = append(acts, Wrap("change-preview-window", window))
 	}
-	return strings.TrimPrefix(id, AIPrefix), true
+	if f.Pane.Prompt {
+		acts = append(acts, "reload-sync(swoop-nav rows)", "first")
+	} else {
+		acts = append(acts, "reload-sync(swoop-nav rows {q})", "first", "rebind("+LandEvent+")")
+	}
+	return strings.Join(acts, "+")
+}
+
+// Sends says whether Enter in the pane the user is in sends the bar's
+// text to the row id: the bar is a prompt, there is a row, and there is
+// text. The send itself is the caller's, done before the actions of
+// AfterSend, so that a send that fails (the model is still answering the
+// last prompt) can leave the bar as it was.
+func Sends(st *State, id, query string) bool {
+	top := st.Top()
+	return top != nil && top.Kind == "view" && top.Pane.Prompt && id != "" && strings.TrimSpace(query) != ""
 }
 
 // LandEvent is the fzf event that puts the cursor where a chain asked,
@@ -386,8 +413,8 @@ func AISendTarget(st *State, id, query string) (string, bool) {
 // Until the list lands, keys see the old one. Typing is safe: it only
 // edits the bar, and the reload reads the bar. A key that reads the row
 // under the cursor is not: a second Enter on a checklist would untick the
-// task the first one ticked. So those keys (Enter, a click, ctrl-k, Tab,
-// alt-,) start with fzf's wait in bin/swoop, which holds the key until
+// task the first one ticked. So those keys (Enter, a click, ctrl-k, a key
+// an extension claims) start with fzf's wait in bin/swoop, which holds the key until
 // the search in flight is done, and then land any pending Landing before
 // they read the row (Settle). That is the one wait left, and why: it
 // holds only a key that reads a row, only while a list is on its way. A
@@ -420,7 +447,7 @@ func Landed(st *State, query, kind string, pos int) string {
 	case pos > 0:
 		st.Rest = pos
 	}
-	if top := st.Top(); top == nil || top.Kind != "view" {
+	if top := st.Top(); top == nil || top.Kind != "view" || top.Pane.Prompt {
 		acts = append(acts, "unbind("+LandEvent+")")
 	}
 	return strings.Join(acts, "+")
@@ -546,25 +573,27 @@ func land(st *State, l Landing) string {
 	return "rebind(" + LandEvent + ")"
 }
 
-// AfterSend is what follows a send: clear the bar, list again so the
-// conversation is at the top under New, land on it, and draw it. The
-// worker the send started fills the preview from then on.
-func AfterSend(st *State) string {
+// AfterSend is what follows a send: clear the bar, list again, since the
+// send may have made a row or moved one, land on the row the send named
+// in $SWOOP_LAND, id, and draw it. With no row named, "", the cursor
+// stays on its row number, pos. The worker the send started fills the
+// preview from then on.
+func AfterSend(st *State, id string, pos int) string {
+	l := Landing{ID: id, Refresh: true}
+	if id == "" {
+		l.Pos = pos
+	}
 	return strings.Join([]string{
 		"clear-query",
 		"reload-sync(swoop-nav rows)",
-		land(st, Landing{Pos: 2, Refresh: true}),
+		land(st, l),
 	}, "+")
 }
 
-// push is what entering any pane does: clear the bar first, so the reload
-// that follows sees it empty and the pane answers with its "nothing typed
-// yet" rows; then fzf's own matching goes off, because inside a pane the
-// launcher shows exactly what comes back; then the cursor goes to the top,
-// because fzf keeps its row index across a reload, and a menu opened from
-// row 2 would otherwise start on its own row 2. Last, LandEvent is armed:
-// the first row may be a header, Past due over the tasks, and the cursor
-// is stepped off it once the rows are there (Landed).
+// push is what entering an actions pane does, the same steps as open: the
+// bar cleared, fzf's own matching off, the cursor to the top, since a
+// menu opened from row 2 would otherwise start on its own row 2, and
+// LandEvent armed.
 func push(prompt string) string {
 	return strings.Join([]string{
 		"clear-query",
@@ -635,15 +664,13 @@ func popActions(st *State, refresh bool) string {
 	frame := st.Stack[len(st.Stack)-1]
 	st.Stack = st.Stack[:len(st.Stack)-1]
 	below := st.Top()
-	search, prompt, window := "enable-search", RootPrompt, Window(false)
+	// The window of the pane that is back: a view's own, if it has one.
+	search, prompt, window := "enable-search", RootPrompt, Window(shape(st))
 	if below != nil {
 		search = "disable-search"
 		prompt = below.Title + " > "
-		switch below.Kind {
-		case "actions":
+		if below.Kind == "actions" {
 			prompt = below.Title + " actions > "
-		case "ai":
-			window = Window(true)
 		}
 	}
 	return strings.Join([]string{
@@ -663,12 +690,14 @@ func popActions(st *State, refresh bool) string {
 type Keyed struct {
 	// Rest is the bar's text after the keyword and its space.
 	Rest string
-	// View is the id of the extension's one row when that row is a view,
-	// Define Word for Define, or AIView for the Ask AI pane. "" when the
-	// extension lists anything else: several rows, or rows that depend on
-	// the text, like Calculator's.
+	// View is the id of the view the keyword opens: the one a key of the
+	// extension's opens, or its one row when that row is a view, Define
+	// Word for Define. "" when the extension claims no key and lists
+	// anything else: several rows, or rows that depend on the text, like
+	// Calculator's.
 	View  string
-	Title string // that view row's title, the pane's prompt
+	Title string   // that view's title, the pane's prompt
+	Pane  ext.Pane // what that view says about its pane
 }
 
 // Change decides what typing does: ask for new rows, everywhere. Inside a
@@ -676,12 +705,13 @@ type Keyed struct {
 // the root the apps come from the cache and the extensions are asked with
 // the text, which is how a calculator row appears for "2+2" while fzf
 // keeps matching the apps itself. Inside a pane the cursor goes to the
-// first row, as it does at the root, where fzf's own matching moves it. In the Ask AI pane the bar is the
-// prompt being written, and the list does not change under it.
+// first row, as it does at the root, where fzf's own matching moves it.
+// In a pane whose bar is a prompt the text is being written to be sent,
+// and the list does not change under it.
 //
 // A keyword at the root, k not nil, scopes the bar to one extension.
-// When its one row is a view, the view opens as if Enter had been pressed
-// on it, with the rest of the bar as its text: "def ap" is the Define
+// When it names a view, the view opens as if Enter had been pressed on
+// its row, with the rest of the bar as its text: "def ap" is the Define
 // pane with "ap" typed. Otherwise the root shows that extension's rows
 // alone, and fzf's own matching goes off, because the bar still holds
 // the keyword and no row's title does; swoop-nav filters them on the
@@ -693,7 +723,7 @@ type Keyed struct {
 // would only open the pane again.
 func Change(st *State, k *Keyed) string {
 	top := st.Top()
-	if top != nil && top.Kind == "ai" {
+	if top != nil && top.Pane.Prompt {
 		return "ignore"
 	}
 	if top != nil {
@@ -710,23 +740,10 @@ func Change(st *State, k *Keyed) string {
 	}
 	// change-query fires fzf's change event again; by then the pane is
 	// on the stack, and that Change only reloads it.
-	switch k.View {
-	case "":
+	if k.View == "" {
 		return "disable-search+reload-sync(swoop-nav rows {q})"
-	case AIView:
-		st.Stack = append(st.Stack, Frame{Kind: "ai", View: AIView, Title: AITitle, Pos: 1})
-		return Wrap("change-query", k.Rest) + "+" + askPane()
 	}
-	st.Stack = append(st.Stack, Frame{Kind: "view", View: k.View, Title: k.Title, Pos: 1})
-	return strings.Join([]string{
-		Wrap("change-query", k.Rest),
-		"disable-search",
-		Wrap("change-prompt", k.Title+" > "),
-		"reload-sync(swoop-nav rows {q})",
-		"first",
-		// As in push: the view's first row may be a header.
-		"rebind(" + LandEvent + ")",
-	}, "+")
+	return Wrap("change-query", k.Rest) + "+" + open(st, Frame{Kind: "view", View: k.View, Title: k.Title, Pos: 1, Pane: k.Pane}, true)
 }
 
 // Wrap returns "action<open>arg<close>" with the first delimiter pair that

@@ -45,7 +45,7 @@ your history.
 However it was installed, `swoop restart` restarts the frame and the
 clipboard watcher, `swoop stop` and `swoop start` stop and start them, and
 `swoop status` says whether they run, where from, and how they were
-installed. The bird in the menu bar has the same: Restart, and Quit, which
+installed, and which extension has which key. The bird in the menu bar has the same: Restart, and Quit, which
 keeps it down until the next login or `swoop start`. After an upgrade the
 frame restarts itself, once the panel is hidden.
 
@@ -440,6 +440,33 @@ left out. `extensions/reminders/reminders` filters with it.
 A file called `keyword` beside the program, holding one word, gives the
 extension a keyword: `hello` and a space in the bar then asks only it. When
 its `list` is one row of kind `view`, the keyword opens that view.
+
+Three more things are files beside the program too. Ask AI and Settings
+are built from them, and the launcher knows neither by name:
+
+```
+key      tab ask Ask AI                       # a key, the view it opens, its title
+views    ask bar=prompt preview=wrap,follow   # what that view's pane is like
+```
+
+- **A key.** Each line of `key` claims one: the key opens that view from
+  anywhere, as Enter on its row would. The keys to claim are `tab`,
+  `shift-tab`, `f1` to `f12`, and `alt-` with a letter, a digit, `,`, `.`
+  or `/`. When two extensions claim one key, the first by name has it, and
+  `swoop status` says who has which. An extension turned off in Settings
+  gives its key up. The keyword of an extension with a key opens the same
+  view
+- **A bar that is a prompt.** `bar=prompt` on a view's line in `views`:
+  typing does not filter or reload the rows, and Enter runs
+  `hello send <id> <text>` with the row under the cursor and the text. Exit
+  0 and the bar clears and the rows are listed again; any other exit
+  leaves the text where it is. `send` returns at once. For an answer that
+  takes time, leave a worker running and have it ask fzf to redraw, with
+  `refresh-preview` or `reload(swoop-nav rows)` posted to the socket in
+  `$FZF_SOCK` with the key in `$FZF_API_KEY`
+- **A preview of its own.** `preview=` on a view's line: a width in
+  percent, `wrap` for prose, `follow` to keep the end of a growing text in
+  view. It holds while the pane is open
 
 A result line is five fields separated by tabs. Only the last three are shown:
 

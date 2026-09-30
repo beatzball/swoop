@@ -498,6 +498,93 @@ Type `lisb` again: Lisbon says `✓ on your list`. Press ctrl-k, type `edit`,
 Enter: your editor opens on the list, inside the launcher. Quit the editor,
 and you are back in the pane.
 
+## A keyword, a key, a prompt, a preview
+
+Four more things an extension can have. None is a verb: each is a line in
+a small file beside the program, which swoop reads without running
+anything. Ask AI and Settings are built from these, and the launcher knows
+neither by name.
+
+```
+~/.config/swoop/extensions/clock/clock      the program
+~/.config/swoop/extensions/clock/keyword    time
+~/.config/swoop/extensions/clock/key        alt-t find Find a Time Zone
+~/.config/swoop/extensions/clock/views      find preview=45%,wrap
+```
+
+### keyword
+
+One word. `time` and a space at the start of the bar then asks only this
+extension. When the extension claims a key, the keyword opens the same
+view as the key. Otherwise, when its `list` is one row of kind `view`, the
+keyword opens that view, with the rest of the bar typed into it.
+
+### key
+
+One claim per line: the key, the id of the view it opens, and the view's
+title, which becomes the pane's prompt. The key works from anywhere in the
+launcher and does what Enter on the view's row would do. Inside that view
+it does nothing.
+
+| you may claim | |
+|---|---|
+| `tab`, `shift-tab` | |
+| `f1` to `f12` | |
+| `alt-` and one of `a` to `z`, `0` to `9`, `,` `.` `/` | lower case. It takes the place of what fzf does with that key |
+
+Every other key is the launcher's or the bar's. A claim for one is left
+out. When two extensions claim the same key, the first by name has it.
+`swoop status` lists who has which key and every claim that lost. An
+extension turned off in Settings gives its keys up, and the next that
+claims one has it at once.
+
+### views: a bar that is a prompt
+
+A line in `views` is a view's id, then settings. `bar=prompt` makes the
+bar text to send, not a filter:
+
+```
+ask bar=prompt
+```
+
+- Typing does not filter the rows, and `view` is not asked again. It gets
+  no text
+- Enter runs `clock send <id> <text>`: the row under the cursor and the
+  bar's text. With an empty bar Enter does nothing
+- Exit 0: the bar clears and the rows are listed again. To put the cursor
+  on a row, write its id to the file in `$SWOOP_LAND` before you exit
+- Any other exit: the text stays in the bar, so nothing typed is lost
+- A key that opens this view keeps the bar's text: it is the prompt about
+  to be sent
+
+`send` has two seconds, like `list`. For an answer that takes longer,
+start a worker, leave it running, and exit. The worker redraws the pane by
+asking fzf: swoop starts fzf with its HTTP API on, and your program gets
+the socket in `$FZF_SOCK` (a port in `$FZF_PORT` on Windows) and the key
+in `$FZF_API_KEY`.
+
+```sh
+curl -s --unix-socket "$FZF_SOCK" -H "x-api-key: $FZF_API_KEY" \
+  --data-binary 'reload(swoop-nav rows)+refresh-preview' http://fzf/
+```
+
+`refresh-preview` draws the preview again, and `reload(swoop-nav rows)`
+lists the pane again. Post nothing else. That is how Ask AI shows an
+answer as it arrives.
+
+### views: a preview of its own
+
+`preview=` and a list, separated by commas:
+
+| value | the preview |
+|---|---|
+| `45%` | takes that much of the width, 20 to 80. Without one, the width the user chose |
+| `wrap` | wraps long lines, as prose wants |
+| `follow` | keeps its end in view as the text grows |
+
+It holds while the view is open, and its actions menu keeps it. In a view
+with a width of its own the divider keys do nothing.
+
 ## Make it fast
 
 `list` runs when the launcher opens, and `preview` on every cursor move. A
@@ -516,7 +603,7 @@ slow sixty times a second.
 ## Where to go next
 
 - [Issue #2](https://github.com/beatzball/swoop/issues/2): the contract,
-  every verb and kind, and why each one was added
+  every verb, kind and file, and why each one was added
 - `extensions/` in the repository: fifteen working extensions. `system` is
   the smallest; `define` is the smallest with a view; `files` has a
   `terminal` action
