@@ -1,0 +1,15 @@
+# The site's image builds from the repository root (see site/Dockerfile),
+# so the context is the whole checkout unless this trims it: only site/,
+# the git metadata the image reads the commit from, and VERSION go in.
+*
+!site
+!VERSION
+!.git
+site/node_modules
+site/dist
+site/.output
+site/.nitro
+site/routes.generated.ts
+site/server/stubs/page-manifest.ts
+site/**/*.tsbuildinfo
+.git/objects

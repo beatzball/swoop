@@ -183,7 +183,10 @@ site. Use `pnpm preview`, or the Docker image below.
 Push to `main`. `.github/workflows/site.yml` builds the site, runs the e2e
 suite, builds the image and probes it, then calls the Coolify deploy hook and
 waits until https://swoop.sh/version.json reports the commit. Coolify rebuilds
-from `site/Dockerfile` (Base Directory `/site`) and serves `dist/static` behind
+from `site/Dockerfile` with the repository root as the context (Base Directory
+`/`, Dockerfile Location `/site/Dockerfile`; the image reads the commit from
+`.git` and the version from `VERSION` into `version.json`) and serves
+`dist/static` behind
 nginx. The hook needs two repository secrets, `COOLIFY_WEBHOOK_URL` and
 `COOLIFY_API_TOKEN`; without them the deploy step warns and does nothing.
 
