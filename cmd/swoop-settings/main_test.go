@@ -225,7 +225,11 @@ func TestEveryIconIsOneCell(t *testing.T) {
 func TestTypedValueRowIsShown(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	bin := t.TempDir()
-	if err := os.WriteFile(filepath.Join(bin, "myed"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+	name := "myed"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	if err := os.WriteFile(filepath.Join(bin, name), []byte("#!/bin/sh\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin)
