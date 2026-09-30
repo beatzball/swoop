@@ -76,7 +76,9 @@ The special kinds, each one met in a step below:
 
 A `group` row is not in a step. Tasks prints one over each run of tasks:
 Today, Tomorrow. Give it an id like any row, and print it only when it has
-rows under it.
+rows under it. The launcher draws its title at the left edge, dimmed, over
+the icons of the rows below, and the cursor never stops on it: Up and Down
+step over it, and a click on it does nothing. Leave its icon empty.
 
 ## Step 1: list
 

@@ -300,7 +300,8 @@ moves the file to `deleted/` in that folder, so you can get it back.
 Type `tasks`, Enter. The open tasks are under headers by when they are
 due: **Past due**, **Today**, **Tomorrow**, **This week**, **This month**,
 **Later**, **Unscheduled**. A header shows only when it has a task; under
-it the soonest comes first. Type to filter, and a header with no match
+it the soonest comes first. The cursor skips the headers: Up and Down go
+from task to task. Type to filter, and a header with no match
 goes too. Type a task and press Enter to add it. End it
 with `today`, `tomorrow`, a weekday, or a date like `2026-10-01`, and
 that is its due date: `buy milk tomorrow`. Enter on a task ticks it, and
@@ -414,8 +415,9 @@ A row of kind `view` opens a pane instead of running: the launcher asks
 back. `extensions/define/define` is one: Enter on "Define Word" and you are
 typing into the dictionary. Inside a pane, a row of kind `toggle` runs
 on Enter and the pane stays, reloaded: that is how Tasks ticks a task. A
-row of kind `group` is a header over the rows below it, and Enter on it
-does nothing: that is Today over the tasks due today. A
+row of kind `group` is a header over the rows below it: that is Today
+over the tasks due today. The launcher draws its title at the left edge,
+and the cursor skips it. A
 row or action of kind `terminal` gets the whole terminal while it runs, and
 the launcher comes back after, reloaded, the preview redrawn: that is how
 Notes opens an editor.

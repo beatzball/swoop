@@ -808,7 +808,8 @@ esac
 
         # 13. tasks: the view, a task added with a date word, and Enter
         # on it ticks it while the view stays, reloaded (kind "toggle");
-        # the headers by when, the filter, and Done and back. The clock
+        # the headers by when, which the cursor never rests on, the
+        # filter, and Done and back. The clock
         # is pinned to Monday 14 September 2026, since which header a
         # task is under depends on the day.
         def tasks():
@@ -817,8 +818,10 @@ esac
             eighth.key = key
 
             def titles(s):
-                """The rows' titles, in order: the fourth field of a line."""
-                return [m["text"].split("\t")[3] for m in s.get("matches", [])]
+                """The rows' titles, in order: the fourth field of a line,
+                or for a header the third, where the launcher puts its
+                title so that it starts at the left edge."""
+                return [m["text"].split("\t")[3] or m["text"].split("\t")[2] for m in s.get("matches", [])]
 
             def file():
                 with open(tasks_md) as f:
@@ -829,16 +832,11 @@ esac
                 eighth.press("\r", lambda s: "Type a task" in cur(s), screen=r"Tasks > ", what="the tasks view, the hint row of an empty list")
                 eighth.press("buy milk tomorrow", lambda s: s["query"] == "buy milk tomorrow" and "Add task: buy milk" in cur(s), what="the Add task row")
                 # The cursor keeps its row number, the first, which is now
-                # the header over the new task.
-                eighth.press("\r", lambda s: s["query"] == "" and titles(s) == ["Tomorrow", "buy milk"] and has(s, "tomorrow, Tue 15 Sep") and "Tomorrow" in cur(s),
-                             what="the new task under a Tomorrow header, the view still open")
+                # the header over the new task, and is stepped off it.
+                eighth.press("\r", lambda s: s["query"] == "" and titles(s) == ["Tomorrow", "buy milk"] and has(s, "tomorrow, Tue 15 Sep") and "buy milk" in cur(s),
+                             what="the new task under a Tomorrow header, the cursor on the task, the view still open")
                 if "- [ ] buy milk due: 2026-09-15\n" not in file():
                     fail(f"the file did not get the task: {file()!r}", eighth.buf)
-                # Enter on the header does nothing, and the Down after it
-                # is read once it has: the task is still open.
-                eighth.press("\r\x1b[B", lambda s: "buy milk" in cur(s), what="the cursor on the task, after an Enter on the header")
-                if "- [ ] buy milk due: 2026-09-15\n" not in file():
-                    fail(f"Enter on a header changed the file: {file()!r}", eighth.buf)
                 # Ticked, the task leaves this view for the done one.
                 eighth.press("\r", lambda s: titles(s) == ["Type a task, then Enter", "Done"], what="the task ticked and gone from the open ones, the view still open")
                 if "- [x] buy milk due: 2026-09-15\n" not in file():
@@ -849,34 +847,64 @@ esac
                 eighth.press("fake one", lambda s: s["query"] == "fake one" and "Add task: fake one" in cur(s), what="the Add task row for fake one")
                 eighth.press("\r", lambda s: s["query"] == "" and titles(s) == ["Unscheduled", "fake one", "Done"], what="fake one added")
                 eighth.press("fake two", lambda s: s["query"] == "fake two" and "Add task: fake two" in cur(s), what="the Add task row for fake two")
-                eighth.press("\r", lambda s: s["query"] == "" and titles(s) == ["Unscheduled", "fake one", "fake two", "Done"], what="fake two added, after fake one")
-                down_to(eighth, "fake one", "the fake one row")
+                eighth.press("\r", lambda s: s["query"] == "" and titles(s) == ["Unscheduled", "fake one", "fake two", "Done"] and "fake one" in cur(s),
+                             what="fake two added, after fake one, the cursor on fake one")
                 eighth.press("\r\r", lambda s: titles(s) == ["Type a task, then Enter", "Done"] and has(s, "3 tasks, Enter shows them"),
                              what="both tasks ticked after two quick Enters")
                 if "- [x] fake one\n" not in file() or "- [x] fake two\n" not in file():
                     fail(f"two quick Enters did not tick both: {file()!r}", eighth.buf)
 
-                # One task for each header, out of order in the file: due
-                # yesterday, today, tomorrow, Friday, the 30th, and never.
+                # A task for each header, two for Today, out of order in
+                # the file: due yesterday, today, tomorrow, Friday, the
+                # 30th, and never.
                 # Text typed and cleared reloads the view from the file.
                 with open(tasks_md, "a") as f:
                     f.write("- [ ] fake none\n- [ ] fake the 30th due: 2026-09-30\n- [ ] fake friday due: 2026-09-18\n"
-                            "- [ ] fake tomorrow due: 2026-09-15\n- [ ] fake today due: 2026-09-14\n- [ ] fake yesterday due: 2026-09-13\n")
+                            "- [ ] fake tomorrow due: 2026-09-15\n- [ ] fake today due: 2026-09-14\n- [ ] fake today two due: 2026-09-14\n- [ ] fake yesterday due: 2026-09-13\n")
                 # Typing filters, and a group with no match has no header.
-                eighth.press("friday", lambda s: s["query"] == "friday" and titles(s) == ["Add task: friday", "This week", "fake friday", "Done"],
-                             what="the filter: one task under its header, the other headers gone")
-                grouped = ["Past due", "fake yesterday", "Today", "fake today", "Tomorrow", "fake tomorrow", "This week", "fake friday",
+                eighth.press("friday", lambda s: s["query"] == "friday" and titles(s) == ["Add task: friday", "This week", "fake friday", "Done"] and "Add task" in cur(s),
+                             what="the filter: one task under its header, the other headers gone, the cursor on Add")
+                grouped = ["Past due", "fake yesterday", "Today", "fake today", "fake today two", "Tomorrow", "fake tomorrow", "This week", "fake friday",
                            "This month", "fake the 30th", "Unscheduled", "fake none", "Done"]
-                eighth.press("\x1b", lambda s: s["query"] == "" and titles(s) == grouped, what="the six headers in order, a task under each, Done last")
+                eighth.press("\x1b", lambda s: s["query"] == "" and titles(s) == grouped and "fake yesterday" in cur(s),
+                             what="the six headers in order, their tasks under each, Done last, the cursor on the first task and not on Past due")
+
+                # The cursor steps over a header, both ways. Up from the
+                # first task finds the header on the first row, and must
+                # not stay there: the Down sent with it then goes from
+                # the first task to Today's, not from Past due to the
+                # first task.
+                eighth.press("\x1b[B", lambda s: "fake today\t" in cur(s), what="Down from the last task of Past due: the first of Today")
+                eighth.press("\x1b[A", lambda s: "fake yesterday" in cur(s), what="Up from the first task of Today: the last of Past due")
+                eighth.press("\x1b[A\x1b[B", lambda s: "fake today\t" in cur(s), what="Up on the first task stays on it, so the Down after it lands on Today's first")
+                # A click on a header does nothing, and the cursor goes
+                # back where it was: the Down sent with it goes on from
+                # there. Tomorrow is row 6, on the screen's line 8: the rows
+                # start on line 3, under the bar.
+                eighth.press("\x1b[<0;4;8M\x1b[<0;4;8m\x1b[B", lambda s: "fake today two" in cur(s), what="a click on Tomorrow leaves the cursor on fake today, so Down lands on fake today two")
+                # A tick keeps the row number. The last task of Today
+                # ticked, that number is Tomorrow's header: the cursor
+                # goes on to the task under it.
+                grouped.remove("fake today two")
+                eighth.press("\r", lambda s: titles(s) == grouped and "fake tomorrow" in cur(s), what="the last task of Today ticked, the cursor on the first of Tomorrow, not on its header")
+                if "- [x] fake today two due: 2026-09-14\n" not in file():
+                    fail(f"Enter did not tick the task in the file: {file()!r}", eighth.buf)
 
                 # Done is a switch: the done tasks only, under Back to
                 # open, the most recently done first; and back again.
                 down_to(eighth, "Enter shows them", "the Done row", most=20)
-                eighth.press("\r", lambda s: titles(s) == ["Back to open", "fake two", "fake one", "buy milk"] and "Back to open" in cur(s),
+                eighth.press("\r", lambda s: titles(s) == ["Back to open", "fake today two", "fake two", "fake one", "buy milk"] and "Back to open" in cur(s),
                              screen=r"Done > ", what="the done tasks only, the last ticked first, under Back to open")
                 eighth.press("milk", lambda s: s["query"] == "milk" and titles(s) == ["Back to open", "buy milk"], what="the filter in the done view")
-                eighth.press("\x1b", lambda s: s["query"] == "" and len(titles(s)) == 4, what="the done view, unfiltered")
+                eighth.press("\x1b", lambda s: s["query"] == "" and len(titles(s)) == 5, what="the done view, unfiltered")
                 eighth.press("\r", lambda s: titles(s) == grouped and "Enter shows them" in cur(s), screen=r"Tasks > ", what="Back to open: the open tasks again, the cursor on Done")
+                # Esc does the same from the done view.
+                eighth.press("\r", lambda s: "Back to open" in cur(s), screen=r"Done > ", what="the done tasks again")
+                eighth.press("\x1b", lambda s: titles(s) == grouped and "Enter shows them" in cur(s), screen=r"Tasks > ", what="Esc from Done: the open tasks, the cursor on Done")
+                # The view opened with tasks in it: the cursor is on the
+                # first task, not on the header over it.
+                eighth.press("\x1b", lambda s: s["query"] == "tasks" and "ext/tasks/tasks" in cur(s), what="the root again, on the Tasks row")
+                eighth.press("\r", lambda s: titles(s) == grouped and "fake yesterday" in cur(s), screen=r"Tasks > ", what="Tasks opened with the cursor on the first task, not on Past due")
             finally:
                 eighth.kill()
         check("tasks: groups, the filter, Done and back, two quick Enters", tasks)
@@ -895,9 +923,10 @@ esac
                 # Loading is there only until the fetch lands, which on a
                 # slow runner can be before the first look: either one
                 # shows the view answered, and the rows must follow.
-                # The rows come under headers, so the cursor is on one.
+                # The rows come under headers, and the cursor is on the
+                # first row under the first one, not on the header.
                 ninth.press("\r", lambda s: "Loading reminders" in cur(s) or has(s, "Fake water the plants"), what="the Loading row, or the rows already")
-                ninth.wait_state(lambda s: has(s, "Fake water the plants") and "Unscheduled" in cur(s), what="the rows under their header, with no keystroke")
+                ninth.wait_state(lambda s: has(s, "Unscheduled") and "Fake water the plants" in cur(s), what="the rows under their header, the cursor on the first of them, with no keystroke")
             finally:
                 ninth.kill()
         if sys.platform == "darwin":

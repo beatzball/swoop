@@ -27,6 +27,12 @@ so here.
   it, in any order: `key api` finds API key, and `nvim` finds Editor when
   that is the editor. `ai` finds the API URL and API key rows too.
   Extensions and each setting's choices filter the same way.
+- **The cursor skips a header.** A view opens on its first row that is
+  not a header, Up and Down step over one, and typing, a tick and Esc
+  all leave the cursor on a row you can act on. A click on a header does
+  nothing. A header's title now starts at the left edge, dimmed, with the
+  icons of its rows lined up under it. Every extension that prints a
+  `group` row gets this.
 
 ### Fixed
 

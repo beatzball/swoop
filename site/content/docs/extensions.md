@@ -132,7 +132,8 @@ file to `deleted/` in that folder, so you can get it back.
 Type `tasks`, Enter. The open tasks are under headers by when they are due:
 **Past due**, **Today**, **Tomorrow**, **This week**, **This month**,
 **Later**, **Unscheduled**. A header shows only when it has a task; under it
-the soonest comes first. Type to filter, and a header with no match goes too.
+the soonest comes first. The cursor skips the headers: Up and Down go from
+task to task. Type to filter, and a header with no match goes too.
 
 Type a task and press Enter to add it. End it with `today`, `tomorrow`, a
 weekday, or a date like `2026-10-01`, and that is its due date: `buy milk
