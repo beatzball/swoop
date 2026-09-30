@@ -18,7 +18,7 @@ func TestHotkeyChoicesTakeWhatWasTyped(t *testing.T) {
 		t.Fatalf("the fixed list: %+v", cs)
 	}
 	cs = hotkeyChoices("ctrl+alt+k")
-	if cs[0].value != "ctrl+alt+k" || cs[0].note != "what you typed" {
+	if cs[0].value != "ctrl+alt+k" || !cs[0].typed {
 		t.Fatalf("a typed key comes first: %+v", cs[0])
 	}
 	cs = hotkeyChoices("alt+space")
@@ -215,5 +215,53 @@ func TestEveryIconIsOneCell(t *testing.T) {
 		settings.AIURL:  "http://localhost:8080/v1",
 	} {
 		check(key+", typed", get(key, typed))
+	}
+}
+
+// A pane that takes a value of the user's own shows the row made from
+// what was typed, whatever that row's title and note say (#160): the API
+// key's row is titled "Use what you typed" and noted "N characters", and
+// a filter on either hid it.
+func TestTypedValueRowIsShown(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	bin := t.TempDir()
+	if err := os.WriteFile(filepath.Join(bin, "myed"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin)
+	typed := map[string]string{
+		settings.Hotkey:    "ctrl+alt+k",
+		settings.AI:        "openai:some-model",
+		settings.AIURL:     "http://localhost:8080/v1",
+		settings.AIKey:     "sk-test-0123456789",
+		settings.EditorKey: "myed --clean",
+	}
+	for _, s := range all {
+		text, ok := typed[s.key]
+		// A setting whose choices can carry a typed row must be in the
+		// map, so a new one cannot go untested.
+		var makes bool
+		for _, probe := range typed {
+			for _, c := range s.choices(probe) {
+				makes = makes || c.typed
+			}
+		}
+		if makes != ok {
+			t.Errorf("%s: makes a typed row: %v, in this test: %v", s.key, makes, ok)
+		}
+		if !ok {
+			continue
+		}
+		items, err := rows(s.key, text)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var found bool
+		for _, it := range items {
+			found = found || it.ID == s.key+"="+text
+		}
+		if !found {
+			t.Errorf("%s: typed %q, and no row sets it: %+v", s.key, text, items)
+		}
 	}
 }

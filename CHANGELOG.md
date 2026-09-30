@@ -9,6 +9,13 @@ so here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The API key can be typed in Settings.** In the API key pane, text in
+  the bar hid every row, so there was nothing to press Enter on. The row
+  that takes what you typed now shows, once the text is 8 characters or
+  more.
+
 ## [0.9.2] - 2026-09-30
 
 The site deploys itself, and a cut gets to the tap in half the time.
