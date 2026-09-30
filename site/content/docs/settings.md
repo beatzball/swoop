@@ -11,6 +11,11 @@ Type `settings` and press Enter, or press cmd+, in the frame (alt+, in a
 terminal). One row per setting, the current value beside it. Enter on a row
 to change it.
 
+Typing filters the rows. Each word you type must be in a row's title or in
+the value beside it, in any order and any case: `key api` finds API key, and
+`nvim` finds Editor when that is the editor. `ai` finds the API URL and API
+key rows too. Extensions and each setting's choices filter the same way.
+
 ## What you can set
 
 | setting | in the file | what it changes |
