@@ -101,19 +101,28 @@ jobs:
             echo "sent=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "since=$(date -u +%s)" >> "$GITHUB_OUTPUT"
           curl -fsSL -X POST -H "Authorization: Bearer ${COOLIFY_API_TOKEN}" "$COOLIFY_WEBHOOK_URL"
           echo "sent=true" >> "$GITHUB_OUTPUT"
       # The webhook only queues a build. Wait until the live site reports
-      # this commit, or a failed deploy would pass against the old container.
-      - name: Wait for swoop.sh to serve this commit
+      # this commit, or a build made after the webhook was called: Coolify
+      # builds without .git and passes no commit, so there version.json says
+      # "unknown" for the commit and the build time is the proof. Either
+      # way a failed deploy cannot pass against the old container.
+      - name: Wait for swoop.sh to serve this deploy
         if: steps.hook.outputs.sent == 'true'
         run: |
+          since='${{ steps.hook.outputs.since }}'
           for i in $(seq 1 60); do
-            if curl -fsS https://swoop.sh/version.json | grep -q '${{ github.sha }}'; then
-              echo "swoop.sh serves ${{ github.sha }}"
-              exit 0
+            if json="$(curl -fsS https://swoop.sh/version.json)"; then
+              commit="$(printf '%s' "$json" | jq -r '.commit // ""')"
+              built="$(printf '%s' "$json" | jq -r '.built // 0')"
+              if [ "$commit" = '${{ github.sha }}' ] || [ "$built" -ge "$since" ]; then
+                echo "swoop.sh serves $json"
+                exit 0
+              fi
             fi
             sleep 10
           done
-          echo "::error::swoop.sh did not serve ${{ github.sha }} within ten minutes"
+          echo "::error::swoop.sh did not serve a build newer than $since within ten minutes"
           exit 1
