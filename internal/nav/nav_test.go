@@ -122,12 +122,12 @@ func TestChangeReloadsEverywhere(t *testing.T) {
 		t.Fatalf("root: got %q", got)
 	}
 	st := &State{Stack: []Frame{{Kind: "view", View: "x"}}}
-	if got := Change(st, nil); got != "reload-sync(swoop-nav rows {q})" {
+	if got := Change(st, nil); got != "reload-sync(swoop-nav rows {q})+first" {
 		t.Fatalf("view: got %q", got)
 	}
 	// Inside a pane a keyword means nothing: cmd/swoop-nav never finds
 	// one there, and a stray one is ignored.
-	if got := Change(st, &Keyed{Rest: "ap", View: "ext/define/define", Title: "Define Word"}); got != "reload-sync(swoop-nav rows {q})" || len(st.Stack) != 1 {
+	if got := Change(st, &Keyed{Rest: "ap", View: "ext/define/define", Title: "Define Word"}); got != "reload-sync(swoop-nav rows {q})+first" || len(st.Stack) != 1 {
 		t.Fatalf("view with a keyword: got %q, stack %+v", got, st.Stack)
 	}
 }
@@ -364,6 +364,19 @@ func TestToggleRowInAViewRunsAndStays(t *testing.T) {
 	}
 	// At the root a toggle row is just a row: it runs and the launcher ends.
 	if got := Enter(&State{}, "ext/x/y", "toggle", "y", "", 1, run); !strings.HasPrefix(got, "become:") {
+		t.Fatalf("at the root: %q", got)
+	}
+}
+
+func TestGroupRowDoesNothing(t *testing.T) {
+	st := &State{Stack: []Frame{{Kind: "view", View: "ext/tasks/tasks", Title: "Tasks", Query: "", Pos: 1}}}
+	if got := Enter(st, "ext/tasks/group\x1fToday", "group", "Today", "", 1, run); got != "ignore" {
+		t.Fatalf("a header ran: %q", got)
+	}
+	if len(st.Stack) != 1 || st.Land != nil {
+		t.Fatalf("a header moved the stack: %+v", st)
+	}
+	if got := Enter(&State{}, "ext/x/group", "group", "y", "", 1, run); got != "ignore" {
 		t.Fatalf("at the root: %q", got)
 	}
 }

@@ -27,6 +27,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/beatzball/swoop/internal/ext"
 	"github.com/beatzball/swoop/internal/models"
@@ -145,6 +146,19 @@ var all = []setting{
 		value:   func() string { return settings.Get(settings.Recent, settings.RecentDefault) },
 		choices: func(string) []choice {
 			return []choice{{value: "on", title: "On", note: "the five most recent first"}, {value: "off", title: "Off", note: "the list in its own order"}}
+		},
+	},
+	{
+		key: settings.Week, title: "Week starts on", icon: "󰃭",
+		explain: "The first day of the calendar week. Tasks and Reminders group what is\ndue under This week up to the last day of it.",
+		value: func() string {
+			if settings.WeekStart() == time.Sunday {
+				return "Sunday"
+			}
+			return "Monday"
+		},
+		choices: func(string) []choice {
+			return []choice{{value: "monday", title: "Monday", note: "the week ends on Sunday"}, {value: "sunday", title: "Sunday", note: "the week ends on Saturday"}}
 		},
 	},
 	{

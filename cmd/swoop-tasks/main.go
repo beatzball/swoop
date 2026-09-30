@@ -1,25 +1,36 @@
 // swoop-tasks is the tasks extension: a checklist in one markdown file,
 // ~/.local/share/swoop/tasks.md. One root row, Tasks, opens the view:
-// open tasks first, the ones due soonest on top, done ones after. Text
-// typed in the view becomes an Add task row; date words at its end
-// ("tomorrow", "friday", "2026-10-01") become the due date. Enter on a
-// task ticks it, and the view stays, reloaded.
+// the open tasks under headers by when they are due, Past due to
+// Unscheduled, and a Done row last that opens the done ones as a view of
+// their own. Text typed in the view becomes an Add task row; date words
+// at its end ("tomorrow", "friday", "2026-10-01") become the due date.
+// Enter on a task ticks it, and the view stays, reloaded.
 //
 //	swoop-tasks list                 the root row
-//	swoop-tasks view tasks [text]    the view: an Add row for text, the tasks
+//	swoop-tasks view tasks [text]    the view: an Add row for text, the open tasks
+//	swoop-tasks view done [text]     the done tasks, under a Back to open row
 //	swoop-tasks preview <id>         the task's facts
 //	swoop-tasks actions <id>         Done or Undo, Delete, Copy, Edit the list
 //	swoop-tasks run <id> [action]    tick, untick, delete, copy, edit, or add
 //	swoop-tasks add <text>           a task from the shell, date words and all
 //	swoop-tasks parse <text>         the text and its due day, tab-separated
+//	swoop-tasks group                stdin's lines, a due day first in each, in
+//	                                 the view's order, the group's name in front
 //
-// parse is for the reminders extension, which reads the same date words
-// and should not read them differently.
+// parse and group are for the reminders extension, which reads the same
+// date words and draws the same headers, and should not do either
+// differently.
 //
 // A task's id is "t", a unit separator, and its line as it is in the
 // file; the Add row's is "add", the separator, and the text. The line
 // is the id because it is what stays put: a line number moves when one
-// above it is deleted.
+// above it is deleted. A header's id is "group", the separator, and its
+// name; the Done row's is "done" and Back to open's is "open". None of
+// the three names a task, so none has actions, and running one does
+// nothing.
+//
+// SWOOP_TASKS_NOW, as 2026-09-14T10:30, is the clock for a test that
+// drives the real tool: which group a task is under depends on the day.
 package main
 
 import (
@@ -42,10 +53,26 @@ const sep = "\x1f"
 
 const (
 	viewID   = "tasks"
+	doneID   = "done"  // the Done row, and the view it opens
+	openID   = "open"  // Back to open, in that view
+	groupID  = "group" // a header's id starts with it
 	iconOpen = "󰄱"
 	iconDone = "󰄲"
 	iconAdd  = "󰐕"
+	iconBack = "󰁍"
 )
+
+// envNow names the clock a test pins; see the top of the file.
+const envNow = "SWOOP_TASKS_NOW"
+
+// clock is now, or the minute in SWOOP_TASKS_NOW when that is set and
+// reads as one.
+func clock() time.Time {
+	if t, err := time.ParseInLocation("2006-01-02T15:04", os.Getenv(envNow), time.Local); err == nil {
+		return t
+	}
+	return time.Now()
+}
 
 func main() {
 	if len(os.Args) < 2 {
@@ -57,13 +84,13 @@ func main() {
 		}
 		return ""
 	}
-	now := time.Now()
+	now := clock()
 	var err error
 	switch os.Args[1] {
 	case "list":
 		err = list(now)
 	case "view":
-		err = view(arg(3), now)
+		err = view(arg(2), arg(3), now)
 	case "preview":
 		err = preview(arg(2), now)
 	case "actions":
@@ -75,6 +102,8 @@ func main() {
 	case "parse":
 		text, due := Split(strings.Join(os.Args[2:], " "), now)
 		fmt.Printf("%s\t%s\n", text, due)
+	case "group":
+		err = groupLines(os.Stdin, os.Stdout, now, settings.WeekStart())
 	default:
 		usageExit()
 	}
@@ -85,7 +114,7 @@ func main() {
 }
 
 func usageExit() {
-	fmt.Fprintln(os.Stderr, "usage: swoop-tasks list | view tasks [text] | preview <id> | actions <id> | run <id> [done|undo|delete|copy|edit] | add <text> | parse <text>")
+	fmt.Fprintln(os.Stderr, "usage: swoop-tasks list | view tasks|done [text] | preview <id> | actions <id> | run <id> [done|undo|delete|copy|edit] | add <text> | parse <text> | group")
 	os.Exit(2)
 }
 
@@ -121,49 +150,111 @@ func summary(ts []Task, now time.Time) string {
 	return fmt.Sprintf("%d open", open)
 }
 
-func view(query string, now time.Time) error {
+func view(id, query string, now time.Time) error {
 	f, err := load(path())
 	if err != nil {
 		return err
 	}
-	return protocol.Write(os.Stdout, rows(f.Tasks(), query, now))
+	if id == doneID {
+		return protocol.Write(os.Stdout, doneRows(f.Tasks(), query, loadDone(donePath())))
+	}
+	return protocol.Write(os.Stdout, rows(f.Tasks(), query, now, settings.WeekStart()))
 }
 
-// rows is the view. With text typed, the Add row comes first, so Enter
-// straight after typing adds, then the tasks that hold every word typed.
-// With nothing typed and nothing in the list, a row that says what to do.
+// rows is the view: the open tasks under a header for each group that
+// has any, in the groups' order, and the Done row last. With text typed,
+// the Add row comes first, so Enter straight after typing adds, then the
+// open tasks that hold every word typed; a group with none of them has no
+// header. With nothing typed and nothing open, a row that says what to do.
 //
-// Every row is kind "toggle": Enter runs it and the view stays, reloaded,
-// so a list is ticked off without leaving it (see internal/nav).
-func rows(ts []Task, query string, now time.Time) []protocol.Item {
+// A task row is kind "toggle": Enter runs it and the view stays, reloaded,
+// so a list is ticked off without leaving it (see internal/nav). A header
+// is kind "group", which Enter ignores. The Done row is kind "view": the
+// done tasks are a pane of their own on top of this one, so Esc comes
+// back here too, to the same text and row.
+func rows(ts []Task, query string, now time.Time, weekStart time.Weekday) []protocol.Item {
 	var items []protocol.Item
 	query = strings.TrimSpace(query)
 	// The filter is the text without its date words: "milk friday" is
 	// about to add a task, and still finds the milk one already there.
 	text, due := Split(query, now)
+	words := strings.Fields(strings.ToLower(text))
+	var open []Task
+	var dues []string
+	done := 0
+	for _, t := range ts {
+		switch {
+		case t.Done:
+			done++
+		case matches(t.Text, words):
+			open, dues = append(open, t), append(dues, t.Due)
+		}
+	}
 	if query != "" {
 		items = append(items, protocol.Item{ID: "add" + sep + query, Kind: "toggle", Icon: iconAdd, Title: "Add task: " + text, Subtitle: describe(due, now)})
-	} else if len(ts) == 0 {
+	} else if len(open) == 0 {
 		items = append(items, protocol.Item{ID: "add" + sep, Kind: "toggle", Icon: iconAdd, Title: "Type a task, then Enter", Subtitle: "end it with today, tomorrow, a weekday or a date to give it one"})
 	}
-	words := strings.Fields(strings.ToLower(text))
-	for _, t := range order(ts, now) {
-		if !matches(t.Text, words) {
-			continue
+	order, groups := arrange(dues, now, weekStart)
+	for k, i := range order {
+		if k == 0 || groups[k] != groups[k-1] {
+			n := 1
+			for n+k < len(groups) && groups[n+k] == groups[k] {
+				n++
+			}
+			items = append(items, protocol.Item{ID: groupID + sep + groups[k].String(), Kind: "group", Title: groups[k].String(), Subtitle: count(n, "task")})
 		}
+		t := open[i]
 		it := protocol.Item{ID: "t" + sep + t.Raw, Kind: "toggle", Icon: iconOpen, Title: t.Text}
 		if t.Due != "" {
 			it.Subtitle = Label(t.Due, now)
 		}
-		if t.Done {
-			// A done task sinks and says so. The protocol has no style
-			// field to dim it with; the ticked box and the word do that.
-			it.Icon = iconDone
-			it.Subtitle = "done"
-		}
 		items = append(items, it)
 	}
+	if done > 0 {
+		// A switch, not a group: it is there whatever is typed, and says
+		// how many it holds, not how many match.
+		items = append(items, protocol.Item{ID: doneID, Kind: "view", Icon: iconDone, Title: "Done", Subtitle: count(done, "task") + ", Enter shows them"})
+	}
 	return items
+}
+
+// doneRows is the view the Done row opens: Back to open first, then the
+// done tasks that hold every word typed, the most recently done first.
+// at is when each was ticked, by its line (see loadDone); a task ticked
+// in an editor has no time, and comes after the ones that do, the ones
+// lower in the file first, since those were added later.
+//
+// Back to open is kind "refresh": Enter runs it, which does nothing, and
+// goes back to the pane below, the open tasks. A done task is a toggle
+// like an open one, so Enter opens it again and the view stays.
+func doneRows(ts []Task, query string, at map[string]int64) []protocol.Item {
+	words := strings.Fields(strings.ToLower(query))
+	open := 0
+	var done []Task
+	for i := len(ts) - 1; i >= 0; i-- {
+		if !ts[i].Done {
+			open++
+		} else if matches(ts[i].Text, words) {
+			done = append(done, ts[i])
+		}
+	}
+	sort.SliceStable(done, func(i, j int) bool { return at[done[i].Raw] > at[done[j].Raw] })
+	items := []protocol.Item{{ID: openID, Kind: "refresh", Icon: iconBack, Title: "Back to open", Subtitle: count(open, "open task")}}
+	for _, t := range done {
+		// The protocol has no style field to dim a done task with; the
+		// ticked box and the word do that.
+		items = append(items, protocol.Item{ID: "t" + sep + t.Raw, Kind: "toggle", Icon: iconDone, Title: t.Text, Subtitle: "done"})
+	}
+	return items
+}
+
+// count is "1 task", "3 tasks".
+func count(n int, what string) string {
+	if n == 1 {
+		return "1 " + what
+	}
+	return fmt.Sprintf("%d %ss", n, what)
 }
 
 // matches says whether text holds every word typed, in any order and
@@ -179,31 +270,11 @@ func matches(text string, words []string) bool {
 	return true
 }
 
-// order is the view's order: open tasks with a due day, soonest first,
-// so overdue and today are on top; then open tasks without one; then
-// done ones. Within each, file order, which is the order they were added.
-func order(ts []Task, now time.Time) []Task {
-	out := append([]Task(nil), ts...)
-	rank := func(t Task) int {
-		switch {
-		case t.Done:
-			return 2
-		case t.Due == "":
-			return 1
-		}
-		return 0
-	}
-	sort.SliceStable(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		if rank(a) != rank(b) {
-			return rank(a) < rank(b)
-		}
-		if rank(a) == 0 && a.Due != b.Due {
-			return a.Due < b.Due
-		}
-		return false
-	})
-	return out
+// furniture says whether id is a row that is not a task: a header, the
+// Done row, Back to open. It has no actions, and nothing to run.
+func furniture(id string) bool {
+	kind, _, _ := strings.Cut(id, sep)
+	return kind == groupID || kind == doneID || kind == openID
 }
 
 // resolve reads an id back: the Add row's text, or the task it names.
@@ -230,6 +301,21 @@ func preview(id string, now time.Time) error {
 		fmt.Println("Enter, then type a task. End it with today, tomorrow, a")
 		fmt.Println("weekday or a date like 2026-10-01 and that is its due day.")
 		fmt.Println("Enter on a task ticks it; ctrl-k undoes, deletes, copies.")
+		return nil
+	}
+	switch kind, name, _ := strings.Cut(id, sep); kind {
+	case groupID:
+		fmt.Println(name)
+		fmt.Println()
+		fmt.Println("The open tasks due then, the soonest first.")
+		return nil
+	case doneID:
+		fmt.Println("The tasks you have ticked, the most recently done first.")
+		fmt.Println()
+		fmt.Println("Enter shows them. Back to open, or Esc, comes back here.")
+		return nil
+	case openID:
+		fmt.Println("Enter goes back to the open tasks. Esc does too.")
 		return nil
 	}
 	f, err := load(path())
@@ -289,11 +375,14 @@ func tilde(p string) string {
 // the whole file in the editor setting, inside the panel, and comes back
 // to the view (kind "terminal"); it is also the Tasks row's one action,
 // at the root. The Add row and the hint have no menu: there is nothing
-// yet to act on.
+// yet to act on, and neither have a header, Done, or Back to open.
 func actions(id string) error {
 	edit := protocol.Item{ID: "edit", Kind: "terminal", Icon: iconOpen, Title: "Edit the list", Subtitle: "the whole file, in " + strings.Join(settings.Editor(), " ")}
 	if id == viewID {
 		return protocol.Write(os.Stdout, []protocol.Item{edit})
+	}
+	if furniture(id) {
+		return nil
 	}
 	f, err := load(path())
 	if err != nil {
@@ -328,6 +417,9 @@ func run(id, action string, now time.Time) error {
 		}
 		return settings.Edit(path())
 	}
+	if furniture(id) {
+		return nil
+	}
 	f, err := load(path())
 	if err != nil {
 		return err
@@ -342,11 +434,14 @@ func run(id, action string, now time.Time) error {
 	if id == viewID {
 		return nil
 	}
+	ticked := false
 	switch action {
 	case "":
 		f.SetDone(t, !t.Done)
+		ticked = !t.Done
 	case "done":
 		f.SetDone(t, true)
+		ticked = true
 	case "undo":
 		f.SetDone(t, false)
 	case "delete":
@@ -360,7 +455,14 @@ func run(id, action string, now time.Time) error {
 	default:
 		return fmt.Errorf("no action %q for a task", action)
 	}
-	return f.Save()
+	if err := f.Save(); err != nil {
+		return err
+	}
+	if ticked {
+		// When, for the done view's order. The task's line as it is now.
+		return noteDone(donePath(), f, f.Lines[t.Line], now)
+	}
+	return nil
 }
 
 // addText is `swoop-tasks add`, from the shell.

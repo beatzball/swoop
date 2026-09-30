@@ -52,11 +52,10 @@ cat > "$tmp/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 echo "curl $*" >> "$SWOOP_TEST_LOG"
 EOF
-cat > "$tmp/bin/swoop-tasks" <<'EOF'
-#!/usr/bin/env bash
-printf '%s\t%s\n' "${2% tomorrow}" "$([ "${2% tomorrow}" = "$2" ] || date -v+1d +%F)"
-EOF
 chmod +x "$tmp/bin/"*
+# swoop-tasks is the real one: the date words and the groups are its, and
+# the view is only right if the two agree.
+(cd "$root" && go build -o "$tmp/bin/swoop-tasks" ./cmd/swoop-tasks)
 export PATH="$tmp/bin:$PATH"
 
 fail() { echo "reminders-test: FAIL: $*" >&2; echo "--- log:" >&2; cat "$log" >&2; exit 1; }
@@ -95,6 +94,10 @@ empty_cache() {
   grep -q $'^r:x-apple-reminder://A\ttoggle\t.*\tFake water the plants\toverdue, 2000-01-01 · Home$' "$tmp/out" || fail "no overdue row: $(cat "$tmp/out")"
   grep -q $'^r:x-apple-reminder://B\ttoggle\t.*\tFake send the report\tWork$' "$tmp/out" || fail "no row without a day: $(cat "$tmp/out")"
   [ "$(count fetch)" -eq 1 ] || fail "a fresh cache started a fetch"
+  # A header over each group that has a reminder, and no other.
+  want=$'group:Past due\tgroup\t\tPast due\t1 reminder\nr:x-apple-reminder://A\ngroup:Unscheduled\tgroup\t\tUnscheduled\t1 reminder\nr:x-apple-reminder://B'
+  got=$(sed -e $'s/^\\(r:[^\t]*\\)\t.*/\\1/' "$tmp/out")
+  [ "$got" = "$want" ] || fail "the groups: $(cat "$tmp/out")"
 }
 check "empty cache: Loading, a fetch, a reload, then rows" empty_cache
 
@@ -170,6 +173,29 @@ add() {
   [ "$(count fetch)" -eq 0 ] || fail "adding started a fetch"
 }
 check "add patches the cache" add
+
+groups() {
+  : > "$log"
+  {
+    printf 'x-apple-reminder://N\t\t\tHome\tFake no day\n'
+    printf 'x-apple-reminder://T2\t%s\t17:00\tHome\tFake today at five\n' "$(date +%F)"
+    printf 'x-apple-reminder://M\t%s\t\tHome\tFake tomorrow\n' "$(date -v+1d +%F)"
+    printf 'x-apple-reminder://T1\t%s\t09:00\tWork\tFake today at nine\n' "$(date +%F)"
+    printf 'x-apple-reminder://P\t2000-01-01\t\tHome\tFake late\n'
+  } > "$cache"
+  view
+  want=$'group:Past due\nr:x-apple-reminder://P\ngroup:Today\nr:x-apple-reminder://T1\nr:x-apple-reminder://T2\ngroup:Tomorrow\nr:x-apple-reminder://M\ngroup:Unscheduled\nr:x-apple-reminder://N'
+  [ "$(cut -f 1 "$tmp/out")" = "$want" ] || fail "the groups in order: $(cat "$tmp/out")"
+  grep -q $'^group:Today\tgroup\t\tToday\t2 reminders$' "$tmp/out" || fail "the Today header: $(cat "$tmp/out")"
+  # Typing filters, and a group with no match has no header.
+  "$reminders" view reminders nine > "$tmp/out"
+  want=$'add:nine\ngroup:Today\nr:x-apple-reminder://T1'
+  [ "$(cut -f 1 "$tmp/out")" = "$want" ] || fail "the groups, filtered: $(cat "$tmp/out")"
+  "$reminders" run 'group:Today' || fail "Enter on a header failed"
+  [ -z "$("$reminders" actions 'group:Today')" ] || fail "a header has actions"
+  [ ! -s "$log" ] || fail "a header asked Reminders for something"
+}
+check "groups: headers in order, by day then hour, filtered" groups
 
 loading_enter() {
   "$reminders" run loading || fail "Enter on Loading failed"

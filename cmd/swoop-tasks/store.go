@@ -14,7 +14,9 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Task is one checklist line.
@@ -160,4 +162,67 @@ func (f *File) Save() error {
 		return err
 	}
 	return os.Rename(tmp, f.Path)
+}
+
+// donePath is the log of when each task was ticked: a time and the
+// task's line, tab-separated, in ~/.local/state/swoop/tasks-done.tsv, or
+// under XDG_STATE_HOME. The done view reads it to put the most recently
+// done first. It is beside the tasks file, not in it: the checklist stays
+// a plain one that any editor can change, and losing the log loses only
+// an order.
+func donePath() string {
+	base := os.Getenv("XDG_STATE_HOME")
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		base = filepath.Join(home, ".local", "state")
+	}
+	return filepath.Join(base, "swoop", "tasks-done.tsv")
+}
+
+// loadDone reads the log: when each line was ticked, in nanoseconds. No
+// log, or one that cannot be read, is no times, and the view still has
+// an order.
+func loadDone(p string) map[string]int64 {
+	at := map[string]int64{}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return at
+	}
+	for _, l := range strings.Split(string(data), "\n") {
+		when, line, ok := strings.Cut(l, "\t")
+		if n, err := strconv.ParseInt(when, 10, 64); ok && err == nil {
+			at[line] = n
+		}
+	}
+	return at
+}
+
+// noteDone writes that line was ticked at now. The log is written whole,
+// with only the lines that are done tasks in the file now, so a task
+// opened again, deleted or reworded does not stay in it for ever.
+func noteDone(p string, f *File, line string, now time.Time) error {
+	if p == "" {
+		return errors.New("no state directory")
+	}
+	at := loadDone(p)
+	at[line] = now.UnixNano()
+	var out strings.Builder
+	seen := map[string]bool{}
+	for _, t := range f.Tasks() {
+		if n, ok := at[t.Raw]; ok && t.Done && !seen[t.Raw] {
+			seen[t.Raw] = true
+			out.WriteString(strconv.FormatInt(n, 10) + "\t" + t.Raw + "\n")
+		}
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return err
+	}
+	tmp := p + ".tmp"
+	if err := os.WriteFile(tmp, []byte(out.String()), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, p)
 }

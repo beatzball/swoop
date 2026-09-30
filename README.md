@@ -297,12 +297,24 @@ moves the file to `deleted/` in that folder, so you can get it back.
 
 ## Tasks
 
-Type `tasks`, Enter. The list is open tasks first, the ones due soonest
-on top, done ones after. Type a task and press Enter to add it. End it
+Type `tasks`, Enter. The open tasks are under headers by when they are
+due: **Past due**, **Today**, **Tomorrow**, **This week**, **This month**,
+**Later**, **Unscheduled**. A header shows only when it has a task; under
+it the soonest comes first. Type to filter, and a header with no match
+goes too. Type a task and press Enter to add it. End it
 with `today`, `tomorrow`, a weekday, or a date like `2026-10-01`, and
 that is its due date: `buy milk tomorrow`. Enter on a task ticks it, and
 you stay in the list. ctrl-k undoes, deletes, or copies, and `Edit the
 list` opens the whole file in your editor, in the panel.
+
+A ticked task leaves the list. **Done**, the last row, opens the done
+ones, the most recently done first; `Back to open` at the top, or Esc,
+comes back. Enter on a done task opens it again.
+
+This week is the rest of the calendar week after tomorrow, and This month
+the rest of the month after that week. The week starts on Monday; `week =
+sunday` in the settings file, or Week starts on in Settings, makes it
+Sunday.
 
 The tasks are one markdown checklist, `~/.local/share/swoop/tasks.md`,
 so any editor can change it too:
@@ -313,7 +325,7 @@ so any editor can change it too:
 ```
 
 On a Mac, `reminders` is the same view over Apple Reminders: every list,
-overdue and today first. Enter completes a reminder; typed text adds one
+under the same headers. Enter completes a reminder; typed text adds one
 to your default list, with the same date words. The first time, macOS
 asks to let swoop use Reminders.
 
@@ -346,8 +358,8 @@ the log; Settings turns the group off.
 Type `settings` and press Enter, or cmd+, in the frame (alt+, in a
 terminal). One row per setting, the current value beside it; Enter on a row
 to change it: the hotkey, the preview width, the AI model, whether the model
-may search the web, the editor notes and tasks open in, what draws the
-transcript. Extensions lists every
+may search the web, the editor notes and tasks open in, the day the week starts on, what
+draws the transcript. Extensions lists every
 extension with a box for on or off; Enter turns one off, and its rows leave
 the root until you turn it back on (`off = reminders, tasks` in the file;
 Settings itself cannot be turned off). Every value is one line in
@@ -400,6 +412,8 @@ A row of kind `view` opens a pane instead of running: the launcher asks
 back. `extensions/define/define` is one: Enter on "Define Word" and you are
 typing into the dictionary. Inside a pane, a row of kind `toggle` runs
 on Enter and the pane stays, reloaded: that is how Tasks ticks a task. A
+row of kind `group` is a header over the rows below it, and Enter on it
+does nothing: that is Today over the tasks due today. A
 row or action of kind `terminal` gets the whole terminal while it runs, and
 the launcher comes back after, reloaded, the preview redrawn: that is how
 Notes opens an editor.

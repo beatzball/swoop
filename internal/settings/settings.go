@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Path is the file: $XDG_CONFIG_HOME/swoop/config, or ~/.config/swoop/config.
@@ -87,6 +88,25 @@ const (
 	Skin        = "skin"
 	SkinDefault = "0"
 )
+
+// Week is the day the calendar week starts on, "monday" or "sunday":
+// what Tasks and Reminders mean by "This week".
+const (
+	Week        = "week"
+	WeekDefault = "monday"
+)
+
+// WeekStart is the week setting as a weekday: Sunday for "sunday", and
+// Monday for "monday", for no setting, and for anything else written
+// there, since a typo must not move the week.
+func WeekStart() time.Weekday { return weekStart(Get(Week, WeekDefault)) }
+
+func weekStart(value string) time.Weekday {
+	if strings.EqualFold(strings.TrimSpace(value), "sunday") {
+		return time.Sunday
+	}
+	return time.Monday
+}
 
 // EditorKey is the key for the program a note, the task list or a text
 // file opens in, inside the panel: `editor = nvim`, `editor = emacs -nw`.
