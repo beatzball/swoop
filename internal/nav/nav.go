@@ -17,9 +17,11 @@
 //     number. A checklist is ticked off one row after another; "refresh"
 //     would leave the pane after each one. Two quick Enters tick two
 //     rows: no key is dropped while the list reloads (see LandEvent).
-//   - Enter on a row of kind "group" does nothing: it is a header over
-//     the rows below it, Today over the tasks due today, and has nothing
-//     to run.
+//   - A row of kind "group" is a header over the rows below it, Today
+//     over the tasks due today. It has nothing to run, and the cursor
+//     never rests on it: Up and Down step over it, a list opens or
+//     reloads with the cursor on the row after it, and a click on it
+//     puts the cursor back where it was. See Step.
 //   - Enter on a row of kind "terminal" hands the whole terminal to its
 //     run, an editor on a note, and takes it back when the run exits:
 //     the same pane, the bar as it was, reloaded, the cursor on the same
@@ -51,6 +53,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/beatzball/swoop/internal/protocol"
 )
 
 // Frame is one pushed pane.
@@ -72,6 +76,9 @@ type State struct {
 	// Land is where the cursor goes once the reload in flight lands, or
 	// nil. See LandEvent.
 	Land *Landing `json:"land,omitempty"`
+	// Rest is the row the cursor last came to rest on, 1-based, or 0 when
+	// not known. A click on a header goes back to it. See Step.
+	Rest int `json:"rest,omitempty"`
 }
 
 // Landing is where a chain wants the cursor once its reload lands on a
@@ -184,7 +191,9 @@ func Enter(st *State, id, kind, title, query string, pos int, runCmd func(target
 	}
 	if kind == "group" {
 		// A header over the rows below it. Nothing to run, at the root
-		// or in a view.
+		// or in a view. The cursor is on one only when the key came
+		// before it was moved off, and the caller has tried that once
+		// already (OffHeader).
 		return "ignore"
 	}
 	if kind == "refresh" && st.Top() != nil {
@@ -366,6 +375,14 @@ func AISendTarget(st *State, id, query string) (string, bool) {
 // editor, needs no landing: fzf keeps the cursor's row number across a
 // reload, and that is the row the rules ask for.
 //
+// Inside a view the event stays bound once its chain is done, and every
+// list that lands there is looked at: a header under the cursor is
+// stepped off (Step). A tick keeps the row number, and that number can
+// be the next group's header now; a view's own reload, asked of fzf from
+// outside when its rows arrive late, puts a header on the first row. At
+// the root and in the other panes it is unbound again, so it costs
+// nothing on a keystroke there.
+//
 // Until the list lands, keys see the old one. Typing is safe: it only
 // edits the bar, and the reload reads the bar. A key that reads the row
 // under the cursor is not: a second Enter on a checklist would untick the
@@ -378,21 +395,131 @@ func AISendTarget(st *State, id, query string) (string, bool) {
 // reload tick two rows; fzf has no way to queue it.
 const LandEvent = "result-final"
 
-// Landed is what LandEvent does: the cursor to the Landing's row, the
-// preview redrawn if the chain asked, and the event unbound until the
-// next chain. query is the bar's text now; typed text since the chain
-// means the user has moved on, and the cursor is left alone.
-func Landed(st *State, query string) string {
+// Landed is what LandEvent does: the cursor to the Landing's row, off a
+// header if that is one, the preview redrawn if the chain asked, and the
+// event unbound until the next chain, except inside a view (see
+// LandEvent). query is the bar's text now; typed text since the chain
+// means the user has moved on, and the cursor is left where the typing
+// put it. kind and pos are the row under the cursor now, before any of
+// this: with no Landing to go to, a row that is not a header is where
+// the cursor rests, and nothing is left to do. "" is nothing to do.
+func Landed(st *State, query, kind string, pos int) string {
 	l := st.Land
 	st.Land = nil
 	var acts []string
-	if l != nil && l.Query == query {
-		acts = append(acts, fmt.Sprintf("pos(%d)", max(l.Pos, 1)))
+	placed := l != nil && l.Query == query
+	switch {
+	case placed:
+		// What row that is, is known only once the cursor is there.
+		acts = append(acts, fmt.Sprintf("pos(%d)", max(l.Pos, 1)), stepAgain("down", 0, false))
 		if l.Refresh {
 			acts = append(acts, "refresh-preview")
 		}
+	case kind == "group":
+		acts = append(acts, stepAgain("down", 0, false))
+	case pos > 0:
+		st.Rest = pos
 	}
-	return strings.Join(append(acts, "unbind("+LandEvent+")"), "+")
+	if top := st.Top(); top == nil || top.Kind != "view" {
+		acts = append(acts, "unbind("+LandEvent+")")
+	}
+	return strings.Join(acts, "+")
+}
+
+// Step keeps the cursor off a header. It runs after every move of the
+// cursor: bin/swoop binds each key that moves it to the move and then
+// swoop-nav step, and Landed and OffHeader end in it. dir is the way the
+// cursor was going, "up" or "down"; kind and pos are the row it is on
+// now; from is the row it was on before the last move Step itself asked
+// for, 0 on the first call.
+//
+// On a row that is not a header there is nothing to do: that row is
+// where the cursor rests, and it is remembered for a click (Click). On a
+// header the cursor goes one more the same way, and Step is asked again.
+// A header the move cannot leave, the first row going up, or the last
+// going down, turns the cursor round once, so the ends of the list do
+// not trap it; turned says that has happened, and a second end stops
+// there, which takes a list of headers only, and the contract rules that
+// out.
+//
+// fzf has no row the cursor cannot be on, and no event that says which
+// way it moved, so this is a process on every Up and Down. A key held
+// down repeats some 30 times a second, and swoop-nav answers in a few
+// milliseconds.
+func Step(st *State, dir, kind string, pos, from int, turned bool) string {
+	if kind != "group" {
+		// With a Landing in flight the cursor is not at rest yet, and
+		// swoop-nav rows may be saving the state (Find): leave it be.
+		if st.Land == nil && pos > 0 {
+			st.Rest = pos
+		}
+		return ""
+	}
+	if pos == from || (dir == "up" && pos <= 1) {
+		if turned {
+			return ""
+		}
+		turned = true
+		if dir == "up" {
+			dir = "down"
+		} else {
+			dir = "up"
+		}
+	}
+	return dir + "+" + stepAgain(dir, pos, turned)
+}
+
+// stepAgain is the action that asks Step about the row the cursor is on
+// once the actions before it are done. fzf fills {2} in when it runs the
+// transform, not when it reads the chain, so it is that row's kind.
+func stepAgain(dir string, from int, turned bool) string {
+	cmd := fmt.Sprintf("swoop-nav step %s {2} %d", dir, from)
+	if turned {
+		cmd += " turned"
+	}
+	return Wrap("transform", cmd)
+}
+
+// OffHeader is what a key that reads the row under the cursor does when
+// that row is a header: the cursor goes to the row after it, and the key
+// is done again there, as again, its own transform. The cursor does not
+// rest on a header, so this is a key that came before LandEvent had
+// moved it off one: the second of two quick Enters, when the first
+// ticked the last task of a group and the next group's header took its
+// row number. again must say it is the second try, so a header that
+// cannot be left ends in Enter's "ignore" and not in a loop.
+func OffHeader(again string) string {
+	return stepAgain("down", 0, false) + "+" + Wrap("transform", again)
+}
+
+// Click is what a click on a header does: nothing, and the cursor back
+// where it was. fzf has moved the cursor to the clicked row before the
+// binding runs and does not say from where, which is why Step remembers
+// the row. Where it is not known, the row after the header.
+func Click(st *State) string {
+	if st.Rest < 1 {
+		return stepAgain("down", 0, false)
+	}
+	// fzf's own matching at the root moves the cursor without a word to
+	// Step, so the row remembered may be a header by now.
+	return fmt.Sprintf("pos(%d)+", st.Rest) + stepAgain("down", 0, false)
+}
+
+// Headers gives each row of kind "group" the look of a header: its title
+// at the left edge, in the icon column, dimmed, so the icons of the rows
+// under it line up below its first letter and not to its left. The
+// subtitle, its count, stays where it is. fzf shows "icon title", so the
+// title goes out in the icon's place and the title's own is left empty;
+// fzf matches on both at the root, so a header is still found by its
+// name. It is done here, as the rows go to fzf, so every extension that
+// prints a group row gets it.
+func Headers(items []protocol.Item) {
+	for i, it := range items {
+		if it.Kind == "group" && it.Title != "" {
+			items[i].Icon = "\x1b[2m" + it.Title + "\x1b[22m"
+			items[i].Title = ""
+		}
+	}
 }
 
 // Settle comes first in every key that reads the row under the cursor.
@@ -405,7 +532,11 @@ func Settle(st *State, query, again string) string {
 	if st.Land == nil {
 		return ""
 	}
-	return Landed(st, query) + "+" + Wrap("transform", again)
+	acts := Wrap("transform", again)
+	if landed := Landed(st, query, "", 0); landed != "" {
+		acts = landed + "+" + acts
+	}
+	return acts
 }
 
 // land records where the cursor goes once the reload lands, and returns
@@ -431,7 +562,9 @@ func AfterSend(st *State) string {
 // yet" rows; then fzf's own matching goes off, because inside a pane the
 // launcher shows exactly what comes back; then the cursor goes to the top,
 // because fzf keeps its row index across a reload, and a menu opened from
-// row 2 would otherwise start on its own row 2.
+// row 2 would otherwise start on its own row 2. Last, LandEvent is armed:
+// the first row may be a header, Past due over the tasks, and the cursor
+// is stepped off it once the rows are there (Landed).
 func push(prompt string) string {
 	return strings.Join([]string{
 		"clear-query",
@@ -439,12 +572,14 @@ func push(prompt string) string {
 		Wrap("change-prompt", prompt),
 		"reload-sync(swoop-nav rows {q})",
 		"first",
+		"rebind(" + LandEvent + ")",
 	}, "+")
 }
 
 // stay reloads the pane the user is in, from an empty bar. The cursor
 // stays on its row number, which fzf keeps across a reload, so no pos
-// and no landing (see LandEvent).
+// and no landing (see LandEvent). A header on that row number is stepped
+// off by the event a view keeps bound.
 func stay() string {
 	return "clear-query+reload-sync(swoop-nav rows {q})"
 }
@@ -566,6 +701,8 @@ func Change(st *State, k *Keyed) string {
 		// the text asks for first, Add task for a task typed. fzf keeps
 		// the row number across a reload, so from a row further down,
 		// Enter after typing landed on whatever that number now held.
+		// A header on the first row is stepped off once the rows land,
+		// by the event a view keeps bound (see LandEvent).
 		return "reload-sync(swoop-nav rows {q})+first"
 	}
 	if k == nil {
@@ -587,6 +724,8 @@ func Change(st *State, k *Keyed) string {
 		Wrap("change-prompt", k.Title+" > "),
 		"reload-sync(swoop-nav rows {q})",
 		"first",
+		// As in push: the view's first row may be a header.
+		"rebind(" + LandEvent + ")",
 	}, "+")
 }
 

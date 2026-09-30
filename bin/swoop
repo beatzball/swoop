@@ -172,6 +172,13 @@ esac
 #   left-click:  a click on a row is Enter on that row. fzf moves the
 #                cursor to the clicked row before it runs the binding, so
 #                {1} is the row under the mouse
+#                A click on a header puts the cursor back where it was,
+#                which is why it is swoop-nav click and not enter
+#   up, down, ctrl-p, ctrl-n, ctrl-j, page-up, page-down, the wheel:
+#                every key that moves the cursor does the move and then
+#                asks swoop-nav step about the row it came to: a header,
+#                kind group, is stepped over, the same way. {2} is filled
+#                in when the transform runs, after the move. See nav.Step
 #   ctrl-u, ctrl-d:
 #                scroll the preview half a page, the way preen and the
 #                usual terminal tools do. fzf's own ctrl-u clears the bar,
@@ -206,10 +213,11 @@ esac
 #                quick Enter ticks the next task, not the one just ticked.
 #                No chain waits; see nav.LandEvent in internal/nav
 #   result-final:
-#                places the cursor once a pop's or a send's list lands.
-#                Unbound at start; a chain that needs it rebinds it, and
-#                swoop-nav landed unbinds it again, so it costs nothing
-#                on a keystroke
+#                places the cursor once a pop's or a send's list lands,
+#                and moves it off a header. Unbound at start; a chain
+#                that needs it rebinds it, and swoop-nav landed unbinds it
+#                again outside a view, so it costs nothing on a keystroke
+#                at the root
 icons="$(mktemp "${TMPDIR:-/tmp}/swoop-icons.XXXXXX")"
 rows="$(mktemp "${TMPDIR:-/tmp}/swoop-rows.XXXXXX")"
 # The built-in rows, pictures attached, listed once. Every reload at the
@@ -264,11 +272,20 @@ fzf < "$rows" \
   --bind 'alt-right:transform:swoop-nav divider -5' \
   --bind 'ctrl-u:preview-half-page-up,ctrl-d:preview-half-page-down' \
   --bind 'enter:wait+transform:swoop-nav enter {1} {2} {4}' \
-  --bind 'left-click:wait+transform:swoop-nav enter {1} {2} {4}' \
+  --bind 'left-click:wait+transform:swoop-nav click {1} {2} {4}' \
+  --bind 'up:up+transform:swoop-nav step up {2}' \
+  --bind 'ctrl-p:up+transform:swoop-nav step up {2}' \
+  --bind 'scroll-up:up+transform:swoop-nav step up {2}' \
+  --bind 'page-up:page-up+transform:swoop-nav step up {2}' \
+  --bind 'down:down+transform:swoop-nav step down {2}' \
+  --bind 'ctrl-n:down+transform:swoop-nav step down {2}' \
+  --bind 'ctrl-j:down+transform:swoop-nav step down {2}' \
+  --bind 'scroll-down:down+transform:swoop-nav step down {2}' \
+  --bind 'page-down:page-down+transform:swoop-nav step down {2}' \
   --bind 'ctrl-k:wait+transform:swoop-nav actions {1} {2} {4}' \
   --bind 'tab:wait+transform:swoop-nav ai' \
   --bind 'alt-,:wait+transform:swoop-nav settings' \
-  --bind 'result-final:transform:swoop-nav landed' \
+  --bind 'result-final:transform:swoop-nav landed {2}' \
   --listen "$listen" \
   --bind 'esc:transform:swoop-nav esc' \
   --bind 'change:transform:swoop-nav change' || status=$?

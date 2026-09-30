@@ -7,7 +7,10 @@
 //	swoop-nav actions [id kind title] fzf: transform on ctrl-k
 //	swoop-nav esc                     fzf: transform on Esc
 //	swoop-nav change                  fzf: transform on typing
-//	swoop-nav landed                  fzf: transform on result-final, once armed
+//	swoop-nav click [id kind title]   fzf: transform on a click on a row
+//	swoop-nav landed [kind]           fzf: transform on result-final, once armed
+//	swoop-nav step up|down [kind [from [turned]]]
+//	                                  fzf: transform after a move of the cursor
 //	swoop-nav back id                 fzf: transform after a terminal row's run
 //	swoop-nav rows [query]            fzf: reload, prints the current pane
 //
@@ -47,7 +50,7 @@ const envApps = "SWOOP_APPS"
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|ai|settings|esc|change|landed|back|rows|window|divider ...")
+		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|click|ai|settings|esc|change|landed|step|back|rows|window|divider ...")
 		os.Exit(2)
 	}
 	nav.PreviewPercent = settings.PreviewPercent()
@@ -71,14 +74,26 @@ func main() {
 	query := os.Getenv("FZF_QUERY")
 	pos, _ := strconv.Atoi(os.Getenv("FZF_POS"))
 
+	// arg is the nth argument after the command, "" when it is not there.
+	arg := func(n int) string {
+		if len(os.Args) > n+1 {
+			return os.Args[n+1]
+		}
+		return ""
+	}
+
 	switch os.Args[1] {
-	case "enter", "actions", "ai", "settings":
+	case "enter", "actions", "click", "ai", "settings":
 		// These read the row under the cursor, or remember its number. A
 		// chain's cursor still to be placed is placed first, and the key
-		// done again there; see nav.LandEvent.
+		// done again there; see nav.LandEvent. A click is done again as
+		// Enter: the cursor is no longer on the row that was clicked.
 		again := "swoop-nav " + os.Args[1]
-		if os.Args[1] == "enter" || os.Args[1] == "actions" {
+		switch os.Args[1] {
+		case "enter", "actions":
 			again += " {1} {2} {4}"
+		case "click":
+			again = "swoop-nav enter {1} {2} {4}"
 		}
 		if acts := nav.Settle(st, query, again); acts != "" {
 			fmt.Println(acts)
@@ -90,16 +105,20 @@ func main() {
 	}
 
 	switch os.Args[1] {
-	case "enter", "actions":
-		var id, kind, title string
-		if len(os.Args) > 2 {
-			id = os.Args[2]
-		}
-		if len(os.Args) > 3 {
-			kind = os.Args[3]
-		}
-		if len(os.Args) > 4 {
-			title = os.Args[4]
+	case "enter", "actions", "click":
+		id, kind, title := arg(1), arg(2), arg(3)
+		if kind == "group" {
+			// A header. A click on it puts the cursor back where it was.
+			// A key found it under the cursor before the cursor was moved
+			// off it: it is moved now, and the key done again there, once.
+			switch {
+			case os.Args[1] == "click":
+				fmt.Println(nav.Click(st))
+				return
+			case arg(4) != "again":
+				fmt.Println(nav.OffHeader("swoop-nav " + os.Args[1] + " {1} {2} {4} again"))
+				return
+			}
 		}
 		if os.Args[1] == "actions" {
 			// A row with nothing to offer: ctrl-k does nothing.
@@ -152,7 +171,22 @@ func main() {
 	case "change":
 		fmt.Println(nav.Change(st, keyed(st, query)))
 	case "landed":
-		fmt.Println(nav.Landed(st, query))
+		// An empty answer is printed as no line at all: fzf takes no
+		// action from it.
+		if acts := nav.Landed(st, query, arg(1), pos); acts != "" {
+			fmt.Println(acts)
+		}
+	case "step":
+		rest := st.Rest
+		from, _ := strconv.Atoi(arg(3))
+		if acts := nav.Step(st, arg(1), arg(2), pos, from, arg(4) == "turned"); acts != "" {
+			fmt.Println(acts)
+		}
+		// This runs on every Up and Down: the state is written only when
+		// the row the cursor rests on has changed.
+		if st.Rest == rest {
+			return
+		}
 	case "back":
 		ran := ""
 		if len(os.Args) > 2 {
@@ -183,6 +217,7 @@ func main() {
 				fmt.Fprintln(os.Stderr, "swoop-nav:", err)
 			}
 		}
+		nav.Headers(items)
 		if err := protocol.Write(os.Stdout, items); err != nil {
 			fmt.Fprintln(os.Stderr, "swoop-nav:", err)
 			os.Exit(1)

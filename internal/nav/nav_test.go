@@ -4,6 +4,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/beatzball/swoop/internal/protocol"
 )
 
 // run is the test's stand-in for the shell command that performs a row.
@@ -36,7 +38,7 @@ func TestEnterOnNothingIsIgnored(t *testing.T) {
 func TestEnterOnViewRowPushesAndLoads(t *testing.T) {
 	st := &State{}
 	got := Enter(st, "ext/define/define", "view", "Define Word", "de", 3, run)
-	want := "clear-query+disable-search+change-prompt(Define Word > )+reload-sync(swoop-nav rows {q})+first"
+	want := "clear-query+disable-search+change-prompt(Define Word > )+reload-sync(swoop-nav rows {q})+first+rebind(result-final)"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -69,7 +71,7 @@ func TestEscClearsThenPopsThenCloses(t *testing.T) {
 func TestActionsPushesAPaneAndKeepsThePreviewOnTheTarget(t *testing.T) {
 	st := &State{Stack: []Frame{{Kind: "view", View: "ext/clipboard/clipboard", Title: "Clipboard History", Query: "", Pos: 1}}}
 	got := Actions(st, "ext/clipboard/17", "text", "hello", "he", 2)
-	want := "clear-query+disable-search+change-prompt(hello actions > )+reload-sync(swoop-nav rows {q})+first+change-preview(swoop-preview 'ext/clipboard/17')"
+	want := "clear-query+disable-search+change-prompt(hello actions > )+reload-sync(swoop-nav rows {q})+first+rebind(result-final)+change-preview(swoop-preview 'ext/clipboard/17')"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -135,7 +137,7 @@ func TestChangeReloadsEverywhere(t *testing.T) {
 func TestKeywordWithAViewOpensItWithTheRest(t *testing.T) {
 	st := &State{}
 	got := Change(st, &Keyed{Rest: "ap", View: "ext/define/define", Title: "Define Word"})
-	want := "change-query(ap)+disable-search+change-prompt(Define Word > )+reload-sync(swoop-nav rows {q})+first"
+	want := "change-query(ap)+disable-search+change-prompt(Define Word > )+reload-sync(swoop-nav rows {q})+first+rebind(result-final)"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
@@ -368,6 +370,8 @@ func TestToggleRowInAViewRunsAndStays(t *testing.T) {
 	}
 }
 
+// Enter reaches a header only on the second try (see OffHeader), and
+// then does nothing.
 func TestGroupRowDoesNothing(t *testing.T) {
 	st := &State{Stack: []Frame{{Kind: "view", View: "ext/tasks/tasks", Title: "Tasks", Query: "", Pos: 1}}}
 	if got := Enter(st, "ext/tasks/group\x1fToday", "group", "Today", "", 1, run); got != "ignore" {
@@ -426,19 +430,118 @@ func TestTerminalActionPopsBackToThePaneBelow(t *testing.T) {
 
 func TestLandedPlacesTheCursorOnceAndUnbinds(t *testing.T) {
 	st := &State{Land: &Landing{Query: "de", Pos: 3, Refresh: true}}
-	if got := Landed(st, "de"); got != "pos(3)+refresh-preview+unbind(result-final)" {
+	// The row landed on may be a header, so a step follows the pos.
+	if got := Landed(st, "de", "app", 1); got != "pos(3)+transform(swoop-nav step down {2} 0)+refresh-preview+unbind(result-final)" {
 		t.Fatalf("got %q", got)
 	}
 	if st.Land != nil {
 		t.Fatal("a landing happens once")
 	}
-	if got := Landed(st, "de"); got != "unbind(result-final)" {
-		t.Fatalf("nothing pending: %q", got)
+	if got := Landed(st, "de", "app", 3); got != "unbind(result-final)" || st.Rest != 3 {
+		t.Fatalf("nothing pending: %q, rest %d", got, st.Rest)
 	}
 	// Typed since the chain: the user has moved on, the cursor stays.
 	st.Land = &Landing{Query: "de", Pos: 3}
-	if got := Landed(st, "dex"); got != "unbind(result-final)" || st.Land != nil {
+	if got := Landed(st, "dex", "app", 1); got != "unbind(result-final)" || st.Land != nil {
 		t.Fatalf("typed after: %q %+v", got, st.Land)
+	}
+}
+
+// Inside a view the event stays bound, and a list that lands with a
+// header under the cursor has the cursor stepped off it: a view opened,
+// text typed, a tick, a reload the extension asked fzf for.
+func TestLandedInAViewStaysBoundAndStepsOffAHeader(t *testing.T) {
+	st := &State{Stack: []Frame{{Kind: "view", View: "ext/tasks/tasks", Title: "Tasks"}}}
+	if got := Landed(st, "", "group", 1); got != "transform(swoop-nav step down {2} 0)" || st.Rest != 0 {
+		t.Fatalf("a header under the cursor: %q, rest %d", got, st.Rest)
+	}
+	if got := Landed(st, "", "toggle", 2); got != "" || st.Rest != 2 {
+		t.Fatalf("a task under the cursor, nothing to do: %q, rest %d", got, st.Rest)
+	}
+	st.Land = &Landing{Pos: 4}
+	if got := Landed(st, "", "toggle", 2); got != "pos(4)+transform(swoop-nav step down {2} 0)" {
+		t.Fatalf("a landing in a view: %q", got)
+	}
+	// An actions pane on top of the view is not a view.
+	st.Stack = append(st.Stack, Frame{Kind: "actions", View: "ext/tasks/t"})
+	if got := Landed(st, "", "action", 1); got != "unbind(result-final)" {
+		t.Fatalf("in an actions pane: %q", got)
+	}
+}
+
+func TestStepGoesOverAHeaderTheSameWay(t *testing.T) {
+	st := &State{}
+	// Down from the last task of a group comes to the next group's header.
+	if got := Step(st, "down", "group", 3, 0, false); got != "down+transform(swoop-nav step down {2} 3)" {
+		t.Fatalf("down: %q", got)
+	}
+	if got := Step(st, "up", "group", 3, 0, false); got != "up+transform(swoop-nav step up {2} 3)" {
+		t.Fatalf("up: %q", got)
+	}
+	if st.Rest != 0 {
+		t.Fatalf("a header is not a place to rest: %d", st.Rest)
+	}
+	// On a task there is nothing to do but remember the row.
+	if got := Step(st, "down", "toggle", 4, 3, false); got != "" || st.Rest != 4 {
+		t.Fatalf("on a task: %q, rest %d", got, st.Rest)
+	}
+	// No row at all, an empty list: nothing, and nothing remembered.
+	if got := Step(st, "down", "", 0, 0, false); got != "" || st.Rest != 4 {
+		t.Fatalf("no row: %q, rest %d", got, st.Rest)
+	}
+	// A landing in flight owns the state file's cursor.
+	st.Land = &Landing{ID: "x"}
+	if Step(st, "down", "toggle", 5, 0, false); st.Rest != 4 {
+		t.Fatalf("remembered during a landing: %d", st.Rest)
+	}
+}
+
+func TestStepTurnsRoundAtAnEndOnce(t *testing.T) {
+	st := &State{}
+	// Up from the first task: the header above it is the first row.
+	if got := Step(st, "up", "group", 1, 0, false); got != "down+transform(swoop-nav step down {2} 1 turned)" {
+		t.Fatalf("the first row: %q", got)
+	}
+	// Down onto a header that is the last row: the move did nothing.
+	if got := Step(st, "down", "group", 9, 9, false); got != "up+transform(swoop-nav step up {2} 9 turned)" {
+		t.Fatalf("the last row: %q", got)
+	}
+	// Headers only: the second end is the end.
+	if got := Step(st, "up", "group", 1, 2, true); got != "" {
+		t.Fatalf("turned twice: %q", got)
+	}
+	if got := Step(st, "down", "group", 9, 9, true); got != "" {
+		t.Fatalf("turned twice: %q", got)
+	}
+}
+
+func TestOffHeaderMovesThenDoesTheKeyAgain(t *testing.T) {
+	got := OffHeader("swoop-nav enter {1} {2} {4} again")
+	if got != "transform(swoop-nav step down {2} 0)+transform(swoop-nav enter {1} {2} {4} again)" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestClickOnAHeaderPutsTheCursorBack(t *testing.T) {
+	if got := Click(&State{Rest: 4}); got != "pos(4)+transform(swoop-nav step down {2} 0)" {
+		t.Fatalf("got %q", got)
+	}
+	if got := Click(&State{}); got != "transform(swoop-nav step down {2} 0)" {
+		t.Fatalf("no row remembered: %q", got)
+	}
+}
+
+func TestHeadersPutsTheTitleInTheIconColumn(t *testing.T) {
+	items := []protocol.Item{
+		{ID: "g", Kind: "group", Title: "Today", Subtitle: "2 tasks"},
+		{ID: "t", Kind: "toggle", Icon: "☐", Title: "fake task"},
+	}
+	Headers(items)
+	if want := (protocol.Item{ID: "g", Kind: "group", Icon: "\x1b[2mToday\x1b[22m", Subtitle: "2 tasks"}); items[0] != want {
+		t.Fatalf("the header: %+v", items[0])
+	}
+	if want := (protocol.Item{ID: "t", Kind: "toggle", Icon: "☐", Title: "fake task"}); items[1] != want {
+		t.Fatalf("a task is left as it is: %+v", items[1])
 	}
 }
 
@@ -449,7 +552,7 @@ func TestSettleLandsBeforeAKeyReadsTheRow(t *testing.T) {
 	}
 	st.Land = &Landing{Query: "de", Pos: 3}
 	got := Settle(st, "de", "swoop-nav enter {1} {2} {4}")
-	if got != "pos(3)+unbind(result-final)+transform(swoop-nav enter {1} {2} {4})" {
+	if got != "pos(3)+transform(swoop-nav step down {2} 0)+unbind(result-final)+transform(swoop-nav enter {1} {2} {4})" {
 		t.Fatalf("got %q", got)
 	}
 	if st.Land != nil {
@@ -518,7 +621,7 @@ func TestBackKeepsTheBarUnlessTheRunNamesARow(t *testing.T) {
 	if Find(st, "", ids) {
 		t.Fatal("found once; later reloads leave it")
 	}
-	if got := Landed(st, ""); got != "pos(2)+unbind(result-final)" {
+	if got := Landed(st, "", "note", 1); got != "pos(2)+transform(swoop-nav step down {2} 0)" {
 		t.Fatalf("got %q", got)
 	}
 }
