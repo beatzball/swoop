@@ -279,7 +279,8 @@ def main():
     slow = os.path.join(tmp, "slow")
 
     # The fake extension: one view row, one plain row, a view that filters
-    # three words, an action menu, and a run that leaves a marker.
+    # three words through swoop-match, as a view in shell does, an action
+    # menu, and a run that leaves a marker.
     write_exe(os.path.join(ext_dir, "fake"), f"""#!/usr/bin/env bash
 row() {{ printf '%s\\t%s\\t%s\\t%s\\t%s\\n' "$1" "$2" "$3" "$4" "$5"; }}
 case "$1" in
@@ -290,10 +291,9 @@ case "$1" in
     row things view '' 'Fake Things' 'a view of fake things'
     row plain command '' 'Fake Plain Row' 'runs and leaves a marker' ;;
   view)
-    q="${{3:-}}"
     for w in apple banana cherry; do
-      case "$w" in *"$q"*) row "$w" fruit '' "$w" 'fruit' ;; esac
-    done ;;
+      row "$w" fruit '' "$w" 'fruit'
+    done | swoop-match "${{3:-}}" ;;
   preview) echo "preview of $2" ;;
   actions) row copy action '' 'Copy Fake' 'Enter'; row delete refresh '' 'Delete Fake' '' ;;
   run) echo "$2 ${{3:-}}" > '{marker}' ;;
@@ -414,6 +414,11 @@ esac
                 fail(f"the one row should be cherry: {st['current']}", L.buf)
             # clears 'err'
             L.press("\x1b", lambda s: s["query"] == "" and s["matchCount"] == 3, what="all three rows back after Esc cleared the bar")
+            # the letters in order, with others in between, find a row
+            st = L.press("bnn", lambda s: s["query"] == "bnn" and s["matchCount"] == 1, what="swoop-match leaving one row for 'bnn'")
+            if "banana" not in cur(st):
+                fail(f"the one row should be banana: {st['current']}", L.buf)
+            L.press("\x1b", lambda s: s["query"] == "" and s["matchCount"] == 3, what="all three rows back after Esc cleared 'bnn'")
             # pops: the text back at once, while the root's rows are still
             # on their way (the fake list is slow here), and letters typed
             # then are kept, not dropped as fzf's wait dropped them; the
@@ -521,6 +526,9 @@ esac
                 if "preview = 70" not in f.read():
                     fail("the choice did not write preview = 70", L.buf)
             L.press("\x1b", lambda s: s["query"] == "" and has(s, "Preview width"), what="the bar cleared in Settings")  # clears 'preview'
+            # The view's own filter takes letters in order (#201).
+            L.press("akey", lambda s: s["query"] == "akey" and "API key" in cur(s), what="the API key row first for 'akey'")
+            L.press("\x1b", lambda s: s["query"] == "" and has(s, "Preview width"), what="the bar cleared in Settings again")  # clears 'akey'
             L.press("\x1b", lambda s: s["query"] == "fake" and has(s, "Fake Search"), what="the root with the earlier text back")  # pops to the root
             # and clear it for the next step
             L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="an empty bar at the root")

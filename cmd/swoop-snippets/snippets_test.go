@@ -330,6 +330,11 @@ func TestSnippetsRowAndView(t *testing.T) {
 	if lines := strings.Split(strings.TrimSpace(out), "\n"); len(lines) != 2 || !strings.Contains(lines[1], "Greeting") {
 		t.Fatalf("a keyword filters the pane: %q", out)
 	}
+	// The letters in order find a name (#201), and New snippet stays first.
+	out = capture(t, func() error { return view("grtg") })
+	if lines := strings.Split(strings.TrimSpace(out), "\n"); len(lines) != 2 || !strings.HasPrefix(lines[0], newID+"\t") || !strings.Contains(lines[1], "Greeting") {
+		t.Fatalf("letters in order: %q", out)
+	}
 }
 
 // capture runs fn with stdout in a file and returns what it printed.

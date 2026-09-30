@@ -9,6 +9,27 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **Every view matches the way the root does.** Inside a view, a word's
+  letters need only be in a row in order: `akey` finds API key in
+  Settings, as it does at the root. Words still match in any order, in the
+  title, the subtitle, or a setting's hidden words. The best rows come
+  first: a word as typed ahead of one with letters in between, the start
+  of a word ahead of its middle, a title ahead of a subtitle, a short
+  reach ahead of a long one. Settings, its choices and Extensions, Tasks
+  and Done, Notes, Snippets, Emoji, Stats, the action menu, and a
+  keyword's rows (Links, Window) all filter this way. A note's text and a
+  clipboard entry match a word only as typed. In Tasks and Reminders the
+  groups and the days keep their order, and the best match leads among
+  tasks due the same day. A row made from the text (Add task, New note,
+  Use what you typed) still shows, where it was.
+- **`swoop-match` for extensions.** A view in shell prints its rows and
+  pipes them through `swoop-match <query>`, and gets the same matching and
+  order as the bundled views. A `group` header with no matching row is
+  left out. Reminders uses it, so it finds a reminder by its list's name
+  too.
+
 ## [0.10.0] - 2026-09-30
 
 Tasks in groups, headers the cursor skips, and a Settings filter that takes words in any order.

@@ -180,22 +180,25 @@ field() {
 
 # rows prints the view's reminder rows, filtered by every word of $1,
 # under a header for each group that has any: Past due, Today, Tomorrow,
-# This week, This month, Later, Unscheduled. The first awk filters, and
-# puts the due day first; the sort is by day and then hour; swoop-tasks
-# group keeps that order inside a group and says which group each is in,
-# by the same rules and the same week setting as Tasks; the last awk
-# prints a header, kind "group", over each run of one group.
+# This week, This month, Later, Unscheduled. The filter is swoop-match,
+# the matcher every view shares: the first awk gives it each reminder as
+# a protocol row, the name as the title and the list as the subtitle, and
+# it gives back the ones that match, the best first. The second awk finds
+# each of those in the cache again, and puts the due day first; the sort
+# is by day and then hour, and it is stable, so reminders due at the same
+# time stay best first; swoop-tasks group keeps that order inside a group
+# and says which group each is in, by the same rules and the same week
+# setting as Tasks; the last awk prints a header, kind "group", over each
+# run of one group.
 rows() {
   local today tomorrow
   today=$(date +%F)
   tomorrow=$(date -v+1d +%F)
-  Q="$1" awk -F '\t' '
-    BEGIN { OFS = "\t"; n = split(tolower(ENVIRON["Q"]), words, " ") }
-    {
-      name = tolower($5)
-      for (i = 1; i <= n; i++) if (index(name, words[i]) == 0) next
-      print $2, $3, $1, $4, $5
-    }' "$cache" | sort -t "$(printf '\t')" -k1,1 -k2,2 -s | swoop-tasks group |
+  awk -F '\t' '{ printf "%s\ttoggle\t\t%s\t%s\n", $1, $5, $4 }' "$cache" | swoop-match "$1" |
+  awk -F '\t' '
+    BEGIN { OFS = "\t" }
+    NR == FNR { line[$1] = $2 OFS $3 OFS $1 OFS $4 OFS $5; next }
+    $1 in line { print line[$1] }' "$cache" - | sort -t "$(printf '\t')" -k1,1 -k2,2 -s | swoop-tasks group |
   awk -F '\t' -v today="$today" -v tomorrow="$tomorrow" '
     { group[NR] = $1; day[NR] = $2; hm[NR] = $3; id[NR] = $4; list[NR] = $5; name[NR] = $6; count[$1]++ }
     END {

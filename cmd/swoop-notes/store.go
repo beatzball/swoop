@@ -10,6 +10,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"github.com/beatzball/swoop/internal/match"
 	"io"
 	"os"
 	"path/filepath"
@@ -141,32 +142,26 @@ func readCapped(path string) (string, error) {
 	return string(data), err
 }
 
-// Match says whether a note holds every word of the query, each in the
-// title or anywhere in the text, ignoring case. inTitle is true when the
-// title alone holds them all; otherwise line is the first line of the
+// Match says whether a note matches every word of the query, and how
+// well (internal/match): each word in the title, its letters in order,
+// or anywhere in the text as typed, ignoring case. The text is prose, so
+// a word's letters spread over it do not count. inTitle is true when the
+// title alone matches them all; otherwise line is the first line of the
 // text that holds the first word the title does not, to show why it
-// matched. words are lower case.
-func Match(title, text string, words []string) (ok, inTitle bool, line string) {
-	lt := strings.ToLower(title)
-	var body string
-	inTitle = true
-	for _, w := range words {
-		if strings.Contains(lt, w) {
+// matched.
+func Match(title, text string, q match.Query) (score int, ok, inTitle bool, line string) {
+	score, ok = q.ScoreProse(text, title)
+	if !ok {
+		return 0, false, false, ""
+	}
+	for _, w := range q.Words() {
+		if _, in := match.Word(w, title); in {
 			continue
 		}
-		if body == "" {
-			body = strings.ToLower(text)
-		}
-		i := strings.Index(body, w)
-		if i < 0 {
-			return false, false, ""
-		}
-		if inTitle {
-			inTitle = false
-			line = lineAt(text, body, i)
-		}
+		body := strings.ToLower(text)
+		return score, true, false, lineAt(text, body, strings.Index(body, w))
 	}
-	return true, inTitle, line
+	return score, true, true, ""
 }
 
 // lineAt is the line of text around byte i of its lower-cased copy.
@@ -190,28 +185,28 @@ func lineAt(text, lower string, i int) string {
 	return s
 }
 
-// find is the view's rows: every note with no query; with one, the notes
-// whose title holds it first, then those whose text does, each newest
-// first. Capped at maxRows.
+// find is the view's rows: every note with no query, newest first; with
+// one, the notes that match, best first, so a title match leads a match
+// in the text, and newest first among equals. Capped at maxRows.
 func find(d, query string) ([]Note, error) {
 	notes, err := scan(d)
 	if err != nil {
 		return nil, err
 	}
-	words := strings.Fields(strings.ToLower(query))
-	var titled, bodied []Note
-	for _, n := range notes {
-		if len(titled) >= maxRows {
-			break
-		}
+	q := match.New(query)
+	var best match.Best[Note]
+	for k, n := range notes {
 		p := filepath.Join(d, n.File)
-		if len(words) == 0 {
+		if q.Empty() {
+			if k >= maxRows {
+				break
+			}
 			first, err := readHead(p)
 			if err != nil {
 				continue
 			}
 			n.Title = Title(first, n.File)
-			titled = append(titled, n)
+			best.Add(n, 0)
 			continue
 		}
 		text, err := readCapped(p)
@@ -219,17 +214,12 @@ func find(d, query string) ([]Note, error) {
 			continue
 		}
 		n.Title = Title(firstLine(text), n.File)
-		ok, inTitle, line := Match(n.Title, text, words)
-		switch {
-		case !ok:
-		case inTitle:
-			titled = append(titled, n)
-		default:
+		if score, ok, _, line := Match(n.Title, text, q); ok {
 			n.Line = line
-			bodied = append(bodied, n)
+			best.Add(n, score)
 		}
 	}
-	out := append(titled, bodied...)
+	out := best.Rows()
 	if len(out) > maxRows {
 		out = out[:maxRows]
 	}

@@ -362,7 +362,9 @@ to change it: the hotkey, the preview width, the AI model, whether the model
 may search the web, the editor notes and tasks open in, the day the week starts on, what
 draws the transcript. Typing filters the rows by words, in any order, in a
 title or a value: `key api` finds API key, `nvim` finds Editor when that is
-the editor. Extensions lists every
+the editor. A word's letters need only be there in order, so `akey` finds
+API key too, and the best match comes first. Every view filters this way:
+Tasks, Notes, Snippets, Emoji, a keyword's rows. Extensions lists every
 extension with a box for on or off; Enter turns one off, and its rows leave
 the root until you turn it back on (`off = reminders, tasks` in the file;
 Settings itself cannot be turned off). Every value is one line in
@@ -421,6 +423,19 @@ and the cursor skips it. A
 row or action of kind `terminal` gets the whole terminal while it runs, and
 the launcher comes back after, reloaded, the preview redrawn: that is how
 Notes opens an editor.
+
+The launcher does not filter a pane's rows: the `view` command gets the
+text in the bar and prints what should show. `swoop-match` does that the
+way the bundled views do. Print every row and pipe them through it:
+
+```
+rows | swoop-match "$3"
+```
+
+It keeps the rows where every word typed matches the title or the
+subtitle, in any order, a word's letters in order (`akey` for API key),
+the best match first. A `group` header with no matching row under it is
+left out. `extensions/reminders/reminders` filters with it.
 
 A file called `keyword` beside the program, holding one word, gives the
 extension a keyword: `hello` and a space in the bar then asks only it. When

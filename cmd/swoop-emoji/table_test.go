@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/beatzball/swoop/internal/match"
 	"time"
 
 	"github.com/beatzball/swoop/internal/usage"
@@ -102,10 +104,29 @@ func TestSearch(t *testing.T) {
 	if got := search(entries, nil, "  "); len(got) != len(entries) {
 		t.Error("an empty query is the whole table")
 	}
-	// Every word must match: "red" and "heart" together, not either.
-	for _, e := range search(entries, nil, "red heart") {
-		if !strings.Contains(e.Name+strings.Join(e.Keywords, " "), "red") {
-			t.Errorf("%s %s has no red", e.Char, e.Name)
+	// Every word must match: "red" and "heart" together, not either. The
+	// letters of red in order will do, as in "crossed" (#201), after the
+	// rows that hold the word.
+	red := search(entries, nil, "red heart")
+	if len(red) == 0 || red[0].Name != "red heart" {
+		t.Errorf("red heart: want it first, got %v", chars(red[:min(len(red), 5)]))
+	}
+	loose := false
+	for _, e := range red {
+		all := e.Name + " " + strings.Join(e.Keywords, " ")
+		if _, ok := match.New("red heart").ScoreProse(all, e.Name); !ok {
+			t.Errorf("%s %s does not match red heart", e.Char, e.Name)
+		}
+		if has := strings.Contains(all, "red"); !has {
+			loose = true
+		} else if loose {
+			t.Errorf("%s %s holds red, and comes after one that does not", e.Char, e.Name)
+		}
+	}
+	// The letters in order find a name, and a word inside a word does.
+	for query, want := range map[string]string{"rckt": "🚀", "ocket": "🚀"} {
+		if got := search(entries, nil, query); len(got) == 0 || got[0].Char != want {
+			t.Errorf("%q: want %s first, got %v", query, want, chars(got[:min(len(got), 5)]))
 		}
 	}
 }

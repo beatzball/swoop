@@ -14,7 +14,11 @@ to change it.
 Typing filters the rows. Each word you type must be in a row's title or in
 the value beside it, in any order and any case: `key api` finds API key, and
 `nvim` finds Editor when that is the editor. `ai` finds the API URL and API
-key rows too. Extensions and each setting's choices filter the same way.
+key rows too. The letters of a word need only be there in order: `akey`
+finds API key as well. The best match comes first: a word as you typed it
+ahead of one with letters in between, the start of a word ahead of its
+middle, a title ahead of a value. Extensions and each setting's choices
+filter the same way, and so does every other view.
 
 ## What you can set
 

@@ -68,6 +68,13 @@ func TestFindAndGet(t *testing.T) {
 	if len(found) != 1 || found[0].Text != "Hello World" {
 		t.Fatalf("Find is case-insensitive substring: %+v", found)
 	}
+	// Words in any order; and as typed only, an entry is prose (#201).
+	if found, _ := s.Find("world hello"); len(found) != 1 {
+		t.Fatalf("words in any order: %+v", found)
+	}
+	if found, _ := s.Find("hlwd"); len(found) != 0 {
+		t.Fatalf("letters spread over an entry matched: %+v", found)
+	}
 	e, err := s.Get(strconv.FormatInt(found[0].ID, 10))
 	if err != nil || e.Text != "Hello World" {
 		t.Fatalf("Get by id: %+v %v", e, err)

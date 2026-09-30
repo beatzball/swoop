@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/beatzball/swoop/internal/ext"
+	"github.com/beatzball/swoop/internal/match"
 	"github.com/beatzball/swoop/internal/models"
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
@@ -289,47 +290,33 @@ func view(id, query string) error {
 	return protocol.Write(os.Stdout, items)
 }
 
-// matches reports whether every word of the query is in one of the texts,
-// whatever the case and the order: "key api" finds API key, and "nvim"
-// finds the Editor row whose value is nvim (#196). A word must sit inside
-// one text; it cannot run from the end of one into the next. An empty
-// query matches everything.
-func matches(query string, texts ...string) bool {
-	for i, t := range texts {
-		texts[i] = strings.ToLower(t)
-	}
-	for _, word := range strings.Fields(strings.ToLower(query)) {
-		if !slices.ContainsFunc(texts, func(t string) bool { return strings.Contains(t, word) }) {
-			return false
-		}
-	}
-	return true
-}
-
 // rows are the pane's rows: the settings, the extensions, or one
 // setting's choices. The query filters each of them by words, in the
-// title or the subtitle; for choices it may also be a value of the user's
-// own, which the setting decides.
+// title or the subtitle, and the best match comes first (internal/match):
+// "key api" and "akey" find API key, and "nvim" finds the Editor row
+// whose value is nvim (#196, #201). For choices the query may also be a
+// value of the user's own, which the setting decides.
 func rows(id, query string) ([]protocol.Item, error) {
+	q := match.New(query)
+	var best match.Best[protocol.Item]
 	if id == "settings" {
-		var items []protocol.Item
 		for _, s := range all {
 			value := s.value()
-			if !matches(query, s.title, value, s.words) {
-				continue
+			if score, ok := q.Score(s.title, value, s.words); ok {
+				best.Add(protocol.Item{ID: s.key, Kind: "view", Icon: s.icon, Title: s.title, Subtitle: value}, score)
 			}
-			items = append(items, protocol.Item{ID: s.key, Kind: "view", Icon: s.icon, Title: s.title, Subtitle: value})
 		}
-		if value := extensionsValue(); matches(query, "Extensions", value) {
-			items = append(items, protocol.Item{ID: extensionsID, Kind: "view", Icon: "󰏗", Title: "Extensions", Subtitle: value})
+		value := extensionsValue()
+		if score, ok := q.Score("Extensions", value); ok {
+			best.Add(protocol.Item{ID: extensionsID, Kind: "view", Icon: "󰏗", Title: "Extensions", Subtitle: value}, score)
 		}
 		// The folder row matches on its title alone. Its subtitle is a
 		// path, not a value, and the letters of a home folder's name would
 		// bring the row up for words that have nothing to do with it.
-		if matches(query, "Open the config folder") {
-			items = append(items, protocol.Item{ID: folderID, Kind: "command", Icon: "󰉋", Title: "Open the config folder", Subtitle: settings.Dir()})
+		if score, ok := q.Score("Open the config folder"); ok {
+			best.Add(protocol.Item{ID: folderID, Kind: "command", Icon: "󰉋", Title: "Open the config folder", Subtitle: settings.Dir()}, score)
 		}
-		return items, nil
+		return best.Rows(), nil
 	}
 	if id == extensionsID {
 		return extensionRows(query), nil
@@ -339,7 +326,6 @@ func rows(id, query string) ([]protocol.Item, error) {
 		return nil, fmt.Errorf("no setting %q", id)
 	}
 	current := settings.Get(s.key, "")
-	var items []protocol.Item
 	for _, c := range s.choices(query) {
 		note := c.note
 		if c.value == current || (current == "" && c.value == "" && s.key != settings.AI) {
@@ -347,16 +333,18 @@ func rows(id, query string) ([]protocol.Item, error) {
 		}
 		// The pane's own matching is off inside a view, so the choices
 		// filter on what was typed themselves, by words in the title or
-		// the note; a row the setting made from the typed text is always
-		// shown.
-		if !c.typed && !matches(query, c.title, note) {
-			continue
-		}
+		// the note, best first; a row the setting made from the typed
+		// text is always shown, where the setting put it.
 		// Kind refresh: Enter sets the value and returns to the Settings
 		// pane, reloaded, so the subtitle shows the new value.
-		items = append(items, protocol.Item{ID: s.key + "=" + c.value, Kind: "refresh", Icon: blank, Title: c.title, Subtitle: note})
+		it := protocol.Item{ID: s.key + "=" + c.value, Kind: "refresh", Icon: blank, Title: c.title, Subtitle: note}
+		if c.typed {
+			best.Pin(it)
+		} else if score, ok := q.Score(c.title, note); ok {
+			best.Add(it, score)
+		}
 	}
-	return items, nil
+	return best.Rows(), nil
 }
 
 func preview(id string) error {
@@ -542,11 +530,12 @@ func extensionsValue() string {
 
 // extensionRows is the Extensions view: every extension found, on or off,
 // by name, filtered on what was typed by words in the name or the
-// subtitle. Each row is kind toggle:
+// subtitle, best first. Each row is kind toggle:
 // Enter flips it and the view stays, reloaded, with the new mark.
 func extensionRows(query string) []protocol.Item {
 	off := settings.OffList()
-	var items []protocol.Item
+	q := match.New(query)
+	var best match.Best[protocol.Item]
 	for _, e := range ext.DiscoverAll(ext.Dirs()) {
 		it := protocol.Item{ID: extensionPrefix + e.Name, Kind: "toggle", Icon: iconOn, Title: e.Name, Subtitle: purpose(e.Name, e.Exe)}
 		switch {
@@ -558,12 +547,11 @@ func extensionRows(query string) []protocol.Item {
 			it.Icon = iconOff
 			it.Subtitle = strings.TrimSuffix("off · "+it.Subtitle, " · ")
 		}
-		if !matches(query, it.Title, it.Subtitle) {
-			continue
+		if score, ok := q.Score(it.Title, it.Subtitle); ok {
+			best.Add(it, score)
 		}
-		items = append(items, it)
 	}
-	return items
+	return best.Rows()
 }
 
 // flip turns one extension on if it is off, and off if it is on. Settings

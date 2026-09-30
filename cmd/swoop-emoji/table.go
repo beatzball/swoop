@@ -6,6 +6,7 @@ package main
 
 import (
 	_ "embed"
+	"github.com/beatzball/swoop/internal/match"
 	"os"
 	"path/filepath"
 	"sort"
@@ -179,8 +180,13 @@ func allPrefix(tokens, ws []string) bool {
 // search returns the entries that match query, best first. Within the
 // name ranks a shorter name leads, so "heart" puts the red heart's plain
 // name ahead of "heart with arrow"; among keyword matches the table's own
-// order holds, which is the order of a keyboard's picker. An empty query
-// is the whole table in that order.
+// order holds, which is the order of a keyboard's picker. After those
+// come the entries only the matcher every view shares finds
+// (internal/match): a word inside a word of the name or a keyword, or
+// its letters in order in the name, "rckt" for rocket, the best of them
+// first. The keywords count as typed only: there are thousands of them,
+// and the letters of a short word are spread in some of them. An empty
+// query is the whole table in that order.
 func search(entries []Entry, extra map[string][]string, query string) []Entry {
 	query = strings.ToLower(strings.TrimSpace(query))
 	if query == "" {
@@ -196,9 +202,14 @@ func search(entries []Entry, extra map[string][]string, query string) []Entry {
 		score int
 	}
 	var hits []hit
+	q := match.New(query)
+	var loose match.Best[Entry]
 	for _, e := range entries {
-		if s := score(e, extra[key(e.Char)], query, tokens); s != noMatch {
+		mine := extra[key(e.Char)]
+		if s := score(e, mine, query, tokens); s != noMatch {
 			hits = append(hits, hit{e, s})
+		} else if s, ok := q.ScoreProse(strings.Join(e.Keywords, " ")+" "+strings.Join(mine, " "), e.Name); ok {
+			loose.Add(e, s)
 		}
 	}
 	sort.SliceStable(hits, func(i, j int) bool {
@@ -215,5 +226,5 @@ func search(entries []Entry, extra map[string][]string, query string) []Entry {
 	for i, h := range hits {
 		out[i] = h.e
 	}
-	return out
+	return append(out, loose.Rows()...)
 }

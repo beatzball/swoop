@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/beatzball/swoop/internal/match"
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/usage"
 )
@@ -82,23 +83,25 @@ func usageExit() {
 
 // view lists what was opened, most used first, the count and the last
 // time in the subtitle. The id is the opened thing's own id, so Enter
-// opens it again and the preview is its usage. The query filters titles.
+// opens it again and the preview is its usage. The query filters titles,
+// the best match first (internal/match).
 func view(query string) error {
 	entries, err := usage.Load()
 	if err != nil {
 		return err
 	}
-	var items []protocol.Item
+	q := match.New(query)
+	var best match.Best[protocol.Item]
 	for _, s := range usage.Stats(entries) {
 		title := s.Title
 		if title == "" {
 			title = s.ID
 		}
-		if query != "" && !strings.Contains(strings.ToLower(title), strings.ToLower(query)) {
-			continue
+		if score, ok := q.Score(title); ok {
+			best.Add(protocol.Item{ID: s.ID, Kind: "stat", Icon: iconFor(s.Kind), Title: title, Subtitle: fmt.Sprintf("%s · %s", times(s.Count), ago(s.Last))}, score)
 		}
-		items = append(items, protocol.Item{ID: s.ID, Kind: "stat", Icon: iconFor(s.Kind), Title: title, Subtitle: fmt.Sprintf("%s · %s", times(s.Count), ago(s.Last))})
 	}
+	items := best.Rows()
 	if len(items) == 0 {
 		items = append(items, protocol.Item{ID: "none", Kind: "text", Icon: "", Title: "Nothing opened yet", Subtitle: "every Enter counts from now on"})
 	}
