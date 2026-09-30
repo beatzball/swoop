@@ -54,8 +54,9 @@ echo "curl $*" >> "$SWOOP_TEST_LOG"
 EOF
 chmod +x "$tmp/bin/"*
 # swoop-tasks is the real one: the date words and the groups are its, and
-# the view is only right if the two agree.
-(cd "$root" && go build -o "$tmp/bin/swoop-tasks" ./cmd/swoop-tasks)
+# the view is only right if the two agree. swoop-match is the real one
+# too: the filter is its.
+(cd "$root" && go build -o "$tmp/bin/" ./cmd/swoop-tasks ./cmd/swoop-match)
 export PATH="$tmp/bin:$PATH"
 
 fail() { echo "reminders-test: FAIL: $*" >&2; echo "--- log:" >&2; cat "$log" >&2; exit 1; }
@@ -191,6 +192,22 @@ groups() {
   "$reminders" view reminders nine > "$tmp/out"
   want=$'add:nine\ngroup:Today\nr:x-apple-reminder://T1'
   [ "$(cut -f 1 "$tmp/out")" = "$want" ] || fail "the groups, filtered: $(cat "$tmp/out")"
+  # The filter is swoop-match: the letters in order find a name, in any
+  # word order, and a list's name finds its reminders.
+  "$reminders" view reminders 'nine fke' > "$tmp/out"
+  want=$'add:nine fke\ngroup:Today\nr:x-apple-reminder://T1'
+  [ "$(cut -f 1 "$tmp/out")" = "$want" ] || fail "letters in order: $(cat "$tmp/out")"
+  "$reminders" view reminders work > "$tmp/out"
+  want=$'add:work\ngroup:Today\nr:x-apple-reminder://T1'
+  [ "$(cut -f 1 "$tmp/out")" = "$want" ] || fail "by the list's name: $(cat "$tmp/out")"
+  # Among reminders due at the same time, the best match comes first.
+  {
+    printf 'x-apple-reminder://K1\t\t\tHome\tFake monkey\n'
+    printf 'x-apple-reminder://K2\t\t\tHome\tFake key\n'
+  } > "$cache"
+  "$reminders" view reminders key > "$tmp/out"
+  want=$'add:key\ngroup:Unscheduled\nr:x-apple-reminder://K2\nr:x-apple-reminder://K1'
+  [ "$(cut -f 1 "$tmp/out")" = "$want" ] || fail "best first: $(cat "$tmp/out")"
   "$reminders" run 'group:Today' || fail "Enter on a header failed"
   [ -z "$("$reminders" actions 'group:Today')" ] || fail "a header has actions"
   [ ! -s "$log" ] || fail "a header asked Reminders for something"

@@ -281,34 +281,6 @@ func TestTypedValueRowIsShown(t *testing.T) {
 	}
 }
 
-// The filter splits the bar's text on spaces, and a row matches when
-// every word is in one of its texts, whatever the case and the order
-// (#196).
-func TestMatches(t *testing.T) {
-	for _, c := range []struct {
-		query string
-		texts []string
-		want  bool
-	}{
-		{"", []string{"API key"}, true},
-		{"   ", []string{"API key"}, true},
-		{"api key", []string{"API key", "not set"}, true},
-		{"key api", []string{"API key", "not set"}, true},
-		{"KEY  Api", []string{"API key", "not set"}, true},
-		{"ai key", []string{"API key", "not set"}, false},
-		{"ai key", []string{"API key", "not set", "ai"}, true},
-		{"nvim", []string{"Editor", "nvim"}, true},
-		{"edit nv", []string{"Editor", "nvim"}, true},
-		{"editor vim emacs", []string{"Editor", "nvim"}, false},
-		// A word sits inside one text, not across two.
-		{"ornv", []string{"Editor", "nvim"}, false},
-	} {
-		if got := matches(c.query, c.texts...); got != c.want {
-			t.Errorf("matches(%q, %q) = %v, want %v", c.query, c.texts, got, c.want)
-		}
-	}
-}
-
 // The rows of the Settings view for the words a person types (#196): the
 // API rows answer to "ai" though neither title holds it, and a row is
 // found by its value.
@@ -342,6 +314,10 @@ func TestSettingsFilterByWords(t *testing.T) {
 		"folder":    "Open the config folder",
 		"ext":       "Extensions",
 		"key nvim":  "",
+		// The letters in order, with others in between (#201).
+		"akey":   "API key",
+		"apiurl": "API URL",
+		"edtr":   "Editor",
 	} {
 		if got := titles("settings", query); got != want {
 			t.Errorf("settings, %q: %q, want %q", query, got, want)
@@ -369,8 +345,8 @@ func TestChoicesFilterByWords(t *testing.T) {
 		return strings.Join(out, "|")
 	}
 	for _, c := range []struct{ id, query, want string }{
-		// Default's note names LM Studio too.
-		{settings.AIURL, "studio lm", "Default|LM Studio"},
+		// Default's note names LM Studio too; the title match comes first.
+		{settings.AIURL, "studio lm", "LM Studio|Default"},
 		// "local" is only in a note.
 		{settings.AIURL, "LOCAL studio", "LM Studio"},
 		{settings.AIURL, "local", "LM Studio"},
@@ -385,6 +361,44 @@ func TestChoicesFilterByWords(t *testing.T) {
 	} {
 		if got := titles(c.id, c.query); got != c.want {
 			t.Errorf("%s, %q: %q, want %q", c.id, c.query, got, c.want)
+		}
+	}
+}
+
+// The Extensions view filters with the matcher every view shares (#201):
+// the letters in order find a name, and a name match comes before a match
+// in the subtitle.
+func TestExtensionsFuzzyAndRanked(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	dir := t.TempDir()
+	for name, body := range map[string]string{
+		"alpha": "#!/usr/bin/env bash\n# alpha: comes before gamma.\n",
+		"gamma": "#!/usr/bin/env bash\n# gamma: the third one.\n",
+	} {
+		if err := os.MkdirAll(filepath.Join(dir, name), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name, name), []byte(body), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	t.Setenv("SWOOP_EXTENSIONS", dir)
+	names := func(query string) string {
+		var out []string
+		for _, it := range extensionRows(query) {
+			out = append(out, it.Title)
+		}
+		return strings.Join(out, "|")
+	}
+	for query, want := range map[string]string{
+		"":      "alpha|gamma",
+		"apha":  "alpha",
+		"gmma":  "gamma|alpha",
+		"gamma": "gamma|alpha",
+		"zzz":   "",
+	} {
+		if got := names(query); got != want {
+			t.Errorf("%q: %q, want %q", query, got, want)
 		}
 	}
 }

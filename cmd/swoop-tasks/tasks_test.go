@@ -456,3 +456,30 @@ func read(t *testing.T, p string) string {
 	}
 	return string(data)
 }
+
+// The filter is the matcher every view shares (#201): the letters in
+// order find a task, the Add row still shows, first, and a group with no
+// match has no header. Among tasks due the same day the best match leads.
+func TestRowsFuzzyAndRanked(t *testing.T) {
+	got := titles(rows(sixGroups, "ystr", midMonth, time.Monday))
+	if want := "Add task: ystr,[Past due],yesterday,Done"; got != want {
+		t.Fatalf("letters in order:\n%s\nwant:\n%s", got, want)
+	}
+	ts := []Task{
+		{Raw: "a", Text: "feed the monkey"},
+		{Raw: "b", Text: "k e y spelled out"},
+		{Raw: "c", Text: "key for the shed"},
+		{Raw: "d", Text: "monkey on friday", Due: "2026-09-18"},
+		{Raw: "e", Text: "done key", Done: true},
+		{Raw: "f", Text: "done monkey", Done: true},
+	}
+	got = titles(rows(ts, "key", midMonth, time.Monday))
+	if want := "Add task: key,[This week],monkey on friday,[Unscheduled],key for the shed,feed the monkey,k e y spelled out,Done"; got != want {
+		t.Fatalf("ranked inside a group:\n%s\nwant:\n%s", got, want)
+	}
+	// Done: the best match first, then the most recently done.
+	got = titles(doneRows(ts, "key", map[string]int64{"e": 1, "f": 2}))
+	if want := "Back to open,done key,done monkey"; got != want {
+		t.Fatalf("done, ranked:\n%s\nwant:\n%s", got, want)
+	}
+}

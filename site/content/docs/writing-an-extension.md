@@ -244,6 +244,34 @@ prints: here `head -100`.
 The rows of a view are ordinary rows. `preview` and `run` work on them as
 anywhere else, which is why Enter on Lisbon already copies the time.
 
+`grep` finds the text exactly as typed. To filter the way the bundled
+views do, print every row and pipe the rows through `swoop-match`, a small
+tool that ships with swoop:
+
+```bash
+  view)
+    all_zones | while IFS= read -r z; do
+      row "$z" clock '🕐' "$(city "$z")" "$z"
+    done | swoop-match "${3:-}" | head -100
+    ;;
+```
+
+`swoop-match <query>` reads rows and prints the ones that match, the best
+first:
+
+- every word typed must match the title or the subtitle, in any order and
+  any case
+- a word matches when its letters are there in that order, so `lsbn` finds
+  Lisbon; the letters must sit close together, so a long text does not
+  match every word
+- a word as typed comes ahead of one with letters in between, the start of
+  a word ahead of its middle, the title ahead of the subtitle
+- a header, a row of kind `group`, stays only when a row under it matches
+- with nothing typed, every row passes, in your order
+
+A row you make from the text itself, like an Add row, is yours to print:
+put it before or after the pipe. The `reminders` extension does this.
+
 **Try it.**
 
 ```sh
@@ -479,6 +507,8 @@ slow sixty times a second.
 - Do the slow part once and cache it, in `$XDG_CACHE_HOME` or beside the
   script: `SWOOP_EXT_DIR` is the extension's own folder
 - Cap a view's rows. Nobody reads the thousandth
+- `swoop-match` filters a few thousand rows in a few milliseconds. The
+  cost is in making the rows, so make them once and cache them
 - A script is fine. When one grows, the bundled extensions keep a short shell
   script as the entry point and put the work in a compiled tool: `emoji`,
   `notes` and `tasks` do this

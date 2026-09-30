@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/beatzball/swoop/internal/match"
 )
 
 // Entry is one thing that was copied.
@@ -114,21 +116,18 @@ func (s Store) All() ([]Entry, error) {
 	return entries, nil
 }
 
-// Find returns the entries whose text contains query, ignoring case,
-// newest first. An empty query returns everything.
+// Find returns the entries whose text holds every word of query, in any
+// order and case; those where a word starts a word of the text first,
+// and newest first among equals (internal/match). An entry is prose: a
+// word must be in it as typed, since the letters of any word are spread
+// somewhere in a page of text. An empty query returns everything.
 func (s Store) Find(query string) ([]Entry, error) {
 	all, err := s.All()
-	if err != nil || query == "" {
+	q := match.New(query)
+	if err != nil || q.Empty() {
 		return all, err
 	}
-	q := strings.ToLower(query)
-	var out []Entry
-	for _, e := range all {
-		if strings.Contains(strings.ToLower(e.Text), q) {
-			out = append(out, e)
-		}
-	}
-	return out, nil
+	return match.Rank(all, func(e Entry) (int, bool) { return q.ScoreProse(e.Text) }), nil
 }
 
 // Get returns the entry with that id.

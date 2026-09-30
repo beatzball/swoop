@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/beatzball/swoop/internal/match"
 	"github.com/beatzball/swoop/internal/paste"
 	"github.com/beatzball/swoop/internal/protocol"
 )
@@ -101,28 +102,16 @@ func list() error {
 }
 
 // view prints the Snippets pane: New snippet first, then the snippets
-// whose name or keyword holds every word typed. The extension filters
-// here; fzf's matching is off inside a pane.
+// whose name or keyword matches every word typed, best first
+// (internal/match). The extension filters here; fzf's matching is off
+// inside a pane.
 func view(query string) error {
 	snippets, err := heads()
 	if err != nil {
 		return err
 	}
-	words := strings.Fields(strings.ToLower(query))
-	var kept []Snippet
-	for _, s := range snippets {
-		hay := strings.ToLower(s.Name + " " + s.Keyword)
-		all := true
-		for _, w := range words {
-			if !strings.Contains(hay, w) {
-				all = false
-				break
-			}
-		}
-		if all {
-			kept = append(kept, s)
-		}
-	}
+	q := match.New(query)
+	kept := match.Rank(snippets, func(s Snippet) (int, bool) { return q.Score(s.Name, s.Keyword) })
 	sub := "a new file, opened in the editor"
 	if len(snippets) == 0 {
 		sub = "none yet: Enter makes the Signature example in the editor"

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/beatzball/swoop/internal/match"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -104,21 +105,31 @@ func TestSearch(t *testing.T) {
 	if len(got) != 0 {
 		t.Errorf("a word nowhere matches nothing: %v", files(got))
 	}
+	// The letters in order find a title (#201), and not a text: a note's
+	// text is prose, where the letters of any word are spread somewhere.
+	got, _ = find(d, "shpng")
+	if want := []string{"shopping.md"}; !reflect.DeepEqual(files(got), want) {
+		t.Errorf("letters in order: %v", files(got))
+	}
+	got, _ = find(d, "pkbrd")
+	if len(got) != 0 {
+		t.Errorf("letters spread over a text matched: %v", files(got))
+	}
 }
 
 func TestMatch(t *testing.T) {
 	for _, c := range []struct {
 		title, text string
-		words       []string
+		words       string
 		ok, inTitle bool
 		line        string
 	}{
-		{"Groceries", "# Groceries\neggs", []string{"groc"}, true, true, ""},
-		{"Groceries", "# Groceries\n  Eggs, milk  \n", []string{"groc", "milk"}, true, false, "Eggs, milk"},
-		{"Groceries", "# Groceries\neggs", []string{"tea"}, false, false, ""},
-		{"Title", "no newline at the end", []string{"end"}, true, false, "no newline at the end"},
+		{"Groceries", "# Groceries\neggs", "groc", true, true, ""},
+		{"Groceries", "# Groceries\n  Eggs, milk  \n", "groc milk", true, false, "Eggs, milk"},
+		{"Groceries", "# Groceries\neggs", "tea", false, false, ""},
+		{"Title", "no newline at the end", "end", true, false, "no newline at the end"},
 	} {
-		ok, inTitle, line := Match(c.title, c.text, c.words)
+		_, ok, inTitle, line := Match(c.title, c.text, match.New(c.words))
 		if ok != c.ok || inTitle != c.inTitle || line != c.line {
 			t.Errorf("Match(%q, %v) = %v %v %q", c.title, c.words, ok, inTitle, line)
 		}

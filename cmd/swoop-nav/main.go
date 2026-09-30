@@ -31,6 +31,7 @@ import (
 
 	"github.com/beatzball/swoop/internal/apps"
 	"github.com/beatzball/swoop/internal/ext"
+	"github.com/beatzball/swoop/internal/match"
 	"github.com/beatzball/swoop/internal/nav"
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
@@ -363,13 +364,8 @@ func rows(st *nav.State, query string) ([]protocol.Item, error) {
 		return items, nil
 	}
 	if top.Kind == "actions" {
-		var items []protocol.Item
-		for _, it := range actionsFor(top.View) {
-			if query == "" || strings.Contains(strings.ToLower(it.Title), strings.ToLower(query)) {
-				items = append(items, it)
-			}
-		}
-		return items, nil
+		q := match.New(query)
+		return match.Rank(actionsFor(top.View), func(it protocol.Item) (int, bool) { return q.Score(it.Title) }), nil
 	}
 	name, viewID, ok := ext.Route(top.View)
 	if !ok {
@@ -422,8 +418,8 @@ func keyed(st *nav.State, query string) *nav.Keyed {
 }
 
 // scoped prints the root scoped to one extension by its keyword: its rows
-// for the rest of the bar, and only those whose title holds every word of
-// it. fzf's matching is off here (see nav.Change), because the bar still
+// for the rest of the bar, and only those that match every word of it,
+// best first. fzf's matching is off here (see nav.Change), because the bar still
 // starts with the keyword, so the filtering is done here, the way the
 // actions pane does it. No apps and no recent group: the keyword asked
 // for one extension.
@@ -435,25 +431,11 @@ func scoped(e ext.Extension, rest string) ([]protocol.Item, error) {
 	return matching(items, rest), nil
 }
 
-// matching keeps the items whose title holds every word of query,
-// ignoring case.
+// matching keeps the items that match every word of query in the title
+// or the subtitle, best first, by the rules every view filters with
+// (internal/match).
 func matching(items []protocol.Item, query string) []protocol.Item {
-	words := strings.Fields(strings.ToLower(query))
-	var kept []protocol.Item
-	for _, it := range items {
-		title := strings.ToLower(it.Title)
-		all := true
-		for _, w := range words {
-			if !strings.Contains(title, w) {
-				all = false
-				break
-			}
-		}
-		if all {
-			kept = append(kept, it)
-		}
-	}
-	return kept
+	return match.Items(match.New(query), items)
 }
 
 // cachedApps reads the rows bin/swoop cached at startup. Without the cache

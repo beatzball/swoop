@@ -52,6 +52,8 @@ bench: build
 	hyperfine --warmup 5 -N 'bin/swoop-snippets list'
 	hyperfine --warmup 5 -N 'bin/swoop-notes view notes' 'bin/swoop-notes view notes word'
 	hyperfine --warmup 5 -N 'bin/swoop-tasks list'
+	hyperfine --warmup 5 'bin/swoop-list | bin/swoop-match saf'
+	go test ./internal/match -run '^$$' -bench .
 
 clean:
 	find bin -type f ! -name swoop -delete

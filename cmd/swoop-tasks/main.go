@@ -42,6 +42,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/beatzball/swoop/internal/match"
 	"github.com/beatzball/swoop/internal/paste"
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
@@ -164,8 +165,9 @@ func view(id, query string, now time.Time) error {
 // rows is the view: the open tasks under a header for each group that
 // has any, in the groups' order, and the Done row last. With text typed,
 // the Add row comes first, so Enter straight after typing adds, then the
-// open tasks that hold every word typed; a group with none of them has no
-// header. With nothing typed and nothing open, a row that says what to do.
+// open tasks that match every word typed (internal/match); a group with
+// none of them has no header. The groups and the days keep their order;
+// among tasks due the same day the best match comes first. With nothing typed and nothing open, a row that says what to do.
 //
 // A task row is kind "toggle": Enter runs it and the view stays, reloaded,
 // so a list is ticked off without leaving it (see internal/nav). A header
@@ -178,17 +180,21 @@ func rows(ts []Task, query string, now time.Time, weekStart time.Weekday) []prot
 	// The filter is the text without its date words: "milk friday" is
 	// about to add a task, and still finds the milk one already there.
 	text, due := Split(query, now)
-	words := strings.Fields(strings.ToLower(text))
-	var open []Task
-	var dues []string
+	q := match.New(text)
+	var best match.Best[Task]
 	done := 0
 	for _, t := range ts {
-		switch {
-		case t.Done:
+		if t.Done {
 			done++
-		case matches(t.Text, words):
-			open, dues = append(open, t), append(dues, t.Due)
+		} else if score, ok := q.Score(t.Text); ok {
+			best.Add(t, score)
 		}
+	}
+	// Best first here, and arrange keeps that order inside one day.
+	open := best.Rows()
+	dues := make([]string, len(open))
+	for i, t := range open {
+		dues[i] = t.Due
 	}
 	if query != "" {
 		items = append(items, protocol.Item{ID: "add" + sep + query, Kind: "toggle", Icon: iconAdd, Title: "Add task: " + text, Subtitle: describe(due, now)})
@@ -220,7 +226,8 @@ func rows(ts []Task, query string, now time.Time, weekStart time.Weekday) []prot
 }
 
 // doneRows is the view the Done row opens: Back to open first, then the
-// done tasks that hold every word typed, the most recently done first.
+// done tasks that match every word typed, the best match first and then
+// the most recently done.
 // at is when each was ticked, by its line (see loadDone); a task ticked
 // in an editor has no time, and comes after the ones that do, the ones
 // lower in the file first, since those were added later.
@@ -229,17 +236,18 @@ func rows(ts []Task, query string, now time.Time, weekStart time.Weekday) []prot
 // goes back to the pane below, the open tasks. A done task is a toggle
 // like an open one, so Enter opens it again and the view stays.
 func doneRows(ts []Task, query string, at map[string]int64) []protocol.Item {
-	words := strings.Fields(strings.ToLower(query))
+	q := match.New(query)
 	open := 0
 	var done []Task
 	for i := len(ts) - 1; i >= 0; i-- {
 		if !ts[i].Done {
 			open++
-		} else if matches(ts[i].Text, words) {
+		} else {
 			done = append(done, ts[i])
 		}
 	}
 	sort.SliceStable(done, func(i, j int) bool { return at[done[i].Raw] > at[done[j].Raw] })
+	done = match.Rank(done, func(t Task) (int, bool) { return q.Score(t.Text) })
 	items := []protocol.Item{{ID: openID, Kind: "refresh", Icon: iconBack, Title: "Back to open", Subtitle: count(open, "open task")}}
 	for _, t := range done {
 		// The protocol has no style field to dim a done task with; the
@@ -255,19 +263,6 @@ func count(n int, what string) string {
 		return "1 " + what
 	}
 	return fmt.Sprintf("%d %ss", n, what)
-}
-
-// matches says whether text holds every word typed, in any order and
-// case: the view filters for itself, since fzf's matching is off in a
-// pane.
-func matches(text string, words []string) bool {
-	lower := strings.ToLower(text)
-	for _, w := range words {
-		if !strings.Contains(lower, w) {
-			return false
-		}
-	}
-	return true
 }
 
 // furniture says whether id is a row that is not a task: a header, the
