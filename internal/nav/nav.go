@@ -17,6 +17,9 @@
 //     number. A checklist is ticked off one row after another; "refresh"
 //     would leave the pane after each one. Two quick Enters tick two
 //     rows: no key is dropped while the list reloads (see LandEvent).
+//   - Enter on a row of kind "group" does nothing: it is a header over
+//     the rows below it, Today over the tasks due today, and has nothing
+//     to run.
 //   - Enter on a row of kind "terminal" hands the whole terminal to its
 //     run, an editor on a note, and takes it back when the run exits:
 //     the same pane, the bar as it was, reloaded, the cursor on the same
@@ -177,6 +180,11 @@ func Enter(st *State, id, kind, title, query string, pos int, runCmd func(target
 	if top := st.Top(); top != nil && top.Kind == "ai" {
 		// The caller sends first; see AISendTarget. Enter here never
 		// runs a row or pushes a pane.
+		return "ignore"
+	}
+	if kind == "group" {
+		// A header over the rows below it. Nothing to run, at the root
+		// or in a view.
 		return "ignore"
 	}
 	if kind == "refresh" && st.Top() != nil {
@@ -532,7 +540,8 @@ type Keyed struct {
 // pane the extension filters, or the launcher does for an actions pane. At
 // the root the apps come from the cache and the extensions are asked with
 // the text, which is how a calculator row appears for "2+2" while fzf
-// keeps matching the apps itself. In the Ask AI pane the bar is the
+// keeps matching the apps itself. Inside a pane the cursor goes to the
+// first row, as it does at the root, where fzf's own matching moves it. In the Ask AI pane the bar is the
 // prompt being written, and the list does not change under it.
 //
 // A keyword at the root, k not nil, scopes the bar to one extension.
@@ -553,7 +562,11 @@ func Change(st *State, k *Keyed) string {
 		return "ignore"
 	}
 	if top != nil {
-		return "reload-sync(swoop-nav rows {q})"
+		// The cursor goes to the top with the new rows: a view puts what
+		// the text asks for first, Add task for a task typed. fzf keeps
+		// the row number across a reload, so from a row further down,
+		// Enter after typing landed on whatever that number now held.
+		return "reload-sync(swoop-nav rows {q})+first"
 	}
 	if k == nil {
 		return "enable-search+reload-sync(swoop-nav rows {q})"

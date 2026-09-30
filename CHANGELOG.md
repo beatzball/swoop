@@ -9,8 +9,25 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **Tasks in groups.** The open tasks sit under headers by when they are
+  due: Past due, Today, Tomorrow, This week, This month, Later,
+  Unscheduled. A header shows only when it has a task, and typing filters
+  inside the view. Reminders gets the same headers.
+- **Done is its own view.** A ticked task leaves the list. Done, the last
+  row, opens the done tasks, the most recently done first; `Back to open`
+  or Esc comes back. The file format is the same.
+- **Week starts on.** A new setting, `week = monday` or `sunday`, says
+  where This week ends. Monday is the default.
+- **A `group` row kind for extensions.** A row of kind `group` is a
+  header: Enter on it does nothing.
+
 ### Fixed
 
+- **Enter after typing in a view takes the first row.** The cursor used
+  to keep its row number while you typed, so from a row further down,
+  Enter on a new task could tick another one.
 - **The API key can be typed in Settings.** In the API key pane, text in
   the bar hid every row, so there was nothing to press Enter on. The row
   that takes what you typed now shows, once the text is 8 characters or

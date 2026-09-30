@@ -129,12 +129,24 @@ file to `deleted/` in that folder, so you can get it back.
 
 ## Tasks
 
-Type `tasks`, Enter. The list is open tasks first, the ones due soonest on
-top, done ones after. Type a task and press Enter to add it. End it with
-`today`, `tomorrow`, a weekday, or a date like `2026-10-01`, and that is its
-due date: `buy milk tomorrow`. Enter on a task ticks it, and you stay in the
-list. ctrl-k undoes, deletes, or copies, and `Edit the list` opens the whole
-file in your editor, in the panel.
+Type `tasks`, Enter. The open tasks are under headers by when they are due:
+**Past due**, **Today**, **Tomorrow**, **This week**, **This month**,
+**Later**, **Unscheduled**. A header shows only when it has a task; under it
+the soonest comes first. Type to filter, and a header with no match goes too.
+
+Type a task and press Enter to add it. End it with `today`, `tomorrow`, a
+weekday, or a date like `2026-10-01`, and that is its due date: `buy milk
+tomorrow`. Enter on a task ticks it, and you stay in the list. ctrl-k undoes,
+deletes, or copies, and `Edit the list` opens the whole file in your editor,
+in the panel.
+
+A ticked task leaves the list. **Done**, the last row, opens the done ones,
+the most recently done first; `Back to open` at the top, or Esc, comes back.
+Enter on a done task opens it again.
+
+This week is the rest of the calendar week after tomorrow, and This month the
+rest of the month after that week. The week starts on Monday;
+[Week starts on](/docs/settings) makes it Sunday.
 
 The tasks are one markdown checklist, `~/.local/share/swoop/tasks.md`, so any
 editor can change it too:
@@ -147,7 +159,7 @@ editor can change it too:
 ## Reminders
 
 On a Mac, `reminders` is the same view over Apple Reminders: every list,
-overdue and today first. Enter completes a reminder; typed text adds one to
+under the same headers as Tasks. Enter completes a reminder; typed text adds one to
 your default list, with the same date words as Tasks. The first time, macOS
 asks to let swoop use Reminders.
 

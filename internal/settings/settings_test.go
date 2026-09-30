@@ -5,7 +5,20 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+func TestWeekStart(t *testing.T) {
+	for value, want := range map[string]time.Weekday{
+		"monday": time.Monday, "sunday": time.Sunday, " Sunday ": time.Sunday,
+		// Anything else is the default, not a third kind of week.
+		"": time.Monday, "saturday": time.Monday,
+	} {
+		if got := weekStart(value); got != want {
+			t.Errorf("weekStart(%q) = %s, want %s", value, got, want)
+		}
+	}
+}
 
 func TestGetAndSetKeepOtherLines(t *testing.T) {
 	text := "# swoop\npreview = 60\n\nhotkey = alt+space\n"

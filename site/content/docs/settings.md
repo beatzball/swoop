@@ -23,6 +23,7 @@ to change it.
 | API key | `ai_key` | the key for that server; empty uses `OPENAI_API_KEY` |
 | Editor | `editor` | what notes, tasks and Edit actions open in, inside the panel |
 | Used recently | `recent` | whether the five things you opened last come first |
+| Week starts on | `week` | `monday` or `sunday`: where This week ends in Tasks and Reminders |
 | Emoji skin tone | `skin` | the default tone for emoji |
 | Transcript renderer | `render` | what draws the Ask AI transcript |
 | Extensions | `off` | which extensions are off |

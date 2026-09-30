@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
 # reminders: Apple Reminders as a view, on a Mac. One root row opens it:
-# every open reminder in every list, overdue and today first, then by
-# due day, then the ones without one. Enter completes a reminder and the
-# view stays, reloaded. Text typed becomes an Add reminder row, and the
-# date words at its end ("tomorrow", "friday", "2026-10-01") become its
-# due day, read by swoop-tasks so both checklists read them alike.
+# every open reminder in every list, under headers by when it is due,
+# Past due to Unscheduled. Enter completes a reminder and the view stays,
+# reloaded. Text typed becomes an Add reminder row, and the date words at
+# its end ("tomorrow", "friday", "2026-10-01") become its due day. The
+# date words and the headers are swoop-tasks', so both checklists read
+# and group alike.
 #
 # Everything goes through osascript, in JavaScript for Automation. The
 # list is read through EventKit, the framework Reminders itself sits on,
@@ -177,29 +178,44 @@ field() {
   awk -F '\t' -v id="$1" -v n="$2" '$1 == id { print $n; exit }' "$cache"
 }
 
-# rows prints the view's reminder rows, filtered by every word of $1:
-# overdue and today first, then by due day, then the ones without one.
+# rows prints the view's reminder rows, filtered by every word of $1,
+# under a header for each group that has any: Past due, Today, Tomorrow,
+# This week, This month, Later, Unscheduled. The first awk filters, and
+# puts the due day first; the sort is by day and then hour; swoop-tasks
+# group keeps that order inside a group and says which group each is in,
+# by the same rules and the same week setting as Tasks; the last awk
+# prints a header, kind "group", over each run of one group.
 rows() {
   local today tomorrow
   today=$(date +%F)
   tomorrow=$(date -v+1d +%F)
-  Q="$1" awk -F '\t' -v today="$today" -v tomorrow="$tomorrow" '
-    BEGIN { n = split(tolower(ENVIRON["Q"]), words, " ") }
+  Q="$1" awk -F '\t' '
+    BEGIN { OFS = "\t"; n = split(tolower(ENVIRON["Q"]), words, " ") }
     {
       name = tolower($5)
       for (i = 1; i <= n; i++) if (index(name, words[i]) == 0) next
-      if ($2 == "") { rank = 2; when = "" }
-      else if ($2 <= today) { rank = 0; when = ($2 < today ? "overdue, " $2 : "today") }
-      else { rank = 1; when = ($2 == tomorrow ? "tomorrow" : $2) }
-      if ($3 != "") when = when " " $3
-      note = (when == "" ? $4 : when " · " $4)
-      printf "%d\t%s\t%s\tr:%s\ttoggle\t󰄱\t%s\t%s\n", rank, $2, $3, $1, $5, note
-    }' "$cache" | sort -t "$(printf '\t')" -k1,1n -k2,2 -k3,3 -s | cut -f 4-
+      print $2, $3, $1, $4, $5
+    }' "$cache" | sort -t "$(printf '\t')" -k1,1 -k2,2 -s | swoop-tasks group |
+  awk -F '\t' -v today="$today" -v tomorrow="$tomorrow" '
+    { group[NR] = $1; day[NR] = $2; hm[NR] = $3; id[NR] = $4; list[NR] = $5; name[NR] = $6; count[$1]++ }
+    END {
+      for (i = 1; i <= NR; i++) {
+        if (i == 1 || group[i] != group[i - 1])
+          printf "group:%s\tgroup\t\t%s\t%d reminder%s\n", group[i], group[i], count[group[i]], (count[group[i]] == 1 ? "" : "s")
+        if (day[i] == "") when = ""
+        else if (day[i] < today) when = "overdue, " day[i]
+        else if (day[i] == today) when = "today"
+        else when = (day[i] == tomorrow ? "tomorrow" : day[i])
+        if (hm[i] != "") when = when " " hm[i]
+        note = (when == "" ? list[i] : when " · " list[i])
+        printf "r:%s\ttoggle\t󰄱\t%s\t%s\n", id[i], name[i], note
+      }
+    }'
 }
 
 case "${1:-}" in
   list)
-    row reminders view '' 'Reminders' 'Apple Reminders: overdue and today first'
+    row reminders view '' 'Reminders' 'Apple Reminders: past due and today first'
     ;;
   view)
     query="${3:-}"
@@ -225,7 +241,7 @@ case "${1:-}" in
     id="${2:-}"
     case "$id" in
       reminders)
-        echo 'Your open reminders, every list, overdue and today first.'
+        echo 'Your open reminders, every list, grouped by when they are due.'
         echo
         echo 'Enter completes one. Type to filter, or to add: end the text'
         echo 'with today, tomorrow, a weekday or 2026-10-01 to give it a day.'
@@ -238,6 +254,11 @@ case "${1:-}" in
         # The Reminders pane has no minus button, so the reset is tccutil.
         echo 'Already on? A new build needs a new grant: run'
         echo 'tccutil reset Reminders, then allow it again when asked.'
+        ;;
+      group:*)
+        echo "${id#group:}"
+        echo
+        echo 'The reminders due then, the soonest first.'
         ;;
       add:*)
         parsed=$(swoop-tasks parse "${id#add:}")
@@ -276,6 +297,8 @@ case "${1:-}" in
       perm) open "$settings" ;;
       # Enter on Loading only reloads the pane, as a toggle does.
       loading) ;;
+      # A header has nothing to run; the launcher does not ask.
+      group:*) ;;
       add:*)
         parsed=$(swoop-tasks parse "${id#add:}")
         text="${parsed%%$'\t'*}"

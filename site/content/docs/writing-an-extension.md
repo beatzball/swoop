@@ -72,6 +72,11 @@ The special kinds, each one met in a step below:
 | `refresh` | in a ctrl-k menu: runs it and comes back to the pane, reloaded |
 | `toggle` | runs it and stays in the same pane, reloaded |
 | `terminal` | runs it with the whole terminal, then comes back, reloaded |
+| `group` | nothing: the row is a header over the rows below it |
+
+A `group` row is not in a step. Tasks prints one over each run of tasks:
+Today, Tomorrow. Give it an id like any row, and print it only when it has
+rows under it.
 
 ## Step 1: list
 
