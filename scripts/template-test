@@ -123,15 +123,15 @@ refused() {
   [ "$(find mytool -type f -exec cksum {} + | sort)" = "$before" ] || fail "new changed a tool that was already there"
   : > taken
   got=0; out="$("$launcher" new taken 2>&1)" || got=$?
-  [ "$got" = 1 ] && [ ! -s taken ] && [ -f taken ] || fail "new over a file that is there: exit $got: $out"
+  if ! { [ "$got" = 1 ] && [ ! -s taken ] && [ -f taken ]; }; then fail "new over a file that is there: exit $got: $out"; fi
   got=0; out="$("$launcher" new 2>&1)" || got=$?
   [ "$got" = 2 ] || fail "new with no name: exit $got: $out"
   got=0; out="$("$launcher" new 'my tool' 2>&1)" || got=$?
-  [ "$got" = 2 ] && [ ! -e 'my tool' ] || fail "new with a name of two words: exit $got: $out"
+  if ! { [ "$got" = 2 ] && [ ! -e 'my tool' ]; }; then fail "new with a name of two words: exit $got: $out"; fi
   got=0; out="$("$launcher" new ../up 2>&1)" || got=$?
-  [ "$got" = 2 ] && [ ! -e ../up ] || fail "new with a path for a name: exit $got: $out"
+  if ! { [ "$got" = 2 ] && [ ! -e ../up ]; }; then fail "new with a path for a name: exit $got: $out"; fi
   got=0; out="$("$launcher" new swoop-nav 2>&1)" || got=$?
-  [ "$got" = 2 ] && [ ! -e swoop-nav ] || fail "new with a name of the kit's own: exit $got: $out"
+  if ! { [ "$got" = 2 ] && [ ! -e swoop-nav ]; }; then fail "new with a name of the kit's own: exit $got: $out"; fi
 }
 check "new writes over nothing, and takes one plain word" refused
 
