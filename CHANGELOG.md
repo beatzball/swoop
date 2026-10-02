@@ -9,6 +9,10 @@ so here.
 
 ## [Unreleased]
 
+## [0.12.0] - 2026-10-02
+
+swoopkit: the tool's name, title, id and hotkey come from one file, and the core spells none of them.
+
 ### Changed
 
 - **The toolkit has a name, swoopkit, and the tool's name comes from one
@@ -644,7 +648,8 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.12.0...HEAD
+[0.12.0]: https://github.com/beatzball/swoop/compare/v0.11.0...v0.12.0
 [0.11.0]: https://github.com/beatzball/swoop/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/beatzball/swoop/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/beatzball/swoop/compare/v0.9.2...v0.10.0
