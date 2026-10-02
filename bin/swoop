@@ -228,6 +228,8 @@ case "${1:-}" in
     swoop_service "$1" || status=$?
     # Which extension has which key, and any claim that lost.
     [ "$1" != status ] || swoop-nav keys status || true
+    # The lists that missed their limit the last time a start was slow.
+    [ "$1" != status ] || swoop-nav late || true
     exit "$status" ;;
 esac
 
@@ -275,6 +277,9 @@ esac
 #                Enter on its row would. This script names none of them;
 #                swoop-nav keys lists them, and swoop-nav key decides who
 #                has the key when it is pressed
+#   start:       sends the pictures for the rows, once, and unbinds
+#                result-final. After a start where a list missed its
+#                limit it also lists again; see $again below
 #   --listen:    fzf's HTTP API on a socket of this run's own, so a worker
 #                an extension leaves running can tell fzf to redraw the
 #                preview or list again. The key keeps anything else out
@@ -336,6 +341,17 @@ export FZF_API_KEY
 # binding below to send. Only this first call is told: the terminal takes
 # the pictures once.
 SWOOP_ICONS="$icons" swoop-nav rows > "$rows"
+# A list that missed its limit in that call left a file beside the once
+# file: the first run of programs new on the machine, mostly, after an
+# install or an update, when the system checks each one. Its rows are not
+# in the list fzf starts with. So fzf asks again as it starts, with no key
+# pressed, and they fill themselves in. On every other start this is one
+# test of a name and no process.
+again=""
+if [ -e "$SWOOP_ONCE.late" ]; then
+  rm -f "$SWOOP_ONCE.late"
+  again="+reload(swoop-nav rows)"
+fi
 # One binding for each key an extension claims. They go in the positional
 # parameters, which this script does not read past this point: an empty
 # "$@" is safe under set -u in the bash macOS ships, and an empty array is
@@ -347,7 +363,7 @@ while IFS= read -r key; do
 done < <(swoop-nav keys)
 fzf < "$rows" \
   --ansi \
-  --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons' '$rows')+unbind(result-final)" \
+  --bind "start:execute-silent(cat '$icons' > /dev/tty; rm -f '$icons' '$rows')+unbind(result-final)$again" \
   --delimiter $'\t' \
   --with-nth $'{3} {4}  \t{5}' \
   --nth 1 \

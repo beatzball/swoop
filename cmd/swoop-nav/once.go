@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -34,6 +35,14 @@ const envIcons = "SWOOP_ICONS"
 // The first call of a run lists both sorts side by side, so a long list
 // kept for the run costs the start no more than the slowest extension.
 //
+// That first call, the one bin/swoop waits for before fzf starts, gives
+// a list kept for the run the limit of the start and not a keystroke's
+// (ext.ListStart): it is asked once, and the first paint without it has
+// no applications. The rest keep a keystroke's limit there too. Any list
+// that still misses its limit at the start is written to the late log,
+// and leaves a file for bin/swoop, which then asks again as fzf starts,
+// with no key pressed (see late.go).
+//
 // The kept rows of an extension turned off since are left out, and one
 // turned on since is listed then, late: without pictures, which the
 // terminal took at the start. One whose list failed is not kept, and is
@@ -47,15 +56,16 @@ func rootRows(query string) []protocol.Item {
 			live = append(live, e)
 		}
 	}
-	if len(once) == 0 {
-		return ext.ListAll(live, query)
-	}
+	// With no path swoop-nav was run by hand: nowhere to keep the rows,
+	// and no pictures.
 	path := os.Getenv(envOnce)
-	if path == "" {
-		// swoop-nav run by hand: nowhere to keep them, no pictures.
-		return append(ext.ListAll(once, ""), ext.ListAll(live, query)...)
+	icons := os.Getenv(envIcons)
+	start := icons != ""
+	var names []string
+	var kept []protocol.Item
+	if path != "" && len(once) > 0 {
+		names, kept = readOnce(path)
 	}
-	names, kept := readOnce(path)
 	var late []ext.Extension
 	for _, e := range once {
 		if !slices.Contains(names, e.Name) {
@@ -64,20 +74,29 @@ func rootRows(query string) []protocol.Item {
 	}
 	var fresh []protocol.Item
 	var listed []string
+	var errs []error
 	var wg sync.WaitGroup
 	if len(late) > 0 {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			fresh, listed = listOnce(late)
-			fresh = pictures(fresh, late, os.Getenv(envIcons))
+			fresh, listed, errs = ext.ListEach(late, func(e ext.Extension) ([]protocol.Item, error) {
+				if start {
+					return e.ListStart()
+				}
+				return e.List("")
+			})
+			if path != "" {
+				fresh = pictures(fresh, late, icons)
+			}
 		}()
 	}
-	rest := ext.ListAll(live, query)
+	rest, _, liveErrs := ext.ListEach(live, func(e ext.Extension) ([]protocol.Item, error) { return e.List(query) })
 	wg.Wait()
-	if len(listed) > 0 {
+	failed(append(errs, liveErrs...), start, path)
+	kept = append(kept, fresh...)
+	if len(listed) > 0 && path != "" {
 		names = append(names, listed...)
-		kept = append(kept, fresh...)
 		if err := writeOnce(path, names, kept); err != nil {
 			fmt.Fprintln(os.Stderr, "swoop-nav:", err)
 		}
@@ -92,35 +111,31 @@ func rootRows(query string) []protocol.Item {
 	return append(items, rest...)
 }
 
-// listOnce lists each extension with no text, all at once, and returns
-// their rows, in the extensions' order, and the names of those that
-// answered. A failure is one line on stderr and no rows, as in
-// ext.ListAll, and its name is left out.
-func listOnce(exts []ext.Extension) (items []protocol.Item, names []string) {
-	results := make([][]protocol.Item, len(exts))
-	failed := make([]bool, len(exts))
-	var wg sync.WaitGroup
-	for i, e := range exts {
-		wg.Add(1)
-		go func(i int, e ext.Extension) {
-			defer wg.Done()
-			rows, err := e.List("")
-			if err != nil {
-				fmt.Fprintln(os.Stderr, tool.Name()+":", err)
-				failed[i] = true
-				return
-			}
-			results[i] = rows
-		}(i, e)
-	}
-	wg.Wait()
-	for i, e := range exts {
-		if !failed[i] {
-			names = append(names, e.Name)
-			items = append(items, results[i]...)
+// failed says what the lists that failed said: one line on stderr each,
+// and no rows from that extension. At the start, the ones that missed
+// their limit are also written to the late log, and the file named by
+// lateMark is left beside the once file, at path, for bin/swoop.
+func failed(errs []error, start bool, path string) {
+	var late []string
+	for _, err := range errs {
+		fmt.Fprintln(os.Stderr, tool.Name()+":", err)
+		var le *ext.LateError
+		if errors.As(err, &le) {
+			late = append(late, le.Error())
 		}
 	}
-	return items, names
+	if !start || len(late) == 0 {
+		return
+	}
+	if err := logLate(late); err != nil {
+		fmt.Fprintln(os.Stderr, "swoop-nav:", err)
+	}
+	if path == "" {
+		return
+	}
+	if err := os.WriteFile(path+lateMark, nil, 0o600); err != nil {
+		fmt.Fprintln(os.Stderr, "swoop-nav:", err)
+	}
 }
 
 // onceHeader starts the first line of the file, which names the

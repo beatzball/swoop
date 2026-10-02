@@ -58,7 +58,8 @@ your history.
 However it was installed, `swoop restart` restarts the frame and the
 clipboard watcher, `swoop stop` and `swoop start` stop and start them, and
 `swoop status` says whether they run, where from, and how they were
-installed, and which extension has which key. The bird in the menu bar has the same: Restart, and Quit, which
+installed, which extension has which key, and which lists were too slow
+the last time the launcher was slow to open. The bird in the menu bar has the same: Restart, and Quit, which
 keeps it down until the next login or `swoop start`. After an upgrade the
 frame restarts itself, once the panel is hidden.
 

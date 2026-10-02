@@ -639,6 +639,13 @@ A kept list is a list the launcher does not ask about again, so a change
 shows the next time the launcher opens. With a keyword typed, the scoped
 list still asks `list` with the text, each time.
 
+A `list` has two seconds. A kept list, asked as the launcher opens, has
+ten: it is asked once, and the first list is not right without it. That
+is for the first run after an install, when the system checks each new
+program; a warm list should still take milliseconds. A list that misses
+its limit as the launcher opens is asked again as soon as it is open, and
+`swoop status` names it.
+
 `icons` is for rows that stand for a file with a picture of its own. Print
 the glyph as the fallback: a terminal that draws no pictures shows it, and
 so does the first launch, while the pictures are made ready in the

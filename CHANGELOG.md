@@ -9,6 +9,24 @@ so here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The first open after an install or an update has the apps in it.**
+  macOS checks each program that is new on the machine the first time it
+  runs, one at a time, a fifth to a third of a second each. The launcher
+  starts every extension together, so on a busy machine the last of them
+  waited up to 8 seconds, and any that passed the 2 seconds a list gets
+  was left out: the root came up with a few rows and no apps until you
+  typed. Now a list kept for the run, an extension with a `cache` file,
+  has 10 seconds when the launcher starts, since it is asked once and
+  the first list is not right without it; a list asked on every keystroke
+  keeps its 2 seconds. When any list still misses its limit at the start,
+  the launcher asks again by itself as it opens, with no key pressed, and
+  the rows fill in. Each such list is written with its time to `late.log`
+  beside the usage log (`~/.local/state/swoop`), and `swoop status` shows
+  the ones from the last slow start. A warm start takes the same time as
+  before.
+
 ## [0.12.0] - 2026-10-02
 
 swoopkit: the tool's name, title, id and hotkey come from one file, and the core spells none of them.
