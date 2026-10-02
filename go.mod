@@ -4,7 +4,7 @@ go 1.25
 
 require (
 	github.com/jackmordaunt/icns/v3 v3.0.1
-	github.com/yuin/goldmark v1.7.13
+	github.com/yuin/goldmark v1.8.6
 	howett.net/plist v1.0.1
 )
 
