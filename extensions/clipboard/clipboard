@@ -13,6 +13,15 @@ case "${1:-}" in
     swoop-clipd list "${3:-}"
     ;;
   preview)
+    # The root row is no entry: the cursor rests on it like on any other,
+    # and asking the watcher for it printed "bad id".
+    if [ "${2:-}" = clipboard ]; then
+      echo 'What you copied, newest first.'
+      echo
+      echo 'Enter, then type to search. Enter on an entry copies it;'
+      echo 'ctrl-k offers Delete.'
+      exit 0
+    fi
     swoop-clipd get "${2:-}"
     ;;
   actions)

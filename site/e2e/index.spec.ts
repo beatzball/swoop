@@ -6,6 +6,7 @@ const DOC_ROUTES = [
   '/docs/extensions',
   '/docs/settings',
   '/docs/writing-an-extension',
+  '/docs/contract',
 ];
 
 const PRERENDERED_ROUTES = ['/', ...DOC_ROUTES];

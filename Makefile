@@ -33,6 +33,7 @@ test:
 	scripts/launchd-test
 	scripts/reminders-test
 	scripts/codesign-test
+	scripts/contract-test
 
 # The launcher end to end: bin/swoop driven through a pseudo-terminal with
 # a fake extension and a fake AI command. Needs fzf and python3.

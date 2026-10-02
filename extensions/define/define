@@ -29,13 +29,24 @@ case "${1:-}" in
     else
       # Prefix matches, case-insensitive, in the list's own alphabetical
       # order. Capped: fzf is not filtering here, so a long list costs a
-      # reload on every keystroke.
-      grep -i -- "^$query" "$words" 2>/dev/null | head -200 | while IFS= read -r w; do
+      # reload on every keystroke. The cap is grep's own, -m: with head
+      # after it, grep was cut off mid-write for a common start, which
+      # under pipefail failed the view, and one letter typed showed no
+      # words at all. No match, or a text grep cannot read as a pattern,
+      # is no rows and not a failure.
+      { grep -i -m 200 -- "^$query" "$words" 2>/dev/null || true; } | while IFS= read -r w; do
         row "$w" word '' "$w" ''
       done
     fi
     ;;
   preview)
+    # swoop-dict has a source for the system dictionary on a Mac only so
+    # far. Elsewhere the words still list, and the preview says why it is
+    # empty: that is its answer there, not a failure.
+    if [ "$(uname)" != Darwin ]; then
+      echo 'No dictionary on this system yet.'
+      exit 0
+    fi
     swoop-dict "${2:-}"
     ;;
   run)

@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+# contract-test: swoop-check, the conformance test for CONTRACT.md, on
+# every extension in extensions/. The bundle is held to the contract an
+# outside extension is held to: a bundled one that breaks a rule fails
+# `make test`, with the rule named.
+#
+#   scripts/contract-test
+#
+# swoop-check asks only the verbs that read, list, view, preview and
+# actions; nothing is run and nothing is sent. Even so the extensions
+# read real things, so this gives them a home of their own:
+#
+#   - the tools they call are built fresh into a temp folder, so a stale
+#     bin/ never answers for this checkout
+#   - HOME and the XDG folders are in that temp folder: the test reads no
+#     note, task or clipboard entry of yours, and writes nothing of its own
+#     where yours are
+#   - a pretend osascript, which fails at once, is first on PATH: the
+#     Reminders view fetches in the background, and the real one would
+#     ask this Mac for permission in the middle of a test
+#
+# The limit is ten seconds where the contract's is two, as the unit tests
+# of internal/ext give: a runner busy compiling is not a slow extension.
+set -euo pipefail
+
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    # The bundled extensions are bash scripts, which Windows does not run
+    # as programs. They come with the Windows frame.
+    echo "contract-test: skipped on Windows"
+    exit 0 ;;
+esac
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/swoop-contract-test.XXXXXX")"
+trap 'rm -rf "$tmp"' EXIT
+
+# Built before HOME moves: Go's build cache is under it.
+(cd "$root" && go build -o "$tmp/bin/" ./cmd/...)
+
+mkdir -p "$tmp/home" "$tmp/fakes"
+printf '#!/bin/sh\nexit 1\n' > "$tmp/fakes/osascript"
+chmod +x "$tmp/fakes/osascript"
+
+export HOME="$tmp/home"
+export XDG_CONFIG_HOME="$HOME/.config" XDG_DATA_HOME="$HOME/.local/share" XDG_STATE_HOME="$HOME/.local/state"
+export PATH="$tmp/fakes:$tmp/bin:$PATH"
+# The tools are not beside the tool file here, so it is named, as the
+# launcher names it for everything it runs.
+export SWOOP_TOOL="$root/tool"
+# No launcher is open: nothing to redraw, and no run's files to share.
+unset FZF_SOCK FZF_PORT FZF_API_KEY SWOOP_STATE SWOOP_ONCE SWOOP_LAND SWOOP_EXTENSIONS
+
+swoop-check -limit 10s "$root"/extensions/*/

@@ -96,6 +96,7 @@ and could be moved to its own repository without surgery:
 | `swoop-preview` | print the preview for one result |
 | `swoop-run` | do the action for one result |
 | `swoop-img` | print a picture as Kitty graphics escapes |
+| `swoop-check` | say where an extension breaks the contract |
 | `swoop` | wire the above into one `fzf` call |
 | `swoop-shell-<os>` | the only per-OS code: a window, a hotkey, a terminal surface |
 
@@ -111,8 +112,15 @@ kit's own: the program names and the `SWOOP_*` variables, which are the
 contract with an extension. `grep -rn swoop internal cmd shell bin scripts`
 finds those and nothing that is one tool's.
 
-- Tools talk through stdout lines. The line format is a `spec` issue. Do not
-  add a field without changing the spec first
+- Tools talk through stdout lines. The line format, and everything else
+  an extension may lean on, is `CONTRACT.md` at the repository root, with
+  a version at its top; the spec issue it came from is its history. Do
+  not add a field, a verb, a kind or a variable without changing the
+  contract first, with a dated line under its Changes and a new minor
+  version. `swoop-check` is its test: a new rule goes in the document's
+  table, in `cmd/swoop-check`, and in a fixture that breaks it. The
+  site's page `/docs/contract` is the same text, and a test holds the
+  two together
 - Nothing under `cmd/` imports another `cmd/`. Shared code goes in `internal/`
 - Per-OS code uses Go build tags, never a runtime check on the OS name
 - The frame (`swoop-shell-*`) holds no launcher logic. It shows and hides a
@@ -133,9 +141,10 @@ startup time is felt directly.
 The unit tests cover the rules; two harnesses cover the wiring, which is
 where the bugs have been.
 
-- `make test`: gofmt, vet, the unit tests, and `scripts/launchd-test`, the
-  installer's launchd steps against a fake launchctl. Runs everywhere in
-  seconds. Clean before every pull request
+- `make test`: gofmt, vet, the unit tests, `scripts/launchd-test`, the
+  installer's launchd steps against a fake launchctl, and
+  `scripts/contract-test`, which runs `swoop-check` on every bundled
+  extension. Runs everywhere in seconds. Clean before every pull request
 - `make e2e`: `scripts/launcher-test` drives `bin/swoop` through a
   pseudo-terminal with a fake extension and a fake AI command, and asks
   fzf for its state through its socket. Run it for any change to

@@ -123,6 +123,12 @@ func newTitle(id string) (string, bool) {
 }
 
 func preview(id string) error {
+	if id == viewID {
+		// The root row. The cursor rests on it like on any other, and a
+		// note called "notes" that is not there was all it showed.
+		fmt.Printf("Markdown notes, one file each, in %s\n\nEnter, then type to search titles and text.\nEnter on a note opens it in %s, here in the panel.\n", tilde(dir()), strings.Join(settings.Editor(), " "))
+		return nil
+	}
 	if t, ok := newTitle(id); ok {
 		if t == "" {
 			fmt.Printf("Type the new note's first line, then Enter.\nWith nothing typed, Enter makes a note titled\n\n  # %s\n\nIt goes in %s, one markdown file per note,\nand opens in %s, here in the panel.\n", stamp(), tilde(dir()), strings.Join(settings.Editor(), " "))

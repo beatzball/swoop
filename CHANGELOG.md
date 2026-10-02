@@ -9,6 +9,32 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **The extension contract is a document with a version: `CONTRACT.md`,
+  contract 1.** It was the history in the spec issue, a list of dated
+  additions. It is now one text at the repository root, and the same
+  text at [swoop.sh/docs/contract](https://swoop.sh/docs/contract): the
+  line, the verbs (`list`, `view`, `preview`, `run`, `actions`, `send`),
+  the row kinds, the files beside a program (`keyword`, `key`, `views`,
+  `cache`, `icons`), the variables, the limits, the `tool` file and
+  `swoop-match`, each with what the launcher promises and what an
+  extension must do, and an extension in ten lines that runs. The
+  promise: within a major version an extension that met the contract
+  keeps working; an addition is a new minor version with a dated line;
+  a removal or a changed meaning is a new major. The issue stays as the
+  history. Nothing in the launcher changed.
+- **`swoop-check`, the conformance test.** `swoop-check <folder>` runs
+  an extension the way the launcher does and prints each thing that
+  breaks the contract on one line, with the rule's name:
+  `hello: line: list: line 2 has 4 fields, not 5`. It exits 0, and says
+  `hello: meets contract 1`, when there is nothing. It asks only the
+  verbs that read (`list`, `view`, `preview`, `actions`) and checks the
+  files beside the program; `-act` also tries `run` and `send`, for
+  real, for an extension whose run is safe to do once. `make test` and
+  CI run it on every bundled extension, through `scripts/contract-test`,
+  in a home of its own.
+
 ### Fixed
 
 - **The first open after an install or an update has the apps in it.**
@@ -26,6 +52,20 @@ so here.
   beside the usage log (`~/.local/state/swoop`), and `swoop status` shows
   the ones from the last slow start. A warm start takes the same time as
   before.
+Found by `swoop-check` on the bundled extensions:
+
+- **Define Word lists words for one letter typed.** A common start,
+  `a` or `un`, listed nothing: the script cut the word list off with
+  `head`, which failed the whole view. A text that is not a pattern,
+  `[`, is no words now and not a failure.
+- **The Clipboard History and Notes rows have a preview at the root.**
+  Each showed an error line in the preview while the cursor was on it,
+  `bad id` and `no note "notes"`. Each now says what the row opens.
+- **Search Files is not listed where there is no Spotlight.** On Linux
+  its row opened a view that could only fail. It now prints no row
+  there, as Reminders does. Define Word still lists words on Linux, and
+  its preview says there is no dictionary on that system yet, where it
+  showed an error.
 
 ## [0.12.0] - 2026-10-02
 
