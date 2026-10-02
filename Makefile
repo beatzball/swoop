@@ -2,7 +2,7 @@
 #
 #   make build   compile every tool into bin/, beside the swoop script
 #   make test    gofmt, vet, the unit tests, and the script tests
-#   make bench   startup and list time of the hot-path tools (needs hyperfine)
+#   make bench   every hot path as one line of JSON (needs hyperfine and fzf)
 #   make e2e     the launcher driven through a pseudo-terminal (needs fzf)
 
 .PHONY: build test bench e2e clean shell-mac install uninstall
@@ -41,21 +41,11 @@ test:
 e2e: build
 	scripts/launcher-test
 
+# Every hot path as one line of JSON: the tools one process each, the keys
+# through the launcher itself, the frame and the sizes. The budgets are at
+# the top of the script. CI runs the same on every pull request.
 bench: build
-	hyperfine --warmup 5 -N 'bin/swoop-apps list'
-	hyperfine --warmup 5 'bin/swoop-apps list | fzf --filter saf --delimiter "\t" --with-nth "{3} {4}" --nth 1'
-	SWOOP_EXTENSIONS=extensions hyperfine --warmup 5 -N 'bin/swoop-preview ext/apps//Applications/Safari.app'
-	hyperfine --warmup 5 'bin/swoop-apps list | bin/swoop-icons -out /dev/null'
-	SWOOP_EXTENSIONS=extensions hyperfine --warmup 5 -N 'extensions/define/define view define de'
-	hyperfine --warmup 5 -N 'bin/swoop-dict swoop'
-	SWOOP_EXTENSIONS=extensions hyperfine --warmup 5 -N 'bin/swoop-nav rows' 'bin/swoop-nav rows 2+2'
-	hyperfine --warmup 5 -N 'bin/swoop-clipd list'
-	hyperfine --warmup 5 -N 'bin/swoop-emoji list' 'bin/swoop-emoji view emoji rocket'
-	hyperfine --warmup 5 -N 'bin/swoop-snippets list'
-	hyperfine --warmup 5 -N 'bin/swoop-notes view notes' 'bin/swoop-notes view notes word'
-	hyperfine --warmup 5 -N 'bin/swoop-tasks list'
-	hyperfine --warmup 5 'bin/swoop-apps list | bin/swoop-match saf'
-	go test ./internal/match -run '^$$' -bench .
+	@scripts/bench
 
 clean:
 	find bin -type f ! -name swoop -delete

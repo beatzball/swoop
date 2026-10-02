@@ -166,11 +166,22 @@ final class LauncherController: NSObject, NSWindowDelegate,
     }
 
     func show() {
+        let start = DispatchTime.now()
         log("show")
         if terminal == nil { prepare() }
         centerOnActiveScreen()
         panel.makeKeyAndOrderFront(nil)
         if let terminal { panel.makeFirstResponder(terminal) }
+        // The frame's own cost of a show, for scripts/bench, which reads
+        // this line: what the key press waits on before the panel is the
+        // system's to draw.
+        log("shown in \(Self.milliseconds(since: start)) ms")
+    }
+
+    /// The time since start as milliseconds with two decimals, for the log.
+    private static func milliseconds(since start: DispatchTime) -> String {
+        let nanos = DispatchTime.now().uptimeNanoseconds - start.uptimeNanoseconds
+        return String(format: "%.2f", Double(nanos) / 1_000_000)
     }
 
     /// Press key in the launcher, by fzf's name for the key, and show the
@@ -218,8 +229,11 @@ final class LauncherController: NSObject, NSWindowDelegate,
 
     /// Put the panel away and keep the launcher as it is.
     func hide() {
+        let start = DispatchTime.now()
         log("hide")
         panel.orderOut(nil)
+        // As in show: scripts/bench reads this line.
+        log("hidden in \(Self.milliseconds(since: start)) ms")
     }
 
     /// The launcher said it is exiting (SIGUSR2). Replace it, and once the panel
