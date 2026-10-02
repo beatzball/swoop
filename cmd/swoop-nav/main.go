@@ -10,6 +10,7 @@
 //	swoop-nav click [id kind title]   fzf: transform on a click on a row
 //	swoop-nav key name                fzf: transform on a key an extension claims
 //	swoop-nav keys [status]           those keys, for bin/swoop to bind; who has which
+//	swoop-nav keys for name           the key that opens extension name's pane
 //	swoop-nav landed [kind]           fzf: transform on result-final, once armed
 //	swoop-nav step up|down [kind [from [turned]]]
 //	                                  fzf: transform after a move of the cursor
@@ -53,6 +54,14 @@ func main() {
 		return
 	}
 	if os.Args[1] == "keys" {
+		if len(os.Args) > 3 && os.Args[2] == "for" {
+			// For the frame's menu, through the launcher's `keys` verb. No
+			// line at all when the extension has no key.
+			if k := keyFor(os.Args[3]); k != "" {
+				fmt.Println(k)
+			}
+			return
+		}
 		keys(len(os.Args) > 2 && os.Args[2] == "status")
 		return
 	}
@@ -334,6 +343,26 @@ func keys(status bool) {
 	for _, line := range ext.KeyReport(ext.Discover(ext.Dirs())) {
 		fmt.Println("key:     " + line)
 	}
+}
+
+// keyFor is the key that opens the pane of the extension called name: the
+// first key it claims and has, among the extensions that are on. "" when
+// it is not installed or is off, claims no key, or another extension, the
+// first by name, has every key it claims. So whoever asks gets a key that
+// opens that pane and no other, or learns there is none to offer.
+func keyFor(name string) string {
+	exts := ext.Discover(ext.Dirs())
+	for _, e := range exts {
+		if e.Name != name {
+			continue
+		}
+		for _, c := range e.Claims() {
+			if holder, _, ok := ext.ByKey(exts, c.Key); ok && holder.Name == name {
+				return c.Key
+			}
+		}
+	}
+	return ""
 }
 
 // paneOf is what the view row id's view says about its pane, in its

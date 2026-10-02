@@ -2,20 +2,29 @@ import AppKit
 
 /// The bird in the menu bar: the one visible sign that the tool is running,
 /// as the launchers you know have. Its menu opens the launcher,
-/// opens the settings folder, restarts, and quits. An accessory app has no Dock
+/// opens it on the Settings pane, restarts, and quits. An accessory app has no Dock
 /// icon, so without this there is nothing to click.
-final class StatusItem {
+final class StatusItem: NSObject, NSMenuDelegate {
     private let item: NSStatusItem
     private let open: () -> Void
+    private let press: (String) -> Void
     private let hotkey: String
+    /// The extension whose pane Settings… opens, by its folder's name.
+    private static let settingsExtension = "settings"
+    /// Settings… and the line under it, and the key that opens the pane,
+    /// as the launcher said when the menu was last opened.
+    private var settingsItems: [NSMenuItem] = []
+    private var settingsKey: String?
     /// The tool's title, from its tool file: every word a person reads
     /// here that names the tool is this one.
     private static var title: String { Tool.current.title }
 
-    init(hotkey: String, open: @escaping () -> Void) {
+    init(hotkey: String, open: @escaping () -> Void, press: @escaping (String) -> Void) {
         self.open = open
+        self.press = press
         self.hotkey = hotkey
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
+        super.init()
         if let button = item.button {
             // A template image takes the menu bar's own colour, light or
             // dark. The owl is a silhouette cut from the logo, 18 px with a
@@ -42,7 +51,11 @@ final class StatusItem {
         let settings = NSMenuItem(title: "Settings…", action: #selector(openSettings), keyEquivalent: "")
         settings.target = self
         menu.addItem(settings)
-        menu.addItem(.separator())
+        let line = NSMenuItem.separator()
+        menu.addItem(line)
+        settingsItems = [settings, line]
+        // Asked again each time the menu opens; see menuNeedsUpdate.
+        menu.delegate = self
         let restart = NSMenuItem(title: "Restart \(Self.title)", action: #selector(restart), keyEquivalent: "")
         restart.target = self
         menu.addItem(restart)
@@ -54,12 +67,22 @@ final class StatusItem {
 
     @objc private func openLauncher() { open() }
 
-    /// The config folder in Finder: the settings files, the clipboard
-    /// ignore list, and a place for extensions of your own.
+    /// The launcher on its Settings pane: the panel, and in it the key the
+    /// Settings extension claims, the same one cmd+, sends. The pane has
+    /// the row that opens the config folder, so the menu has none: a
+    /// folder opened in Finder from here came up behind other windows,
+    /// and looked like nothing had happened.
     @objc private func openSettings() {
-        let dir = Tool.configDir
-        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(URL(fileURLWithPath: dir))
+        if let settingsKey { press(settingsKey) }
+    }
+
+    /// The menu is about to open: ask the launcher which key opens the
+    /// Settings pane. With no such key, because the tool has no Settings
+    /// extension or it claims none, there is nothing for the item to do,
+    /// so it and its line are left out.
+    func menuNeedsUpdate(_: NSMenu) {
+        settingsKey = Launcher.key(for: Self.settingsExtension)
+        for item in settingsItems { item.isHidden = settingsKey == nil }
     }
 
     /// Exit, and let the service start a new frame: launchd's KeepAlive,

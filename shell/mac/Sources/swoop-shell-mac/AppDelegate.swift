@@ -50,7 +50,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // The bird in the menu bar. SWOOP_NO_MENU_BAR=1 leaves it out.
         if ProcessInfo.processInfo.environment["SWOOP_NO_MENU_BAR"] == nil {
-            statusItem = StatusItem(hotkey: spec) { [weak launcher] in launcher?.show() }
+            statusItem = StatusItem(
+                hotkey: spec,
+                open: { [weak launcher] in launcher?.show() },
+                press: { [weak launcher] key in launcher?.press(key) }
+            )
         }
 
         // SIGUSR1 toggles the panel: `kill -USR1 $(pgrep swoop-shell-mac)`.

@@ -31,6 +31,15 @@ so here.
 
 ### Fixed
 
+- **Settings… in the bird's menu opens the Settings pane.** It opened the
+  config folder in Finder, often behind other windows, so it looked like
+  nothing had happened. Now it shows the panel and presses the key the
+  Settings extension claims, the one cmd+, sends, from a closed panel and
+  from an open one. The pane's last row still opens the folder. The frame
+  has no key of its own for this: it asks the launcher, `swoop keys for
+  settings`, each time the menu opens, so a tool built on swoopkit with
+  no Settings extension, or one that claims no key, has no such item in
+  its menu.
 - **The launcher test no longer fails now and then on a slow runner.** It
   looked like an Esc lost after a key opened a pane; the key was read.
   `scripts/launcher-test` did not read the terminal while it asked fzf
