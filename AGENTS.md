@@ -125,6 +125,15 @@ finds those and nothing that is one tool's.
 - Per-OS code uses Go build tags, never a runtime check on the OS name
 - The frame (`swoop-shell-*`) holds no launcher logic. It shows and hides a
   window, owns the hotkey, hosts the surface, and runs `swoop`
+- **The languages are fixed.** What ships is Go, and one language per
+  platform for its frame: Swift on macOS today. A Linux or Windows frame
+  is Go with a platform binding, not a new language. An extension in the
+  bundle is Go or bash. Test and build scripts are bash, or Python where
+  bash is the wrong tool: the two harnesses that drive fzf over its
+  socket, read a terminal and shape JSON (`scripts/launcher-test`,
+  `scripts/bench`). The site is TypeScript. Nothing else. One more
+  language is a `design` issue with the reason, decided before the first
+  line, never a pull request that brings it along
 
 ## 7. Speed is a feature
 
