@@ -88,7 +88,8 @@ and could be moved to its own repository without surgery:
 
 | program | job |
 |---|---|
-| `swoop-list` | print result lines |
+| an extension | print result lines |
+| `swoop-nav` | ask the extensions for their lines; keep the stack of panes |
 | `swoop-preview` | print the preview for one result |
 | `swoop-run` | do the action for one result |
 | `swoop-img` | print a picture as Kitty graphics escapes |
@@ -104,7 +105,7 @@ and could be moved to its own repository without surgery:
 
 ## 7. Speed is a feature
 
-`swoop-list` and `swoop-preview` run on keystrokes and cursor moves. Their
+`swoop-nav` and `swoop-preview` run on keystrokes and cursor moves. Their
 startup time is felt directly.
 
 - Do not add a heavy import to a hot-path tool. Check with `go build` size

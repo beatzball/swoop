@@ -38,9 +38,10 @@ func run(path, action string) error {
 }
 
 // launchExec runs the entry's Exec line through sh, in a session of its
-// own. swoop-run replaced fzf through become, and the launcher's terminal
-// closes once it exits; Setsid keeps the app from being hung up with it.
-// sh reads the quoting the spec allows in Exec, so it is not parsed here.
+// own. swoop-run, which ran this tool, replaced fzf through become, and
+// the launcher's terminal closes once it exits; Setsid keeps the app from
+// being hung up with it. sh reads the quoting the spec allows in Exec, so
+// it is not parsed here.
 func launchExec(path string) error {
 	d, err := apps.ReadDesktop(path)
 	if err != nil {
@@ -56,7 +57,7 @@ func launchExec(path string) error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	// Not waited for: the app runs on after swoop-run exits. Releasing
+	// Not waited for: the app runs on after this tool exits. Releasing
 	// it lets the Go runtime forget the child without a zombie wait.
 	return cmd.Process.Release()
 }

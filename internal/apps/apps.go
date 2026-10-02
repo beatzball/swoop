@@ -1,6 +1,6 @@
-// Package apps finds the applications a user can launch. It is the first
-// built-in source and speaks the same contract an extension would: a list of
-// protocol items. The per-OS part lives behind build tags in the files next
+// Package apps finds the applications a user can launch, for swoop-apps,
+// the tool behind the apps extension. It answers in the contract's terms:
+// a list of protocol items. The per-OS part lives behind build tags in the files next
 // to this one, so this file has no idea what an ".app" is.
 package apps
 

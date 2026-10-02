@@ -5,8 +5,7 @@
 //
 // An id that starts with "ext/<name>/" belongs to that extension and is
 // handed to it with the prefix removed, with the action if one was picked
-// from the menu. Every other id is a built-in source's; today that means
-// an application bundle path, which knows open, reveal, and copy-path.
+// from the menu. Every row is an extension's, so any other id is an error.
 package main
 
 import (
@@ -49,5 +48,5 @@ func dispatch(id, action string) error {
 		}
 		return e.Run(raw, action)
 	}
-	return run(id, action)
+	return fmt.Errorf("%q is not an extension's row", id)
 }

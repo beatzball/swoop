@@ -59,7 +59,7 @@ func Parse(line string) (Item, error) {
 }
 
 // Write writes items as lines, one buffered writer and one flush at the end.
-// swoop-list runs on keystrokes, and a write syscall per line is exactly the
+// swoop-nav rows runs on keystrokes, and a write syscall per line is exactly the
 // kind of cost that adds up to felt lag.
 func Write(w io.Writer, items []Item) error {
 	bw := bufio.NewWriter(w)

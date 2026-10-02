@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# apps: the applications on this machine. Enter opens one; ctrl-k offers
+# Open, a reveal in the file manager, and Copy path. The work is in
+# swoop-apps, a Go tool in bin/, which knows where each OS keeps them.
+# This shim is here so the rows are routed like every other extension.
+#
+# Two files beside it ask the launcher for what a long, fixed list needs:
+# "cache" says the rows are listed once per launch and kept for the run,
+# and "icons" says each row's id is a file to take the row's icon from.
+# See cmd/swoop-apps.
+exec swoop-apps "$@"

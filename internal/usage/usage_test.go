@@ -1,6 +1,7 @@
 package usage
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -76,5 +77,43 @@ func TestStatsOrderAndTimes(t *testing.T) {
 	s := Stats(entries)
 	if s[0].ID != "y" || s[0].Count != 2 || !s[0].First.Equal(now.Add(-2*time.Hour)) || !s[0].Last.Equal(now.Add(-1*time.Hour)) {
 		t.Fatalf("%+v", s[0])
+	}
+}
+
+// Opens logged before every row was an extension's have bare ids. Adopt
+// gives them to one extension, so its rows keep their counts and their
+// place in Used recently; ids that have a prefix are left alone.
+func TestAdoptPrefixesBareIDs(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	if err := Adopt("ext/apps/"); err != nil {
+		t.Fatalf("no log: %v", err)
+	}
+	for _, id := range []string{"/Applications/Safari.app", "ext/fake/plain", "/Applications/Safari.app", "ext/apps//Applications/Safari.app"} {
+		if err := Record(id, "app", "Safari"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := Adopt("ext/apps/"); err != nil {
+		t.Fatal(err)
+	}
+	entries, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stats := Stats(entries)
+	if len(stats) != 2 || stats[0].ID != "ext/apps//Applications/Safari.app" || stats[0].Count != 3 || stats[0].Title != "Safari" {
+		t.Fatalf("stats after Adopt: %+v", stats)
+	}
+	if got := Recent(entries, 5); len(got) != 2 || got[0] != "ext/apps//Applications/Safari.app" || got[1] != "ext/fake/plain" {
+		t.Fatalf("recent after Adopt: %v", got)
+	}
+	// Nothing left to adopt: the log is not written again.
+	before, _ := os.Stat(Path())
+	if err := Adopt("ext/apps/"); err != nil {
+		t.Fatal(err)
+	}
+	after, _ := os.Stat(Path())
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Fatal("Adopt rewrote a log with nothing to adopt")
 	}
 }

@@ -13,12 +13,14 @@ import (
 
 // TestRunSkipsAndWarms feeds run a fake lookup, so it needs no app
 // bundles: a cached icon becomes picture cells, a not-cached one keeps its
-// glyph and is named for the warmer, and an app with no icon at all keeps
+// glyph and is named for the warmer, and a file with no icon at all keeps
 // its glyph and is not, since warming would never help it.
 func TestRunSkipsAndWarms(t *testing.T) {
 	rows := []protocol.Item{
 		{ID: "/A/Cached.app", Kind: "app", Icon: "x", Title: "Cached"},
-		{ID: "/A/Cold.app", Kind: "app", Icon: "x", Title: "Cold"},
+		// As swoop-nav sends it: the launcher's prefix is not part of the
+		// path, for the lookup or for the warmer.
+		{ID: "ext/apps//A/Cold.app", Kind: "app", Icon: "x", Title: "Cold"},
 		{ID: "/A/Bare.app", Kind: "app", Icon: "x", Title: "Bare"},
 		{ID: "calc", Kind: "text", Icon: "=", Title: "4"},
 	}

@@ -7,9 +7,9 @@ sidebar:
 
 ## Every row is an extension
 
-Apps come first. Everything else in the list comes from an extension: a
-small program in the repository's `extensions/` folder that prints rows.
-Yours sit beside them in `~/.config/swoop/extensions/`, and work the same
+Everything in the list comes from an extension: a small program in the
+repository's `extensions/` folder that prints rows. The apps are one too,
+`apps`. Yours sit beside them in `~/.config/swoop/extensions/`, and work the same
 way. [Writing an Extension](/docs/writing-an-extension) builds one from
 nothing.
 
@@ -18,6 +18,7 @@ Extensions. ctrl-k on a row shows what else that row can do.
 
 | type | what you get | extension |
 |---|---|---|
+| an app's name | the app, Enter opens it | apps |
 | `2+2` | the answer, Enter copies it | calc |
 | `wiki`, `google`, your own names | a quicklink | links |
 | `emoji` | every emoji, flag and symbol | emoji |
