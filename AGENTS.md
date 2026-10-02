@@ -52,6 +52,9 @@ There are no design documents in the tree. **The issue is the document.**
 - Priority is `P0` to `P3`. Progress is tracked with milestones
 - Every pull request closes at least one issue (`Closes #n` in the body).
   No issue, no pull request. Open the issue first, even a small one
+- The one exception is a dependency bump Dependabot opens: it needs no
+  issue. It needs green CI, a look at what changed in the dependency, and
+  the same squash-merge as every other pull request
 - When a decision changes, edit the issue that holds it and date the change.
   Do not open a second issue that quietly contradicts the first
 
