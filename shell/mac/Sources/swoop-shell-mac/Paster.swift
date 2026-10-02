@@ -47,7 +47,7 @@ enum Paster {
         // is a mutable C variable, which Swift's concurrency checks refuse.
         let options = ["AXTrustedCheckOptionPrompt": true] as CFDictionary
         guard AXIsProcessTrustedWithOptions(options) else {
-            notify("Copied \(short(request.text)), not pasted: turn on swoop-shell-mac in System Settings > Privacy & Security > Accessibility, and swoop pastes for you. Already on? Remove it with the minus button and add it again: a new build needs a new grant.")
+            notify("Copied \(short(request.text)), not pasted: turn on swoop-shell-mac in System Settings > Privacy & Security > Accessibility, and \(Tool.current.title) pastes for you. Already on? Remove it with the minus button and add it again: a new build needs a new grant.")
             return
         }
         guard focusTakesText() else {
@@ -99,13 +99,13 @@ enum Paster {
         }
     }
 
-    /// A notification titled swoop, through osascript: a bare binary has
+    /// A notification titled with the tool's title, through osascript: a bare binary has
     /// no bundle, and the notification frameworks want one. The text goes
-    /// in as an argument, so no quoting can break it.
+    /// and the title go in as arguments, so no quoting can break them.
     private static func notify(_ note: String) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        p.arguments = ["-e", "on run argv", "-e", "display notification (item 1 of argv) with title \"swoop\"", "-e", "end run", note]
+        p.arguments = ["-e", "on run argv", "-e", "display notification (item 1 of argv) with title (item 2 of argv)", "-e", "end run", note, Tool.current.title]
         try? p.run()
     }
 

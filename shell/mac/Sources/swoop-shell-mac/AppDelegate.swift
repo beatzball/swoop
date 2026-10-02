@@ -19,11 +19,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             TerminalDebugLog.enable(.standard)
             TerminalDebugLog.sink = { FileHandle.standardError.write(Data(($0 + "\n").utf8)) }
         }
-        guard let command = findLauncher() else {
-            FileHandle.standardError.write(Data("swoop-shell-mac: cannot find swoop. Set SWOOP_LAUNCHER or put bin/ on PATH.\n".utf8))
+        guard let command = Launcher.path else {
+            FileHandle.standardError.write(Data("swoop-shell-mac: cannot find the launcher. Set SWOOP_LAUNCHER or put bin/ on PATH.\n".utf8))
             NSApp.terminate(nil)
             return
         }
+        // What this frame is: its name, title, id and hotkey, from the
+        // tool file, through the launcher. Asked for here, before anything
+        // reads a folder or shows a name. See Tool.
+        let tool = Tool.current
         let launcher = LauncherController(command: command)
         self.launcher = launcher
 
@@ -58,7 +62,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         toggle.resume()
         toggleSignal = toggle
 
-        // SIGUSR2 is swoop saying "I am about to exit": hide the panel and
+        // SIGUSR2 is the launcher saying "I am about to exit": hide the panel and
         // start the next one. See LauncherController.replace.
         signal(SIGUSR2, SIG_IGN)
         let ended = DispatchSource.makeSignalSource(signal: SIGUSR2, queue: .main)
@@ -66,7 +70,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ended.resume()
         endedSignal = ended
 
-        FileHandle.standardError.write(Data("swoop-shell-mac: ready; hotkey \(spec); running \(command)\n".utf8))
+        FileHandle.standardError.write(Data("swoop-shell-mac: ready as \(tool.title) (\(tool.id).shell, folder \(tool.name)); hotkey \(spec); running \(command)\n".utf8))
     }
 
     /// Register spec as the hotkey, in place of the one before. A key that
@@ -83,21 +87,5 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } catch {
             FileHandle.standardError.write(Data("swoop-shell-mac: \(error); running without a hotkey\n".utf8))
         }
-    }
-
-    /// The launcher script: SWOOP_LAUNCHER, or `swoop` on PATH. The frame
-    /// never guesses a path of its own; it runs what it is told to run.
-    private func findLauncher() -> String? {
-        let env = ProcessInfo.processInfo.environment
-        if let p = env["SWOOP_LAUNCHER"], FileManager.default.isExecutableFile(atPath: p) {
-            return p
-        }
-        for dir in (env["PATH"] ?? "").split(separator: ":") {
-            let p = String(dir) + "/swoop"
-            if FileManager.default.isExecutableFile(atPath: p) {
-                return p
-            }
-        }
-        return nil
     }
 }

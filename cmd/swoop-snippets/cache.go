@@ -20,6 +20,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 const cacheVersion = "swoop-snippets 1"
@@ -30,14 +32,14 @@ type cached struct {
 	Snippet
 }
 
-// cachePath is ~/Library/Caches/swoop/snippets.tsv on a Mac,
-// ~/.cache/swoop/snippets.tsv on Linux, or "" for no cache.
+// cachePath is ~/Library/Caches/<name>/snippets.tsv on a Mac,
+// ~/.cache/<name>/snippets.tsv on Linux, or "" for no cache.
 func cachePath() string {
 	d, err := os.UserCacheDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(d, "swoop", "snippets.tsv")
+	return filepath.Join(d, tool.Name(), "snippets.tsv")
 }
 
 // loadCache reads the cache for folder. A cache that is missing, for

@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 )
 
-// Info is the subset of an application's metadata swoop shows.
+// Info is the subset of an application's metadata the launcher shows.
 type Info struct {
 	Name     string
 	Version  string

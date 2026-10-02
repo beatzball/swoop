@@ -13,6 +13,7 @@ import (
 
 	"github.com/beatzball/swoop/internal/ext"
 	"github.com/beatzball/swoop/internal/protocol"
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // envOnce names the file that holds, for this run, the rows of the
@@ -105,7 +106,7 @@ func listOnce(exts []ext.Extension) (items []protocol.Item, names []string) {
 			defer wg.Done()
 			rows, err := e.List("")
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "swoop:", err)
+				fmt.Fprintln(os.Stderr, tool.Name()+":", err)
 				failed[i] = true
 				return
 			}

@@ -12,7 +12,7 @@
 //	swoop-settings edit <file>          the editor setting, run on file, for a script
 //	                                    extension that has no Go to call it with
 //
-// Every value is one line in ~/.config/swoop/config, the file
+// Every value is one line in ~/.config/<name>/config, the file
 // internal/settings reads and writes. The frame watches that file for the
 // hotkey, so a change here takes effect with no restart.
 package main
@@ -34,6 +34,7 @@ import (
 	"github.com/beatzball/swoop/internal/models"
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // A setting the pane shows: its key in the config file, its title, how
@@ -60,11 +61,15 @@ type choice struct {
 	typed bool
 }
 
+// me is the tool this pane belongs to: its title and name go in the
+// text a person reads, so a tool built on the kit never shows another's.
+var me = tool.Read()
+
 var all = []setting{
 	{
 		key: settings.Hotkey, title: "Hotkey", icon: "󰌌",
-		explain: "The key that opens swoop, in the frame. The frame watches the settings\nfile and takes a new key at once. A key another app holds cannot be\ntaken; the frame's log says so.",
-		value:   func() string { return settings.Get(settings.Hotkey, settings.HotkeyDefault) },
+		explain: "The key that opens " + me.Title + ", in the frame. The frame watches the settings\nfile and takes a new key at once. A key another app holds cannot be\ntaken; the frame's log says so.",
+		value:   func() string { return settings.Get(settings.Hotkey, settings.HotkeyDefault()) },
 		choices: hotkeyChoices,
 	},
 	{
@@ -81,7 +86,7 @@ var all = []setting{
 	},
 	{
 		key: settings.AI, title: "AI model", icon: "󰭹",
-		explain: "What answers in the Ask AI pane. A preset by name, ollama with a model,\nor a line of your own in ~/.config/swoop/ai: a command that reads the\nconversation on stdin and prints the answer.",
+		explain: "What answers in the Ask AI pane. A preset by name, ollama with a model,\nor a line of your own in ~/.config/" + me.Name + "/ai: a command that reads the\nconversation on stdin and prints the answer.",
 		value:   aiValue,
 		choices: aiChoices,
 	},
@@ -179,7 +184,7 @@ var all = []setting{
 	},
 	{
 		key: settings.Render, title: "Transcript renderer", icon: "󰉿",
-		explain: "What draws an AI answer in the pane. Built in: swoop's own markdown\nrenderer, no process. Or any command: the answer on its stdin, its\nstdout shown; glow, for one.",
+		explain: "What draws an AI answer in the pane. Built in: " + me.Title + "'s own markdown\nrenderer, no process. Or any command: the answer on its stdin, its\nstdout shown; glow, for one.",
 		value: func() string {
 			if r := settings.Get(settings.Render, ""); r != "" {
 				return r
@@ -188,7 +193,7 @@ var all = []setting{
 		},
 		choices: func(string) []choice {
 			return []choice{
-				{value: "", title: "Built in", note: "swoop's own renderer"},
+				{value: "", title: "Built in", note: me.Title + "'s own renderer"},
 				{value: "glow -s dark", title: "glow", note: "needs glow on PATH"},
 				{value: "swoop-md", title: "swoop-md", note: "the built-in one as a command"},
 			}
@@ -353,11 +358,11 @@ func preview(id string) error {
 	}
 	key, _, _ := strings.Cut(id, "=")
 	if key == folderID {
-		fmt.Println("The folder with swoop's files: config, the AI line, the clipboard\nignore list, shell-mac.json, and a place for extensions of your own.")
+		fmt.Println("The folder with " + me.Title + "'s files: config, the AI line, the clipboard\nignore list, shell-mac.json, and a place for extensions of your own.")
 		return nil
 	}
 	if key == extensionsID {
-		fmt.Println("Every extension swoop found, bundled and your own. Enter turns one on\nor off; one that is off has no rows at the root, no pane, no actions.\nSettings stays on: it is the way back.\n\n\x1b[2m" + settings.Off + " = … in " + settings.Path() + "\x1b[22m")
+		fmt.Println("Every extension " + me.Title + " found, bundled and your own. Enter turns one on\nor off; one that is off has no rows at the root, no pane, no actions.\nSettings stays on: it is the way back.\n\n\x1b[2m" + settings.Off + " = … in " + settings.Path() + "\x1b[22m")
 		return nil
 	}
 	if key == "settings" {
@@ -408,16 +413,24 @@ func openFolder(dir string) error {
 	return cmd.Run()
 }
 
-// hotkeyChoices are the keys most launchers use, and whatever was typed
-// when it looks like one: "ctrl+alt+k" in the bar becomes a row.
+// hotkeyChoices are the tool's own key, first, then the keys most
+// launchers use, and whatever was typed when it looks like one:
+// "ctrl+alt+k" in the bar becomes a row.
 func hotkeyChoices(query string) []choice {
-	cs := []choice{
-		{value: "alt+shift+space", title: "alt+shift+space", note: "the default"},
+	own := settings.HotkeyDefault()
+	cs := []choice{{value: own, title: own, note: "the default"}}
+	for _, c := range []choice{
+		{value: "alt+shift+space", title: "alt+shift+space", note: ""},
 		{value: "alt+space", title: "alt+space", note: "Ghostty's quick terminal uses this"},
 		{value: "ctrl+space", title: "ctrl+space", note: ""},
 		{value: "ctrl+alt+space", title: "ctrl+alt+space", note: ""},
 		{value: "cmd+shift+space", title: "cmd+shift+space", note: "the leading launcher's default"},
 		{value: "cmd+ctrl+space", title: "cmd+ctrl+space", note: ""},
+	} {
+		// The tool's own key is on the list already, as the default.
+		if c.value != own {
+			cs = append(cs, c)
+		}
 	}
 	q := strings.ToLower(strings.ReplaceAll(query, " ", ""))
 	if strings.Contains(q, "+") && looksLikeHotkey(q) {

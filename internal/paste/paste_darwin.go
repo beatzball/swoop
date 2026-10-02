@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 const pasteKey = "cmd+V"
@@ -26,7 +28,7 @@ func Clipboard() (string, error) {
 	return string(out), err
 }
 
-// notify posts a notification titled swoop.
+// notify posts a notification titled with the tool's title.
 func notify(note string) error {
 	cmd := exec.Command("osascript", "-e", notification(note))
 	cmd.Stderr = os.Stderr
@@ -34,7 +36,7 @@ func notify(note string) error {
 }
 
 func notification(note string) string {
-	return "display notification " + appleString(note) + ` with title "swoop"`
+	return "display notification " + appleString(note) + " with title " + appleString(tool.Read().Title)
 }
 
 // appleString quotes s as an AppleScript string literal.

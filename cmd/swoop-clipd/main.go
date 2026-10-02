@@ -1,4 +1,4 @@
-// swoop-clipd keeps the clipboard history. It is the first part of swoop
+// swoop-clipd keeps the clipboard history. It is the first part of the launcher
 // that runs while the launcher is closed: a watcher that notices when the
 // clipboard changes and appends the new text to the history file. The
 // extension reads the file back through the same program.
@@ -17,7 +17,7 @@
 // or transient marks (org.nspasteboard.ConcealedType, TransientType) is
 // never stored; some password managers set them. And a copy made while an
 // app on the ignore list is in front is never stored; the list defaults to
-// the known password managers and lives in ~/.config/swoop/clipboard.ignore,
+// the known password managers and lives in ~/.config/<name>/clipboard.ignore,
 // because not every manager sets the mark. Entries are cut at 64 KB and the
 // file is kept to 500 entries, mode 0600, under the data directory.
 package main

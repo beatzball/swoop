@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# swoop: the launcher, as one fzf call. Runs in any terminal on any OS.
+# swoop: swoopkit's launcher, as one fzf call. Runs in any terminal on any
+# OS. The tool it runs as, its name and folders, comes from the file `tool`.
 #
 # The extensions print result lines; fzf shows and filters them; Enter hands
 # the picked id to swoop-run, which replaces fzf (become) so nothing is left
@@ -10,7 +11,7 @@ status=0
 
 # The tools are found by this script's own directory, not by PATH alone, so
 # a stale swoop-nav elsewhere on PATH never answers for ours. Follow
-# symlinks first: scripts/get links ~/.local/bin/swoop to this file, and the
+# symlinks first: scripts/get links ~/.local/bin/<name> to this file, and the
 # tools are beside the file, not beside the link. A loop rather than
 # readlink -f, which the bash and readlink of older macOS do not have.
 src="${BASH_SOURCE[0]}"
@@ -23,20 +24,74 @@ while [ -L "$src" ]; do
 done
 here="$(cd -P "$(dirname "$src")" && pwd)"
 export PATH="$here:$PATH"
-# The extensions bundled in the repository, next to the user's own in
-# ~/.config/swoop/extensions. The user's win when names collide.
-export SWOOP_EXTENSIONS="$here/../extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIONS}"
+# The tool this launcher runs as is named by one file, `tool`, beside the
+# extensions folder: its name, title, id and hotkey, a key and a value on
+# each line. This script spells none of them. SWOOP_TOOL names the file
+# when the tool's folder is not this script's own: a tool built on the kit
+# is that folder and a shim that sets SWOOP_TOOL and runs this script.
+# Exported, so every program this run starts reads the same file; see
+# internal/tool, which reads it in Go. Nothing here reads the file to
+# open the launcher: only the verbs below do.
+case "${SWOOP_TOOL:-}" in
+  '') SWOOP_TOOL="$here/../tool" ;;
+  /*|[A-Za-z]:[\\/]*) ;;
+  *) SWOOP_TOOL="$PWD/$SWOOP_TOOL" ;;
+esac
+export SWOOP_TOOL
+root="${SWOOP_TOOL%[\\/]*}"
+# The extensions bundled with the tool, next to the user's own in
+# ~/.config/<name>/extensions. The user's win when names collide.
+export SWOOP_EXTENSIONS="$root/extensions${SWOOP_EXTENSIONS:+:$SWOOP_EXTENSIONS}"
 
-# swoop start|stop|restart|status: the frame's service, whichever way it
+# Reads the file into tool_name, tool_title, tool_id and tool_hotkey, with
+# what it leaves out filled in: no name is the kit's own prefix, no title
+# is the name, no id is dev.<name>. A name or an id that is not one plain
+# word is skipped, with a note: both end up in paths and labels. The same
+# rules as internal/tool, and a test there holds the two together.
+swoop_tool() {
+  local LC_ALL=C k v
+  tool_name="" tool_title="" tool_id="" tool_hotkey=""
+  if [ -f "$SWOOP_TOOL" ] && [ "$(wc -c < "$SWOOP_TOOL")" -le 4096 ]; then
+    while read -r k v || [ -n "$k" ]; do
+      # A file written on Windows ends its lines with a carriage return.
+      k="${k%$'\r'}"; v="${v%$'\r'}"
+      v="${v%"${v##*[![:space:]]}"}"
+      case "$k" in
+        name|id|hotkey)
+          case "$v" in
+            ''|[!A-Za-z0-9]*|*[!A-Za-z0-9._+-]*)
+              echo "tool: $k \"$v\" is not one plain word (letters, digits, . _ - +); skipped" >&2
+              continue ;;
+          esac ;;
+      esac
+      case "$k" in
+        name) tool_name="$v" ;;
+        title) tool_title="$v" ;;
+        id) tool_id="$v" ;;
+        hotkey) tool_hotkey="$v" ;;
+      esac
+    done < "$SWOOP_TOOL"
+  fi
+  [ -n "$tool_name" ] || tool_name=swoop
+  [ -n "$tool_title" ] || tool_title="$tool_name"
+  [ -n "$tool_id" ] || tool_id="dev.$tool_name"
+  [ -n "$tool_hotkey" ] || tool_hotkey="alt+shift+space"
+}
+
+# <name> start|stop|restart|status: the frame's service, whichever way it
 # was installed, so nobody has to remember brew services or launchctl.
-# They run before fzf, so `swoop restart` never opens the launcher. Any
+# They run before fzf, so `<name> restart` never opens the launcher. Any
 # other argument, or none, opens the launcher as always.
 #
 #   Homebrew   the running frame's path is under a Homebrew prefix, or
-#              `brew services list` names swoop: brew services does it
+#              `brew services list` names the tool: brew services does it
 #   launchd    the curl installer or a checkout, ~/Library/LaunchAgents/
-#              dev.swoop.shell.plist exists: launchctl on dev.swoop.shell
-#              and dev.swoop.clipd
+#              <id>.shell.plist exists: launchctl on <id>.shell and
+#              <id>.clipd
+#
+# <name> tool [key] prints what the file says, filled in: every line, or
+# the one value. It is how the frame and the scripts learn the tool's
+# name without a parser of their own.
 #
 # Written for the bash macOS ships, 3.2: no arrays under set -u, no
 # readlink -f.
@@ -44,7 +99,7 @@ swoop_service() {
   local verb="$1" domain agents pid path how label plist
   case "$(uname -s)" in
     Darwin) ;;
-    *) echo "swoop $verb: there is no frame on this OS yet; run swoop in a terminal" >&2; return 1 ;;
+    *) echo "$tool_name $verb: there is no frame on this OS yet; run $tool_name in a terminal" >&2; return 1 ;;
   esac
   domain="gui/$(id -u)"
   agents="$HOME/Library/LaunchAgents"
@@ -53,15 +108,15 @@ swoop_service() {
   [ -z "$pid" ] || path="$(ps -o comm= -p "$pid" 2>/dev/null)"
 
   # The running frame knows best where it came from. When none runs, a
-  # plist of ours is firmer evidence than brew's list, which names swoop
+  # plist of ours is firmer evidence than brew's list, which names the tool
   # on any Mac that has the formula, used or not.
   how=""
   case "$path" in
     */Cellar/*|/opt/homebrew/*|/home/linuxbrew/*) how=homebrew ;;
   esac
-  [ -n "$how" ] || [ ! -f "$agents/dev.swoop.shell.plist" ] || how=launchd
+  [ -n "$how" ] || [ ! -f "$agents/$tool_id.shell.plist" ] || how=launchd
   if [ -z "$how" ] && command -v brew >/dev/null 2>&1 &&
-    brew services list 2>/dev/null | awk '$1 == "swoop" { f = 1 } END { exit !f }'; then
+    brew services list 2>/dev/null | awk -v n="$tool_name" '$1 == n { f = 1 } END { exit !f }'; then
     how=homebrew
   fi
 
@@ -74,12 +129,12 @@ swoop_service() {
     homebrew)
       # The clipboard watcher is no service under Homebrew: the launcher
       # starts it the first time it runs, and it keeps running.
-      brew services "$verb" swoop ;;
+      brew services "$verb" "$tool_name" ;;
     launchd)
-      # The watcher first, so the frame's first swoop finds it running.
+      # The watcher first, so the frame's first launcher finds it running.
       # Stop goes the other way: the frame, then the watcher.
-      local labels="dev.swoop.clipd dev.swoop.shell"
-      [ "$verb" = stop ] && labels="dev.swoop.shell dev.swoop.clipd"
+      local labels="$tool_id.clipd $tool_id.shell"
+      [ "$verb" = stop ] && labels="$tool_id.shell $tool_id.clipd"
       for label in $labels; do
         plist="$agents/$label.plist"
         # An install older than the watcher's agent has only the frame's.
@@ -106,9 +161,9 @@ swoop_service() {
 }
 
 _swoop_not_installed() {
-  cat >&2 <<'MSG'
-swoop: the frame is not installed. Install it one of these ways:
-  brew install beatzball/tap/swoop && brew services start swoop
+  cat >&2 <<MSG
+$tool_name: the frame is not installed. Install it one of these ways:
+  brew install beatzball/tap/$tool_name && brew services start $tool_name
   curl -fsSL https://raw.githubusercontent.com/beatzball/swoop/main/scripts/get | bash
   make install, from a checkout
 MSG
@@ -118,17 +173,17 @@ MSG
 # the caller.
 _swoop_status() { # how pid path
   local how="$1" pid="$2" path="$3" hotkey="" version="?" plist wpid wpath
-  plist="$agents/dev.swoop.shell.plist"
+  plist="$agents/$tool_id.shell.plist"
   # The frame's own order: SWOOP_HOTKEY in its environment, then the
-  # config file, then the default. See shell/mac Config.hotkey.
+  # config file, then the tool's own. See shell/mac Config.hotkey.
   [ ! -f "$plist" ] || hotkey="$(sed -n 's:.*<key>SWOOP_HOTKEY</key><string>\(.*\)</string>.*:\1:p' "$plist")"
   [ -n "$hotkey" ] || hotkey="$(awk -F= '
     /^[ \t]*#/ { next }
     { k = $1; gsub(/[ \t]/, "", k) }
     k == "hotkey" { v = substr($0, index($0, "=") + 1); gsub(/^[ \t]+|[ \t]+$/, "", v) }
-    END { print v }' "${XDG_CONFIG_HOME:-$HOME/.config}/swoop/config" 2>/dev/null)"
-  [ -n "$hotkey" ] || hotkey="alt+shift+space"
-  [ ! -f "$here/../VERSION" ] || version="$(tr -d '[:space:]' < "$here/../VERSION")"
+    END { print v }' "${XDG_CONFIG_HOME:-$HOME/.config}/$tool_name/config" 2>/dev/null)"
+  [ -n "$hotkey" ] || hotkey="$tool_hotkey"
+  [ ! -f "$root/VERSION" ] || version="$(tr -d '[:space:]' < "$root/VERSION")"
   # Where the frame is when it is not running: what its plist would run,
   # or the one beside this script, as a release and Homebrew keep it.
   if [ -z "$path" ]; then
@@ -150,7 +205,19 @@ _swoop_status() { # how pid path
 }
 
 case "${1:-}" in
+  tool)
+    swoop_tool
+    case "${2:-}" in
+      '') printf 'name %s\ntitle %s\nid %s\nhotkey %s\n' "$tool_name" "$tool_title" "$tool_id" "$tool_hotkey" ;;
+      name) echo "$tool_name" ;;
+      title) echo "$tool_title" ;;
+      id) echo "$tool_id" ;;
+      hotkey) echo "$tool_hotkey" ;;
+      *) echo "tool: no such key: $2; it is one of name, title, id, hotkey" >&2; exit 2 ;;
+    esac
+    exit 0 ;;
   start|stop|restart|status)
+    swoop_tool
     swoop_service "$1" || status=$?
     # Which extension has which key, and any claim that lost.
     [ "$1" != status ] || swoop-nav keys status || true
@@ -187,7 +254,7 @@ esac
 #                which Esc does here anyway
 #   --preview-window:
 #                from swoop-nav, which reads the width the user last chose
-#                from ~/.config/swoop/config; 58% to start with. nav builds
+#                from ~/.config/<name>/config; 58% to start with. nav builds
 #                the same string for the panes that change the window
 #   alt-left, alt-right:
 #                move the divider: alt-left gives the preview 5% more,
@@ -254,7 +321,7 @@ esac
 : "${FZF_API_KEY:=$(head -c 24 /dev/urandom | base64)}"
 export FZF_API_KEY
 # The clipboard watcher outlives the launcher; start it if none runs. It
-# is the one part of swoop that runs while the launcher is closed.
+# is the one part that runs while the launcher is closed.
 # SWOOP_NO_CLIPD=1 skips it: a test, or a machine where you would rather
 # not have it.
 [ -n "${SWOOP_NO_CLIPD:-}" ] || swoop-clipd start || true

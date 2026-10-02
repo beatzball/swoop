@@ -1,5 +1,5 @@
 // Package usage keeps what the launcher opened: one line per open in
-// ~/.local/state/swoop/usage.jsonl, appended by swoop-run and by an
+// ~/.local/state/<name>/usage.jsonl, appended by swoop-run and by an
 // Ask AI send. From it come the Used recently group at the top of the
 // root list and the Stats pane. It is the launcher's own data, in the
 // user's state directory, and it never leaves the machine.
@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/beatzball/swoop/internal/protocol"
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // Entry is one open.
@@ -26,17 +27,17 @@ type Entry struct {
 	Title string    `json:"title,omitempty"`
 }
 
-// Path is the log: $XDG_STATE_HOME/swoop/usage.jsonl, or
-// ~/.local/state/swoop/usage.jsonl.
+// Path is the log: $XDG_STATE_HOME/<name>/usage.jsonl, or
+// ~/.local/state/<name>/usage.jsonl.
 func Path() string {
 	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" {
-		return filepath.Join(dir, "swoop", "usage.jsonl")
+		return filepath.Join(dir, tool.Name(), "usage.jsonl")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".local", "state", "swoop", "usage.jsonl")
+	return filepath.Join(home, ".local", "state", tool.Name(), "usage.jsonl")
 }
 
 // keep is how many lines the log holds before the oldest are dropped:

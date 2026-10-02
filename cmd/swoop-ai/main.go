@@ -14,8 +14,8 @@
 //	swoop-ai send <id|new> <prompt>     record the prompt and start the worker; returns at once
 //	swoop-ai work <id>                  the worker: run the model, stream the answer into the file
 //
-// swoop does not know what a model is. The worker runs one command, the
-// line in ~/.config/swoop/ai, with the conversation on its stdin, and puts
+// The kit does not know what a model is. The worker runs one command, the
+// line in ~/.config/<name>/ai, with the conversation on its stdin, and puts
 // what comes out of its stdout into the file as it comes. See command.go
 // for the defaults when there is no such line.
 //

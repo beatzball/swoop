@@ -10,10 +10,10 @@
 build:
 	go build -o bin/ ./cmd/...
 
-# The macOS frame: a floating panel with swoop in it, no Ghostty.app needed.
-# Run it with bin/ on PATH, or SWOOP_LAUNCHER pointing at bin/swoop.
-# Signed with swoop-dev when this Mac has it, so an Accessibility grant
-# survives the rebuild; see scripts/sign-frame.
+# The macOS frame: a floating panel with the launcher in it, no Ghostty.app
+# needed. Run it with bin/ on PATH, or SWOOP_LAUNCHER pointing at bin/swoop.
+# Signed with <name>-dev, the tool file's name, when this Mac has it, so an
+# Accessibility grant survives the rebuild; see scripts/sign-frame.
 shell-mac:
 	swift build -c release --package-path shell/mac
 	@scripts/sign-frame shell/mac/.build/release/swoop-shell-mac

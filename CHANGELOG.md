@@ -9,6 +9,26 @@ so here.
 
 ## [Unreleased]
 
+### Changed
+
+- **The toolkit has a name, swoopkit, and the tool's name comes from one
+  file.** A file called `tool` beside the `extensions` folder says what
+  the tool is, a key and a value on each line: `name` for its folders
+  (`~/.config/<name>`, `~/.local/share/<name>`, `~/.local/state/<name>`,
+  the logs) and its command, `title` for the frame's menu and its
+  notifications, `id` for the launchd labels (`<id>.shell`, `<id>.clipd`)
+  and the frame's signature, `hotkey` for the key that opens it until you
+  pick one. The launcher, every program, the frame and the install scripts
+  read it and spell none of those themselves. `swoop tool` prints what the
+  file says, and `swoop tool name` one value. For swoop nothing changes:
+  the same folders, labels, hotkey and titles, so an upgrade keeps your
+  settings, notes, tasks and the Accessibility grant. A folder with a
+  `tool` file of its own, its own extensions, and a shim that sets
+  `SWOOP_TOOL` to that file and runs the launcher is a tool of its own,
+  with none of swoop's rows and none of its folders. The programs and the
+  `SWOOP_*` variables keep their names under every tool: they are the
+  kit's, and the contract with an extension.
+
 ### Fixed
 
 - **The launcher test no longer fails now and then on a slow runner.** It

@@ -1,5 +1,5 @@
 // Package picture puts a PNG on the screen of a terminal that speaks the
-// Kitty graphics protocol, which libghostty does. It is the one place swoop
+// Kitty graphics protocol, which libghostty does. It is the one place the launcher
 // knows how a picture becomes bytes; swoop-img and swoop-preview both use
 // it and neither imports the other.
 //

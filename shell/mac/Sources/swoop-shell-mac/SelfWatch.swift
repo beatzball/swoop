@@ -18,7 +18,7 @@ enum SelfWatch {
 
     /// The path the frame was started from, as launchd or a shell gave
     /// it, not with its symlinks resolved: Homebrew's service runs
-    /// opt/swoop/..., a link an upgrade moves to the new version, and the
+    /// opt/<name>/..., a link an upgrade moves to the new version, and the
     /// curl installer's runs current/..., the same. Relative only when
     /// run by hand, so made whole against the directory it started in.
     static var path: String {

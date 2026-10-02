@@ -3,6 +3,8 @@ package main
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // managedByLaunchd says whether make install has written the watcher's
@@ -14,6 +16,6 @@ func managedByLaunchd() bool {
 	if err != nil {
 		return false
 	}
-	_, err = os.Stat(filepath.Join(home, "Library", "LaunchAgents", "dev.swoop.clipd.plist"))
+	_, err = os.Stat(filepath.Join(home, "Library", "LaunchAgents", tool.Read().ID+".clipd.plist"))
 	return err == nil
 }

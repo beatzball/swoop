@@ -323,7 +323,7 @@ func landed(ran string) string {
 // to bind at start. Every extension's, on or off: one turned on while the
 // launcher is open has its key at once, and a key whose extensions are
 // all off does nothing (see the key command). With status it prints who
-// has which instead, for `swoop status`.
+// has which instead, for `<name> status`.
 func keys(status bool) {
 	if !status {
 		for _, k := range ext.Keys(ext.DiscoverAll(ext.Dirs())) {

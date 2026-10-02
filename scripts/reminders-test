@@ -27,7 +27,9 @@ log="$tmp/log"
 export SWOOP_TEST_LOG="$log" SWOOP_TEST_DELAY=1
 export SWOOP_STATE="$tmp/swoop-state" FZF_API_KEY=test-key
 unset FZF_SOCK
-dir="$XDG_STATE_HOME/swoop/reminders"
+# The extension is one of the bundle this checkout's tool ships, and keeps
+# its cache in that tool's state folder.
+dir="$XDG_STATE_HOME/$("$root/bin/swoop" tool name)/reminders"
 cache="$dir/reminders.tsv"
 reminders="$root/extensions/reminders/reminders"
 

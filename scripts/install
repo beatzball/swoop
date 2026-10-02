@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# install: make swoop a daily driver on this Mac, from this checkout. Builds
-# the tools and the frame, then hands both to scripts/launchd.sh, which
-# writes two launchd agents that run at login and keep running:
+# install: make the tool in this checkout a daily driver on this Mac.
+# Builds the tools and the frame, then hands both to scripts/launchd.sh,
+# which writes two launchd agents that run at login and keep running,
+# labelled with the id in the file `tool`:
 #
-#   dev.swoop.shell   the frame: the hotkey and the panel
-#   dev.swoop.clipd   the clipboard watcher
+#   <id>.shell   the frame: the hotkey and the panel
+#   <id>.clipd   the clipboard watcher
 #
 # Both point at this checkout, so `make install` again after a pull or a
-# rebuild restarts them on the new build. Logs go to ~/Library/Logs/swoop.
+# rebuild restarts them on the new build. Logs go to ~/Library/Logs/<name>.
 # `scripts/uninstall` removes both agents and leaves your history alone.
 # scripts/get does the same from a release, with no Go and no Xcode tools.
 #
@@ -40,10 +41,13 @@ make -C "$root" build shell-mac >/dev/null
 # there, and the frame cannot start without that bundle.
 swoop_launchd "$root" "$root/shell/mac/.build/release/swoop-shell-mac"
 
+name="$("$root/bin/swoop" tool name)"
+title="$("$root/bin/swoop" tool title)"
+hotkey="$("$root/bin/swoop" tool hotkey)"
 cat <<MSG
 
-swoop is installed. Press ${SWOOP_HOTKEY:-alt+shift+space}.
-It starts again at login. Logs: $HOME/Library/Logs/swoop. Remove it with: make uninstall
-If you wired Ghostty's quick terminal to swoop in ~/.zshrc, you can take
+$title is installed. Press ${SWOOP_HOTKEY:-$hotkey}.
+It starts again at login. Logs: $HOME/Library/Logs/$name. Remove it with: make uninstall
+If you wired Ghostty's quick terminal to $title in ~/.zshrc, you can take
 that out now.
 MSG

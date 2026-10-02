@@ -23,6 +23,16 @@ The contract itself, every verb and every row kind, is
 [issue #2](https://github.com/beatzball/swoop/issues/2). It is the source of
 truth. This page teaches it; where they differ, the issue wins.
 
+The contract belongs to **swoopkit**, the toolkit swoop is built on: the
+launcher, `swoop-nav`, `swoop-match` and the other small programs, and the
+frame. swoop is one tool on the kit, named by a file called `tool` beside
+its `extensions` folder, which gives its name, title, id and hotkey. A
+tool of your own is another such folder, and an extension does not care
+which tool runs it: the programs it calls and the `SWOOP_*` variables it
+reads keep their names under every tool. So what you write here for swoop
+runs unchanged in any tool built on the kit, and only the folder it lives
+in, `~/.config/<name>/extensions`, takes that tool's name.
+
 ## Before you start
 
 You need swoop, and a way to run the launcher in a terminal. From a checkout:

@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // Turn is one side of one exchange.
@@ -48,16 +50,16 @@ type Conversation struct {
 // Store is the directory.
 type Store struct{ Dir string }
 
-// DefaultDir is $XDG_STATE_HOME/swoop/ai, or ~/.local/state/swoop/ai.
+// DefaultDir is $XDG_STATE_HOME/<name>/ai, or ~/.local/state/<name>/ai.
 func DefaultDir() string {
 	if dir := os.Getenv("XDG_STATE_HOME"); dir != "" {
-		return filepath.Join(dir, "swoop", "ai")
+		return filepath.Join(dir, tool.Name(), "ai")
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".local", "state", "swoop", "ai")
+	return filepath.Join(home, ".local", "state", tool.Name(), "ai")
 }
 
 // TitleMax is how much of the first prompt becomes the title.
@@ -213,7 +215,7 @@ func (c *Conversation) Answer() string {
 // Prompt is what the model reads on stdin: the whole conversation as
 // plain text, User and Assistant blocks, the new prompt last. A first
 // prompt goes alone, with no framing to confuse a model that expects a
-// question. The model command knows nothing of swoop, so this is the one
+// question. The model command knows nothing of the launcher, so this is the one
 // format every command gets.
 func (c *Conversation) Prompt() string {
 	var turns []Turn

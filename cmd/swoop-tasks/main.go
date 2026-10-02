@@ -1,5 +1,5 @@
 // swoop-tasks is the tasks extension: a checklist in one markdown file,
-// ~/.local/share/swoop/tasks.md. One root row, Tasks, opens the view:
+// ~/.local/share/<name>/tasks.md. One root row, Tasks, opens the view:
 // the open tasks under headers by when they are due, Past due to
 // Unscheduled, and a Done row last that opens the done ones as a view of
 // their own. Text typed in the view becomes an Add task row; date words

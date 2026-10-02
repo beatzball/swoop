@@ -7,6 +7,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 const pasteKey = "ctrl+V"
@@ -63,5 +65,5 @@ func notify(note string) error {
 	if _, err := exec.LookPath("notify-send"); err != nil {
 		return nil
 	}
-	return exec.Command("notify-send", "swoop", note).Run()
+	return exec.Command("notify-send", tool.Read().Title, note).Run()
 }

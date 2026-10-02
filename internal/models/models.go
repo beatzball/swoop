@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/beatzball/swoop/internal/settings"
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // Choice is one thing to pick: the value the ai setting takes, a title,
@@ -54,7 +55,7 @@ func Choices(query string) []Choice {
 	}
 	cs = append(cs,
 		Choice{Value: "openai:gpt-5", Title: "openai gpt-5", Note: "needs an API key; type openai:<model> for another"},
-		Choice{Value: "", Title: "The line in ~/.config/swoop/ai", Note: "a command of your own; or the defaults when there is none"},
+		Choice{Value: "", Title: "The line in ~/.config/" + tool.Name() + "/ai", Note: "a command of your own; or the defaults when there is none"},
 	)
 	return cs
 }
@@ -91,7 +92,7 @@ func Current() string {
 	if v := settings.Get(settings.AI, ""); v != "" {
 		return v
 	}
-	return "default: the line in ~/.config/swoop/ai, else claude, else ollama"
+	return "default: the line in ~/.config/" + tool.Name() + "/ai, else claude, else ollama"
 }
 
 // LMStudio asks LM Studio's local server, when it is up, what models it

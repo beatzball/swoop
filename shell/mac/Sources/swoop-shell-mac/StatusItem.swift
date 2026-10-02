@@ -1,6 +1,6 @@
 import AppKit
 
-/// The bird in the menu bar: the one visible sign that swoop is running,
+/// The bird in the menu bar: the one visible sign that the tool is running,
 /// as the launchers you know have. Its menu opens the launcher,
 /// opens the settings folder, restarts, and quits. An accessory app has no Dock
 /// icon, so without this there is nothing to click.
@@ -8,6 +8,9 @@ final class StatusItem {
     private let item: NSStatusItem
     private let open: () -> Void
     private let hotkey: String
+    /// The tool's title, from its tool file: every word a person reads
+    /// here that names the tool is this one.
+    private static var title: String { Tool.current.title }
 
     init(hotkey: String, open: @escaping () -> Void) {
         self.open = open
@@ -20,16 +23,16 @@ final class StatusItem {
             // Symbol bird stands in, and without that the name as text.
             if let image = StatusItem.owl() {
                 button.image = image
-            } else if let image = NSImage(systemSymbolName: "bird", accessibilityDescription: "swoop") {
+            } else if let image = NSImage(systemSymbolName: "bird", accessibilityDescription: Self.title) {
                 image.isTemplate = true
                 button.image = image
             } else {
-                button.title = "swoop"
+                button.title = Self.title
             }
-            button.toolTip = "swoop  \(hotkey)"
+            button.toolTip = "\(Self.title)  \(hotkey)"
         }
         let menu = NSMenu()
-        let openItem = NSMenuItem(title: "Open swoop", action: #selector(openLauncher), keyEquivalent: "")
+        let openItem = NSMenuItem(title: "Open \(Self.title)", action: #selector(openLauncher), keyEquivalent: "")
         openItem.target = self
         menu.addItem(openItem)
         let hint = NSMenuItem(title: hotkey, action: nil, keyEquivalent: "")
@@ -40,10 +43,10 @@ final class StatusItem {
         settings.target = self
         menu.addItem(settings)
         menu.addItem(.separator())
-        let restart = NSMenuItem(title: "Restart swoop", action: #selector(restart), keyEquivalent: "")
+        let restart = NSMenuItem(title: "Restart \(Self.title)", action: #selector(restart), keyEquivalent: "")
         restart.target = self
         menu.addItem(restart)
-        let quit = NSMenuItem(title: "Quit swoop", action: #selector(quit), keyEquivalent: "")
+        let quit = NSMenuItem(title: "Quit \(Self.title)", action: #selector(quit), keyEquivalent: "")
         quit.target = self
         menu.addItem(quit)
         item.menu = menu
@@ -54,9 +57,7 @@ final class StatusItem {
     /// The config folder in Finder: the settings files, the clipboard
     /// ignore list, and a place for extensions of your own.
     @objc private func openSettings() {
-        let env = ProcessInfo.processInfo.environment
-        let base = env["XDG_CONFIG_HOME"] ?? (env["HOME"] ?? "") + "/.config"
-        let dir = base + "/swoop"
+        let dir = Tool.configDir
         try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
         NSWorkspace.shared.open(URL(fileURLWithPath: dir))
     }
@@ -71,7 +72,7 @@ final class StatusItem {
         exit(0)
     }
 
-    /// Stop, and stay stopped until the next login or `swoop start`. An
+    /// Stop, and stay stopped until the next login or `<name> start`. An
     /// exit alone is not enough under a service: KeepAlive would start
     /// the frame again within a second. So the frame unloads its own
     /// service with `launchctl bootout`, which ends this process too.
@@ -98,8 +99,8 @@ final class StatusItem {
     }
 
     /// The launchd label this frame runs under, when a plist for it is in
-    /// ~/Library/LaunchAgents: dev.swoop.shell from the installers,
-    /// homebrew.mxcl.swoop from `brew services`. launchd names the job in
+    /// ~/Library/LaunchAgents: <id>.shell from the installers,
+    /// homebrew.mxcl.<name> from `brew services`. launchd names the job in
     /// XPC_SERVICE_NAME; a frame run from a terminal has none, or "0".
     private static func serviceLabel() -> String? {
         let env = ProcessInfo.processInfo.environment
@@ -125,7 +126,7 @@ final class StatusItem {
         }
         image.size = NSSize(width: 18, height: 18)
         image.isTemplate = true
-        image.accessibilityDescription = "swoop"
+        image.accessibilityDescription = title
         return image
     }
 }

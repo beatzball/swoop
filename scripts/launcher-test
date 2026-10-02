@@ -35,6 +35,13 @@ import tempfile
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# The tool under test is the checkout's own, named by the file `tool` at
+# its root. The harness asks the launcher what that file says, as the
+# frame and the install scripts do, so the folders it seeds are the ones
+# that tool reads, whatever it is called. A tool file named by the
+# caller's environment would be another tool's.
+os.environ.pop("SWOOP_TOOL", None)
+NAME = subprocess.run([os.path.join(ROOT, "bin", "swoop"), "tool", "name"], capture_output=True, text=True).stdout.strip()
 ESC = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b[()][A-Z0-9]|\x1b[=>]|\x1b\][^\x07]*\x07|\x1b\\|\x1bP[^\x1b]*\x1b\\")
 
 
@@ -353,7 +360,7 @@ def main():
 
     tmp = tempfile.mkdtemp(prefix="swoop-launcher-test.")
     home = os.path.join(tmp, "home")
-    os.makedirs(os.path.join(home, ".config", "swoop"))
+    os.makedirs(os.path.join(home, ".config", NAME))
     ext_dir = os.path.join(tmp, "ext", "fake")
     os.makedirs(ext_dir)
     marker = os.path.join(tmp, "ran")
@@ -427,7 +434,7 @@ esac
     # A quicklink with an argument, and a fake `open` (and xdg-open, for
     # Linux) ahead of the real one on PATH that records what it was asked
     # to open instead of opening it.
-    with open(os.path.join(home, ".config", "swoop", "quicklinks.tsv"), "w") as f:
+    with open(os.path.join(home, ".config", NAME, "quicklinks.tsv"), "w") as f:
         f.write("Fake Search\thttps://example.test/find?q={argument}\n")
     fakebin = os.path.join(tmp, "fakebin")
     os.makedirs(fakebin)
@@ -455,13 +462,13 @@ printf '%s\\n' "$@" > '{opened}'
 
     # A snippet with a keyword, a placeholder filled on Enter, and a
     # {cursor}, which outside a frame is only removed.
-    snippets = os.path.join(home, ".config", "swoop", "snippets")
+    snippets = os.path.join(home, ".config", NAME, "snippets")
     os.makedirs(snippets)
     with open(os.path.join(snippets, "fake-greeting.md"), "w") as f:
         f.write("Fake Greeting\nkeyword: ;fg\n\nHello on {date}{cursor}!\n")
 
     # A note, with a word inside it that is not in its title.
-    notes_dir = os.path.join(home, ".data", "swoop", "notes")
+    notes_dir = os.path.join(home, ".data", NAME, "notes")
     os.makedirs(notes_dir)
     fake_note = os.path.join(notes_dir, "fake-meeting.md")
     with open(fake_note, "w") as f:
@@ -474,7 +481,7 @@ printf '%s\\n' "$@" > '{opened}'
 echo "fake-editor on ${@: -1}"
 printf 'edited by the fake editor\\n' >> "${@: -1}"
 """)
-    with open(os.path.join(home, ".config", "swoop", "config"), "w") as f:
+    with open(os.path.join(home, ".config", NAME, "config"), "w") as f:
         f.write("editor = fake-editor --flag\n")
 
     # A fake clipboard, pbcopy on a Mac and wl-copy on Linux, that
@@ -498,7 +505,7 @@ esac
 """)
 
     # The fake AI command: a status line on stderr, a pause, an answer.
-    with open(os.path.join(home, ".config", "swoop", "ai"), "w") as f:
+    with open(os.path.join(home, ".config", NAME, "ai"), "w") as f:
         f.write("sh -c 'echo \"using Fake\" >&2; sleep 1.2; echo \"The answer is 42\"'\n")
 
     key = "launcher-test-key"
@@ -522,7 +529,7 @@ esac
     env.pop("SWOOP_SHELL", None)
     env.pop("SWOOP_SHELL_PID", None)
     env.pop("SWOOP_PASTE", None)
-    config = os.path.join(home, ".config", "swoop", "config")
+    config = os.path.join(home, ".config", NAME, "config")
 
     def flip_extension(L, config, name, want_off):
         """Settings, Extensions: Enter on the row of the extension `name`
@@ -830,7 +837,7 @@ esac
 
         # 8. the open was counted: a new launcher leads with that row, marked
         def recent():
-            usage_log = os.path.join(home, ".state", "swoop", "usage.jsonl")
+            usage_log = os.path.join(home, ".state", NAME, "usage.jsonl")
             if not os.path.exists(usage_log):
                 fail("the run was not recorded in the usage log", "")
             with open(usage_log) as f:
@@ -1043,7 +1050,7 @@ esac
         # is pinned to Monday 14 September 2026, since which header a
         # task is under depends on the day.
         def tasks():
-            tasks_md = os.path.join(home, ".data", "swoop", "tasks.md")
+            tasks_md = os.path.join(home, ".data", NAME, "tasks.md")
             eighth = Launcher(dict(env, SWOOP_TASKS_NOW="2026-09-14T10:30"))
             eighth.key = key
 
@@ -1167,7 +1174,7 @@ esac
         # logged under the bare path, from before, still puts the app in
         # Used recently; turned off, its rows are gone
         def apps():
-            usage_log = os.path.join(home, ".state", "swoop", "usage.jsonl")
+            usage_log = os.path.join(home, ".state", NAME, "usage.jsonl")
             if os.path.exists(opened):
                 os.remove(opened)
             a = Launcher(env)
@@ -1240,6 +1247,91 @@ esac
             finally:
                 d.kill()
         check("no extensions: an empty launcher that works", bare)
+
+        # 17. a tool of one's own: a folder with a `tool` file that names
+        # it mytool, one ten-line shell extension, and the kit's programs
+        # on PATH. A shim names the file and runs the kit's launcher. Its
+        # rows and no others; its own folders for the user's extensions
+        # and for the usage log; its own name in what it says
+        def own_tool():
+            root = os.path.join(tmp, "mytool")
+            runbooks = os.path.join(root, "extensions", "runbooks")
+            os.makedirs(runbooks)
+            ran = os.path.join(tmp, "mytool-ran")
+            with open(os.path.join(root, "tool"), "w") as f:
+                f.write("name mytool\ntitle My Tool\n")
+            write_exe(os.path.join(runbooks, "runbooks"), """#!/bin/sh
+# runbooks: three rows, a preview for each, and a run that leaves a marker.
+case "$1" in
+  list)
+    for r in deploy rollback restart; do
+      printf '%s\\tcommand\\t\\tRunbook %s\\tfor the team\\n' "$r" "$r"
+    done ;;
+  preview) echo "how to $2" ;;
+  run) echo "$2" > "$MYTOOL_RAN" ;;
+esac
+""")
+            shim = os.path.join(root, "mytool")
+            write_exe(shim, """#!/bin/sh
+# mytool: the kit's launcher, told which tool it is.
+SWOOP_TOOL="$(dirname "$0")/tool" exec swoop "$@"
+""")
+            # An extension of the user's own, in this tool's config folder
+            # and in no other tool's.
+            mine = os.path.join(home, ".config", "mytool", "extensions", "mine")
+            os.makedirs(mine)
+            write_exe(os.path.join(mine, "mine"), """#!/bin/sh
+[ "$1" = list ] && printf 'row\\tcommand\\t\\tOwn Folder Row\\tfrom the config folder\\n'
+""")
+            # None of the harness's extensions: the tool's folder is all
+            # the launcher is given.
+            own = dict(env, MYTOOL_RAN=ran)
+            own.pop("SWOOP_EXTENSIONS")
+            said = subprocess.run([shim, "tool"], env=own, capture_output=True, text=True).stdout
+            if said != "name mytool\ntitle My Tool\nid dev.mytool\nhotkey " + subprocess.run([shim, "tool", "hotkey"], env=own, capture_output=True, text=True).stdout:
+                fail(f"mytool tool said:\n{said}")
+            if os.uname().sysname != "Darwin":
+                # Where there is no frame, the verbs say so under the
+                # tool's own name. On a Mac they ask launchd, which
+                # scripts/launchd-test covers with a fake one.
+                verb = subprocess.run([shim, "restart"], env=own, capture_output=True, text=True)
+                if verb.returncode != 1 or not verb.stderr.startswith("mytool restart:"):
+                    fail(f"mytool restart said: {verb.stderr!r} (exit {verb.returncode})")
+            usage_log = os.path.join(home, ".state", "mytool", "usage.jsonl")
+            others_log = os.path.join(home, ".state", NAME, "usage.jsonl")
+            others_before = ""
+            if os.path.exists(others_log):
+                with open(others_log) as f:
+                    others_before = f.read()
+            t = Launcher(own, script=shim)
+            t.key = key
+            try:
+                st = t.wait_state(lambda s: s["totalCount"] == 4 and s.get("current"), what="the tool's three rows and the user's one")
+                rows = [m["text"] for m in st["matches"]]
+                if sum("Runbook " in r for r in rows) != 3 or not has(st, "Own Folder Row"):
+                    fail(f"the tool's own rows and no others: {rows}", t.buf)
+                t.press("rollback", lambda s: s["query"] == "rollback" and s["matchCount"] == 1 and "Runbook rollback" in cur(s), screen=r"how to rollback", what="the one runbook, with its preview")
+                t.send("\r")
+                code = t.wait_exit()
+                if code != 0:
+                    fail(f"mytool exited {code}", t.buf)
+                if not os.path.exists(ran):
+                    fail("the tool's extension did not run", t.buf)
+                with open(ran) as f:
+                    if f.read().strip() != "rollback":
+                        fail("the tool's run got the wrong id", t.buf)
+                if not os.path.exists(usage_log):
+                    fail(f"no usage log in the tool's own state folder: {os.listdir(os.path.join(home, '.state'))}", t.buf)
+                with open(usage_log) as f:
+                    if "ext/runbooks/rollback" not in f.read():
+                        fail("the tool's usage log does not name the row that ran", t.buf)
+                if os.path.exists(others_log):
+                    with open(others_log) as f:
+                        if f.read() != others_before:
+                            fail("the tool wrote to another tool's usage log", t.buf)
+            finally:
+                t.kill()
+        check("a tool of one's own: its name, its rows, its folders", own_tool)
     finally:
         L.kill()
         # The worker may still be around on a fast failure.

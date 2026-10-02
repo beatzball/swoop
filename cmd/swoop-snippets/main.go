@@ -2,7 +2,7 @@
 // row at the root. Enter fills the placeholders, pastes the text into
 // the app in front (see internal/paste), and leaves the caret at
 // {cursor}. The snippets are files, one per snippet, in
-// ~/.config/swoop/snippets/, so any editor is the editor and git is the
+// ~/.config/<name>/snippets/, so any editor is the editor and git is the
 // sync. See store.go for the file and fill.go for the placeholders.
 //
 //	swoop-snippets list                  the root rows, one per snippet

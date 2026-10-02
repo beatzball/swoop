@@ -107,7 +107,7 @@ func Keys(exts []Extension) []string {
 
 // KeyReport says who has which key, one line per key, and what is wrong
 // with the claims that lost: a key two extensions claim, a key nobody may
-// claim. It is what `swoop status` prints, so a key that does not do what
+// claim. It is what `<name> status` prints, so a key that does not do what
 // its extension says has a reason on the screen.
 func KeyReport(exts []Extension) []string {
 	var lines []string

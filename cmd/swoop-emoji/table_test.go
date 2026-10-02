@@ -9,6 +9,7 @@ import (
 	"github.com/beatzball/swoop/internal/match"
 	"time"
 
+	"github.com/beatzball/swoop/internal/tool"
 	"github.com/beatzball/swoop/internal/usage"
 )
 
@@ -197,10 +198,10 @@ func TestDefaultToneFromSettings(t *testing.T) {
 	if defaultTone() != 0 {
 		t.Fatal("unset is no tone")
 	}
-	if err := os.MkdirAll(filepath.Join(dir, "swoop"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, tool.Name()), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "swoop", "config"), []byte("skin = 4\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, tool.Name(), "config"), []byte("skin = 4\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if defaultTone() != 4 {

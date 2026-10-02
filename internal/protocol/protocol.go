@@ -1,4 +1,4 @@
-// Package protocol defines the one contract every swoop tool shares: the
+// Package protocol defines the one contract every swoopkit program shares: the
 // result line. A source prints lines, fzf shows them, and the picked line's
 // id goes back to swoop-run and swoop-preview. The reasoning and the open
 // questions live in the "Spec: the line protocol" issue; this file is the

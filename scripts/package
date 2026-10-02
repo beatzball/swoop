@@ -5,11 +5,15 @@
 #
 #   scripts/package OS ARCH [OUTDIR]     e.g. scripts/package darwin arm64
 #
-# It prints the tarball's path, OUTDIR/swoop-X.Y.Z-OS-ARCH.tar.gz (OUTDIR
-# defaults to dist/). Inside, under one swoop-X.Y.Z-OS-ARCH/ directory:
+# It prints the tarball's path, OUTDIR/<name>-X.Y.Z-OS-ARCH.tar.gz (OUTDIR
+# defaults to dist/), <name> being the tool's, from the file `tool`. Inside,
+# under one <name>-X.Y.Z-OS-ARCH/ directory:
 #
-#   bin/          the Go tools and the swoop script; on darwin, the frame too
+#   bin/          the Go tools and the launcher script; on darwin, the
+#                 frame too
 #   extensions/   the bundled extensions
+#   tool          the file that names the tool, beside extensions/, where
+#                 the launcher and every program look for it
 #   scripts/      launchd.sh and uninstall, so an install from a release can
 #                 write and remove the launchd agents with no checkout
 #   VERSION  LICENSE
@@ -24,7 +28,7 @@ os="$1"; arch="$2"
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 out="${3:-$root/dist}"
 v="$("$root/scripts/release-gate" version "$root")"
-name="swoop-$v-$os-$arch"
+name="$("$root/bin/swoop" tool name)-$v-$os-$arch"
 
 # The darwin tools use cgo for the clipboard and the dictionary, and the frame
 # is Swift: both need Apple's toolchain, so darwin is built on a Mac. Every
@@ -48,7 +52,7 @@ mkdir -p "$dir/bin" "$dir/scripts" "$out"
 cp "$root/bin/swoop" "$dir/bin/"
 cp -R "$root/extensions" "$dir/extensions"
 cp "$root/scripts/launchd.sh" "$root/scripts/uninstall" "$dir/scripts/"
-cp "$root/VERSION" "$root/LICENSE" "$dir/"
+cp "$root/VERSION" "$root/LICENSE" "$root/tool" "$dir/"
 
 if [ "$os" = darwin ]; then
   case "$arch" in

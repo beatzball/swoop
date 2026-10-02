@@ -11,6 +11,7 @@ import (
 	"github.com/beatzball/swoop/internal/ext"
 	"github.com/beatzball/swoop/internal/nav"
 	"github.com/beatzball/swoop/internal/protocol"
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 func TestMatchingNeedsEveryWord(t *testing.T) {
@@ -85,10 +86,10 @@ func TestRootRowsListsOnceAndKeeps(t *testing.T) {
 	fakeExt(t, dir, "live", `printf 'c\tthing\t\tLive %s\t\n' "${2:-none}"`, nil)
 	off := func(names string) {
 		t.Helper()
-		if err := os.MkdirAll(filepath.Join(cfg, "swoop"), 0o700); err != nil {
+		if err := os.MkdirAll(filepath.Join(cfg, tool.Name()), 0o700); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(cfg, "swoop", "config"), []byte("off = "+names+"\n"), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(cfg, tool.Name(), "config"), []byte("off = "+names+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}

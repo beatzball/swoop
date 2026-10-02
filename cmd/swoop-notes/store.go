@@ -1,5 +1,5 @@
 // The notes folder and what a note is. One markdown file per note in
-// ~/.local/share/swoop/notes/ (XDG_DATA_HOME when set): the first line
+// ~/.local/share/<name>/notes/ (XDG_DATA_HOME when set): the first line
 // is the title, a leading "# " allowed, so a note starts with a heading
 // and reads as markdown anywhere. Files are the format, so any editor is
 // the editor and any sync is the sync. A deleted note moves to deleted/
@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/beatzball/swoop/internal/match"
+	"github.com/beatzball/swoop/internal/tool"
 	"io"
 	"os"
 	"path/filepath"
@@ -54,7 +55,7 @@ func dir() string {
 		}
 		base = filepath.Join(home, ".local", "share")
 	}
-	return filepath.Join(base, "swoop", "notes")
+	return filepath.Join(base, tool.Name(), "notes")
 }
 
 func isNote(name string) bool {

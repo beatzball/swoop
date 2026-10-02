@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
-# get: install swoop from a GitHub release. No Go, no Xcode tools, no fzf,
-# no checkout needed; curl and tar are enough.
+# get: install the tool this repository releases, from a GitHub release.
+# No Go, no Xcode tools, no fzf, no checkout needed; curl and tar are
+# enough. What the tool is called comes out of the release itself: its
+# file `tool`, which the launcher in the tarball reads. Only the
+# repository's address is spelled here.
 #
 #   curl -fsSL https://raw.githubusercontent.com/beatzball/swoop/main/scripts/get | bash
 #   curl -fsSL ... | bash -s -- --version 0.4.0
@@ -11,12 +14,12 @@
 #                     with scripts/package, then scripts/get --from it.
 #                     SWOOP_GET_TARBALL=FILE does the same
 #   --no-agents       on macOS, install the files but do not write or start
-#                     the launchd agents; run swoop in a terminal instead
+#                     the launchd agents; run it in a terminal instead
 #
-# It lands in ~/.local/share/swoop/X.Y.Z, and ~/.local/share/swoop/current
+# It lands in ~/.local/share/<name>/X.Y.Z, and ~/.local/share/<name>/current
 # links to it, so an upgrade is a new directory and a swapped link, and a
 # rollback is the link swapped back. Nothing else is written, except fzf into
-# that directory when fzf is not on PATH, ~/.local/bin/swoop (a link) when
+# that directory when fzf is not on PATH, ~/.local/bin/<name> (a link) when
 # ~/.local/bin exists, and on macOS the two launchd agents, through the same
 # scripts/launchd.sh that `make install` uses.
 #
@@ -24,11 +27,14 @@
 set -euo pipefail
 
 repo="beatzball/swoop"
-# The fzf release fetched when fzf is not on PATH. Pinned, because swoop
+# A release's tarballs are named after the tool, and this repository's
+# tool has the repository's name. It is all that can be known before the
+# tarball is here; after that the tool file says the rest.
+pkg="${repo##*/}"
+# The fzf release fetched when fzf is not on PATH. Pinned, because the kit
 # leans on recent fzf actions (transform, become), and a known one is what
 # was tested. Bump it by hand.
 fzf_version="0.74.4"
-share="$HOME/.local/share/swoop"
 
 die() { echo "get: $*" >&2; exit 1; }
 
@@ -90,9 +96,9 @@ else
       *) die "$repo has no release yet" ;;
     esac
   fi
-  name="swoop-$version-$os-$arch.tar.gz"
+  name="$pkg-$version-$os-$arch.tar.gz"
   base="https://github.com/$repo/releases/download/v$version"
-  echo "downloading swoop $version for $os-$arch"
+  echo "downloading $pkg $version for $os-$arch"
   curl -fsSL -o "$tmp/$name" "$base/$name" || die "no $name in release v$version"
   # The release lists a checksum for every tarball. A download that does
   # not match is truncated or not ours; either way, stop.
@@ -109,16 +115,29 @@ tar -xzf "$tarball" -C "$tmp/x"
 # is being installed, so --from works on a renamed file too.
 src="$(find "$tmp/x" -mindepth 1 -maxdepth 1 -type d | head -n 1)"
 if [ -z "$src" ] || [ ! -f "$src/VERSION" ] || [ ! -x "$src/bin/swoop" ]; then
-  die "$tarball is not a swoop release"
+  die "$tarball is not a release of $repo"
 fi
 version="$(tr -d '[:space:]' < "$src/VERSION")"
+# What was just unpacked says what it is: the name is the folder it lands
+# in and the command it is run by, the title is the word in the messages.
+if [ -f "$src/tool" ]; then
+  tool="$("$src/bin/swoop" tool name)" || die "$tarball does not say what tool it is"
+  title="$("$src/bin/swoop" tool title)"
+  hotkey="$("$src/bin/swoop" tool hotkey)"
+else
+  # A release from before the file. Its launcher does not know the verb
+  # and would open instead of answering, so it is not asked: such a
+  # release has the repository's name.
+  tool="$pkg"; title="$pkg"; hotkey="its hotkey"
+fi
+share="$HOME/.local/share/$tool"
 
 # Replace a same-version install whole, so a reinstall never mixes files.
 dest="$share/$version"
 mkdir -p "$share"
 rm -rf "$dest"
 mv "$src" "$dest"
-echo "installed swoop $version in $dest"
+echo "installed $title $version in $dest"
 
 if ! command -v fzf >/dev/null; then
   echo "fzf is not on PATH; fetching fzf $fzf_version"
@@ -136,11 +155,11 @@ fi
 # ln -n replaces the old link itself, rather than following it into the old
 # version's directory and making a link in there.
 ln -sfn "$version" "$share/current"
-# Git Bash copies where it cannot link, and a copied swoop script would look
+# Git Bash copies where it cannot link, and a copied launcher would look
 # for its tools beside the copy. So Windows gets no ~/.local/bin entry.
 linked=0
 if [ "$os" != windows ] && [ -d "$HOME/.local/bin" ]; then
-  ln -sfn "$share/current/bin/swoop" "$HOME/.local/bin/swoop"
+  ln -sfn "$share/current/bin/swoop" "$HOME/.local/bin/$tool"
   linked=1
 fi
 
@@ -152,18 +171,18 @@ if [ "$os" = darwin ] && [ "$agents" = 1 ]; then
   swoop_launchd "$share/current" "$share/current/bin/swoop-shell-mac"
   cat <<MSG
 
-swoop is installed. Press ${SWOOP_HOTKEY:-alt+shift+space}.
-It starts again at login. Logs: $HOME/Library/Logs/swoop.
+$title is installed. Press ${SWOOP_HOTKEY:-$hotkey}.
+It starts again at login. Logs: $HOME/Library/Logs/$tool.
 Remove it with: $share/current/scripts/uninstall
 then: rm -rf $share/current $share/[0-9]*
 MSG
   exit 0
 fi
 
-if [ "$linked" = 1 ]; then run=swoop; else run="$share/current/bin/swoop"; fi
+if [ "$linked" = 1 ]; then run="$tool"; else run="$share/current/bin/swoop"; fi
 cat <<MSG
 
-swoop is installed. Run it in any terminal:
+$title is installed. Run it in any terminal:
 
   $run
 

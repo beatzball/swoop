@@ -6,15 +6,20 @@
 # the two stray-watcher bugs taught: both services unloaded before any
 # process is killed, every process gone before any service is started.
 #
-# The second half drives `swoop start|stop|restart|status` in bin/swoop
+# The second half drives `<name> start|stop|restart|status` in bin/swoop
 # against the same fakes, plus a fake brew, ps and uname: which install it
 # recognises, and which commands it runs for each.
+#
+# The install under test is a tool of its own, with a `tool` file that
+# names it mytool: every label, folder and message below must come from
+# that file. Nothing here or in the scripts under test spells a tool.
 #
 # It runs everywhere, in seconds, as part of `make test`.
 set -euo pipefail
 # A hotkey from the caller's environment would land in the plist and in
-# `swoop status`; the checks below expect the config file's.
-unset SWOOP_HOTKEY XDG_CONFIG_HOME
+# `<name> status`; the checks below expect the config file's. A tool file
+# from the caller's environment would name another tool than the test's.
+unset SWOOP_HOTKEY XDG_CONFIG_HOME SWOOP_TOOL
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/swoop-launchd-test.XXXXXX")"
@@ -47,8 +52,8 @@ case "$1" in
     label="$(basename "$3" .plist)"
     echo "$label running" >> "$SWOOP_TEST_STATE"
     case "$label" in
-      dev.swoop.shell) echo swoop-shell-mac >> "$SWOOP_TEST_PROCS" ;;
-      dev.swoop.clipd) rm -f "$SWOOP_TEST_PROCS.status" ;;
+      *.shell) echo swoop-shell-mac >> "$SWOOP_TEST_PROCS" ;;
+      *.clipd) rm -f "$SWOOP_TEST_PROCS.status" ;;
     esac ;;
   kickstart)
     label="${3##*/}"
@@ -80,13 +85,13 @@ case "$(sed -n "${pid}p" "$SWOOP_TEST_PROCS")" in
   *) exit 1 ;;
 esac
 EOF
-# brew services list names swoop only when SWOOP_TEST_BREW_LISTS is set.
+# brew services list names the tool only when SWOOP_TEST_BREW_LISTS is set.
 cat > "$tmp/bin/brew" <<'EOF'
 #!/usr/bin/env bash
 echo "brew $*" >> "$SWOOP_TEST_LOG"
 if [ "$*" = "services list" ]; then
   echo "Name   Status  User  File"
-  [ -z "${SWOOP_TEST_BREW_LISTS:-}" ] || echo "swoop  none"
+  [ -z "${SWOOP_TEST_BREW_LISTS:-}" ] || echo "mytool  none"
 fi
 EOF
 cat > "$tmp/bin/uname" <<'EOF'
@@ -113,7 +118,7 @@ echo "swoop-clipd $*" >> "$SWOOP_TEST_LOG"
 [ "$1" = status ] || exit 0
 n=0; [ -f "$SWOOP_TEST_PROCS.status" ] && n="$(cat "$SWOOP_TEST_PROCS.status")"
 n=$((n + 1)); echo "$n" > "$SWOOP_TEST_PROCS.status"
-if [ "$n" -ge 3 ] && grep -q '^dev.swoop.clipd ' "$SWOOP_TEST_STATE"; then
+if [ "$n" -ge 3 ] && grep -q '\.clipd ' "$SWOOP_TEST_STATE"; then
   grep -q 'swoop-clipd run' "$SWOOP_TEST_PROCS" || echo "swoop-clipd run" >> "$SWOOP_TEST_PROCS"
   echo running; exit 0
 fi
@@ -123,11 +128,17 @@ chmod +x "$tmp/bin/"* "$tmp/dir/bin/swoop-clipd"
 # sleep is real but the loops end at once when the fakes say "gone".
 export PATH="$tmp/bin:$PATH"
 
+# The tool: the kit's launcher, as a release ships it, beside a tool file
+# with a name, a title and an id of its own.
+id=com.example.mytool
+printf 'name mytool\ntitle My Tool\nid %s\nhotkey ctrl+alt+m\n' "$id" > "$tmp/dir/tool"
+cp "$root/bin/swoop" "$tmp/dir/bin/swoop"
+
 # The starting state: both services loaded and running from a previous
 # install, plus a watcher started by hand, the case that used to win.
-printf 'dev.swoop.shell running\ndev.swoop.clipd running\n' > "$state"
+printf '%s.shell running\n%s.clipd running\n' "$id" "$id" > "$state"
 printf 'swoop-shell-mac\nswoop-clipd run\nswoop-clipd run\n' > "$procs"
-touch "$tmp/dir/bin/fzf" "$tmp/dir/bin/swoop" "$tmp/frame"
+touch "$tmp/dir/bin/fzf" "$tmp/frame"
 chmod +x "$tmp/dir/bin/"* "$tmp/frame"
 
 fail() { echo "launchd-test: $*" >&2; echo "--- log:" >&2; cat "$log" >&2; exit 1; }
@@ -147,14 +158,14 @@ if [ -z "$last_bootout" ] || [ -z "$first_pkill" ] || [ -z "$first_bootstrap" ];
 fi
 [ "$last_bootout" -lt "$first_pkill" ] || fail "a process was killed before both services were unloaded"
 [ "$last_pkill" -lt "$first_bootstrap" ] || fail "a service was started before every process was killed"
-frame_bootstrap="$(grep -n '^launchctl bootstrap .*dev.swoop.shell' "$log" | head -1 | cut -d: -f1)"
+frame_bootstrap="$(grep -n "^launchctl bootstrap .*$id.shell" "$log" | head -1 | cut -d: -f1)"
 lock_held="$(grep -n '^swoop-clipd status' "$log" | sed -n 3p | cut -d: -f1)"
 if [ -z "$frame_bootstrap" ] || [ -z "$lock_held" ]; then
   fail "the frame was not started, or the watcher's lock never checked"
 fi
 [ "$lock_held" -lt "$frame_bootstrap" ] || fail "the frame was started before launchd's watcher held the lock"
-grep -q '^launchctl bootout gui/501/dev.swoop.shell' "$log" || fail "the frame's service was not unloaded"
-grep -q '^launchctl bootout gui/501/dev.swoop.clipd' "$log" || fail "the watcher's service was not unloaded"
+grep -q "^launchctl bootout gui/501/$id.shell" "$log" || fail "the frame's service was not unloaded"
+grep -q "^launchctl bootout gui/501/$id.clipd" "$log" || fail "the watcher's service was not unloaded"
 
 # The end state: both running, exactly one of each process, no stray.
 [ "$(grep -c running "$state")" = 2 ] || fail "not both services running: $(cat "$state")"
@@ -162,12 +173,16 @@ grep -q '^launchctl bootout gui/501/dev.swoop.clipd' "$log" || fail "the watcher
 [ "$(grep -c 'swoop-shell-mac' "$procs")" = 1 ] || fail "frames: $(grep -c swoop-shell-mac "$procs")"
 
 # The plists: the program, the PATH with the install's bin first, the launcher.
-plist="$HOME/Library/LaunchAgents/dev.swoop.shell.plist"
-[ -f "$plist" ] || fail "no frame plist"
+plist="$HOME/Library/LaunchAgents/$id.shell.plist"
+[ -f "$plist" ] || fail "no frame plist under the tool's own id"
+[ "$(find "$HOME/Library/LaunchAgents" -name '*.plist' | wc -l | tr -d ' ')" = 2 ] || fail "agents other than the tool's two: $(ls "$HOME/Library/LaunchAgents")"
+grep -q "<key>Label</key><string>$id.shell</string>" "$plist" || fail "the frame's label is not the tool's id"
+grep -q "<string>$HOME/Library/Logs/mytool/shell.log</string>" "$plist" || fail "the frame's log is not in the tool's own folder"
+[ -d "$HOME/Library/Logs/mytool" ] || fail "no log folder of the tool's own"
 grep -q "<string>$tmp/frame</string>" "$plist" || fail "frame plist does not run the frame"
 grep -q "<key>PATH</key><string>$tmp/dir/bin:" "$plist" || fail "PATH does not start with the install's bin"
 grep -q "<key>SWOOP_LAUNCHER</key><string>$tmp/dir/bin/swoop</string>" "$plist" || fail "no SWOOP_LAUNCHER"
-grep -q "<string>$tmp/dir/bin/swoop-clipd</string>" "$HOME/Library/LaunchAgents/dev.swoop.clipd.plist" || fail "watcher plist does not run the watcher"
+grep -q "<string>$tmp/dir/bin/swoop-clipd</string>" "$HOME/Library/LaunchAgents/$id.clipd.plist" || fail "watcher plist does not run the watcher"
 
 # The second run, the "make install again" case: same result.
 : > "$log"
@@ -176,32 +191,53 @@ out="$(swoop_launchd "$tmp/dir" "$tmp/frame" 2>&1)" || fail "second swoop_launch
 [ "$(grep -c running "$state")" = 2 ] || fail "second run: services $(cat "$state")"
 
 # The verbs. bin/swoop finds the fakes first: it puts only its own bin/
-# ahead of PATH, and none of these live there.
+# ahead of PATH, and none of these live there. It is the checkout's
+# launcher, told which tool it is the way a tool's own shim tells it:
+# SWOOP_TOOL names the file.
 export SWOOP_TEST_FRAME="$tmp/frame" SWOOP_TEST_DIR="$tmp/dir" SWOOP_NO_CLIPD=1
-swoop="$root/bin/swoop"
-mkdir -p "$HOME/.config/swoop"
-echo "hotkey = ctrl+space" > "$HOME/.config/swoop/config"
+export SWOOP_TOOL="$tmp/dir/tool"
+launcher="$root/bin/swoop"
 verb() { # expected-exit args...
   local want="$1" got=0; shift
   : > "$log"
-  out="$("$swoop" "$@" 2>&1)" || got=$?
-  [ "$got" = "$want" ] || fail "swoop $*: exit $got, want $want: $out"
-  if grep -q '^fzf' "$log"; then fail "swoop $* opened the launcher"; fi
+  out="$("$launcher" "$@" 2>&1)" || got=$?
+  [ "$got" = "$want" ] || fail "mytool $*: exit $got, want $want: $out"
+  if grep -q '^fzf' "$log"; then fail "mytool $* opened the launcher"; fi
 }
+
+# What the file says, and what it leaves for the launcher to fill in.
+verb 0 tool
+[ "$out" = "name mytool
+title My Tool
+id $id
+hotkey ctrl+alt+m" ] || fail "tool: $out"
+verb 0 tool title
+[ "$out" = "My Tool" ] || fail "tool title: $out"
+verb 2 tool colour
+printf 'name mytool\n' > "$tmp/name-only"
+out="$(SWOOP_TOOL="$tmp/name-only" "$launcher" tool id)"
+[ "$out" = dev.mytool ] || fail "a file with a name alone: the id is $out, want dev.mytool"
+
+# The hotkey in status: the tool's own until the settings file names one,
+# and the settings file is in the tool's own folder.
+verb 0 status
+case "$out" in *"hotkey ctrl+alt+m"*) ;; *) fail "status does not show the tool's own hotkey: $out" ;; esac
+mkdir -p "$HOME/.config/mytool"
+echo "hotkey = ctrl+space" > "$HOME/.config/mytool/config"
 line() { grep -n "^$1" "$log" | head -1 | cut -d: -f1; }
 
 # launchd, both running: restart kicks the watcher, then the frame.
 verb 0 restart
-k_clipd="$(line 'launchctl kickstart -k gui/501/dev.swoop.clipd')"
-k_shell="$(line 'launchctl kickstart -k gui/501/dev.swoop.shell')"
+k_clipd="$(line "launchctl kickstart -k gui/501/$id.clipd")"
+k_shell="$(line "launchctl kickstart -k gui/501/$id.shell")"
 if [ -z "$k_clipd" ] || [ -z "$k_shell" ]; then fail "restart did not kickstart both"; fi
 [ "$k_clipd" -lt "$k_shell" ] || fail "restart kicked the frame before the watcher"
 if grep -q '^brew services restart' "$log"; then fail "a launchd install was restarted with brew"; fi
 
 # stop: the frame, then the watcher, and nothing left loaded.
 verb 0 stop
-b_shell="$(line 'launchctl bootout gui/501/dev.swoop.shell')"
-b_clipd="$(line 'launchctl bootout gui/501/dev.swoop.clipd')"
+b_shell="$(line "launchctl bootout gui/501/$id.shell")"
+b_clipd="$(line "launchctl bootout gui/501/$id.clipd")"
 if [ -z "$b_shell" ] || [ -z "$b_clipd" ]; then fail "stop did not boot out both"; fi
 [ "$b_shell" -lt "$b_clipd" ] || fail "stop took the watcher down before the frame"
 [ ! -s "$state" ] || fail "stop left services loaded: $(cat "$state")"
@@ -213,8 +249,8 @@ case "$out" in *"$tmp/frame"*) ;; *) fail "status does not say where the frame i
 
 # start: the watcher's agent, then the frame's.
 verb 0 start
-s_clipd="$(line 'launchctl bootstrap gui/501 .*dev.swoop.clipd.plist')"
-s_shell="$(line 'launchctl bootstrap gui/501 .*dev.swoop.shell.plist')"
+s_clipd="$(line "launchctl bootstrap gui/501 .*$id.clipd.plist")"
+s_shell="$(line "launchctl bootstrap gui/501 .*$id.shell.plist")"
 if [ -z "$s_clipd" ] || [ -z "$s_shell" ]; then fail "start did not bootstrap both"; fi
 [ "$s_clipd" -lt "$s_shell" ] || fail "start started the frame before the watcher"
 [ "$(grep -c running "$state")" = 2 ] || fail "start: services $(cat "$state")"
@@ -226,25 +262,31 @@ case "$out" in *"frame:   running, pid "*"hotkey ctrl+space"*"$tmp/frame, instal
 case "$out" in *"watcher: running, pid "*) ;; *) fail "status, watcher: $out" ;; esac
 
 # Homebrew, told by the running frame's path: brew services, no launchctl.
-SWOOP_TEST_FRAME=/opt/homebrew/Cellar/swoop/1.0.0/libexec/bin/swoop-shell-mac verb 0 restart
-grep -q '^brew services restart swoop$' "$log" || fail "a Homebrew frame was not restarted with brew services"
+SWOOP_TEST_FRAME=/opt/homebrew/Cellar/mytool/1.0.0/libexec/bin/swoop-shell-mac verb 0 restart
+grep -q '^brew services restart mytool$' "$log" || fail "a Homebrew frame was not restarted with brew services"
 if grep -q '^launchctl' "$log"; then fail "a Homebrew frame was restarted with launchctl"; fi
 
 # Homebrew, told by brew's list: no frame running and no plist of ours.
-rm -f "$HOME/Library/LaunchAgents/"dev.swoop.*.plist
+rm -f "$HOME/Library/LaunchAgents/$id".*.plist
 grep -v swoop-shell-mac "$procs" > "$procs.new" || true; mv "$procs.new" "$procs"
 SWOOP_TEST_BREW_LISTS=1 verb 0 stop
-grep -q '^brew services stop swoop$' "$log" || fail "brew's list did not make stop a brew services stop"
+grep -q '^brew services stop mytool$' "$log" || fail "brew's list did not make stop a brew services stop"
 SWOOP_TEST_BREW_LISTS=1 verb 0 status
 case "$out" in *"installed by homebrew"*) ;; *) fail "status, Homebrew: $out" ;; esac
 
 # Neither: say how to install it, and exit 1.
 verb 1 restart
-case "$out" in *"not installed"*) ;; *) fail "no install, restart said: $out" ;; esac
+case "$out" in "mytool: the frame is not installed"*) ;; *) fail "no install, restart said: $out" ;; esac
 verb 1 status
 
 # Linux and Windows: no frame yet.
 SWOOP_TEST_UNAME=Linux verb 1 restart
-case "$out" in *"no frame on this OS yet"*) ;; *) fail "Linux restart said: $out" ;; esac
+case "$out" in "mytool restart: there is no frame on this OS yet"*) ;; *) fail "Linux restart said: $out" ;; esac
+
+# The checkout's own tool file: what the launcher says with no SWOOP_TOOL is
+# what the file at the root says, line for line.
+unset SWOOP_TOOL
+out="$("$launcher" tool)"
+[ "$out" = "$(grep -v '^#' "$root/tool" | grep .)" ] || fail "the checkout's tool file and \`tool\` disagree: $out"
 
 echo "launchd-test: ok"

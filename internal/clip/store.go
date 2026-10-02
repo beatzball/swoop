@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/beatzball/swoop/internal/match"
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // Entry is one thing that was copied.
@@ -48,7 +49,7 @@ func Default() Store {
 		home, _ := os.UserHomeDir()
 		base = filepath.Join(home, ".local", "share")
 	}
-	return Store{Path: filepath.Join(base, "swoop", "clipboard", "history.jsonl")}
+	return Store{Path: filepath.Join(base, tool.Name(), "clipboard", "history.jsonl")}
 }
 
 // Append records text, unless it is empty or the same as the newest entry:

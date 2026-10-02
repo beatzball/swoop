@@ -11,7 +11,7 @@
 //	swoop-usage run <id> [action]             open it again; clear
 //	swoop-usage actions <id>                  Clear the log
 //
-// The log is ~/.local/state/swoop/usage.jsonl. See internal/usage.
+// The log is ~/.local/state/<name>/usage.jsonl. See internal/usage.
 package main
 
 import (
