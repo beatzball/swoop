@@ -83,8 +83,14 @@ swoop_launchd() {
   done
   _swoop_agent "$id.shell" "$frame"
 
-  sleep 1
+  # launchd spawns each agent in its own time, and the frame asks the
+  # launcher for its name before it is up: wait on the state, up to ten
+  # seconds each, never on a fixed pause.
   for label in "$id.clipd" "$id.shell"; do
+    for _ in $(seq 1 50); do
+      launchctl print "$domain/$label" 2>/dev/null | grep -q "state = running" && break
+      sleep 0.2
+    done
     if launchctl print "$domain/$label" 2>/dev/null | grep -q "state = running"; then
       echo "running $label"
     else
