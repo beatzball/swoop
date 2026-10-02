@@ -14,4 +14,8 @@ func lock(clip.Store) (func(), error) {
 
 func running(clip.Store) bool { return false }
 
+func sign(clip.Store) error { return nil }
+
+func holder(clip.Store) (int, bool) { return 0, false }
+
 func start(clip.Store) error { return nil }

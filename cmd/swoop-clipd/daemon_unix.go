@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 
 	"github.com/beatzball/swoop/internal/clip"
@@ -44,6 +46,34 @@ func running(store clip.Store) bool {
 	}
 	unlock()
 	return false
+}
+
+// sign writes this process's id into the lock file. Only the watcher
+// does, right after it takes the lock, so the file names the one process
+// that holds it. That is how one tool's watcher is told from another's:
+// every tool's watcher is the same program, and each holds the lock in
+// its own tool's folder. A check that only tries the lock writes nothing.
+func sign(store clip.Store) error {
+	return os.WriteFile(lockPath(store), []byte(strconv.Itoa(os.Getpid())+"\n"), 0o600)
+}
+
+// holder is the process id of the watcher that holds the lock. It is not
+// known when no watcher runs, and when the one that runs is from before
+// the file held an id: what the file says then is nobody, or a watcher
+// long gone, so it counts only while the lock is held.
+func holder(store clip.Store) (int, bool) {
+	if !running(store) {
+		return 0, false
+	}
+	data, err := os.ReadFile(lockPath(store))
+	if err != nil {
+		return 0, false
+	}
+	pid, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || pid <= 0 {
+		return 0, false
+	}
+	return pid, true
 }
 
 // start launches `swoop-clipd run` in its own session with no terminal, so

@@ -128,15 +128,16 @@ a floating panel with swoop in it, drawn by libghostty, on a global hotkey.
 
 ```sh
 make build shell-mac
-PATH="$PWD/bin:$PATH" shell/mac/.build/release/swoop-shell-mac
+SWOOP_LAUNCHER="$PWD/bin/swoop" shell/mac/.build/release/swoop-shell-mac
 ```
 
 Then press alt+shift+space. Esc closes it, Enter opens what you picked, a
 click elsewhere hides it, and the next press is a fresh launcher with an
-empty bar. `SWOOP_HOTKEY=alt+space` picks another key; `SWOOP_LAUNCHER`
-points at a different `swoop`. It needs no Ghostty.app. One permission,
-Accessibility, and only to paste emoji and snippets for you: macOS asks the
-first time.
+empty bar. `SWOOP_HOTKEY=alt+space` picks another key. `SWOOP_LAUNCHER`
+names the launcher the frame runs, and it is how `swoop status` and a
+later `make install` know a frame started by hand as swoop's. It needs no
+Ghostty.app. One permission, Accessibility, and only to paste emoji and
+snippets for you: macOS asks the first time.
 
 | key | what it does |
 |---|---|

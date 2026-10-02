@@ -27,6 +27,35 @@ so here.
   `bench-history`, and `scripts/bench graph` draws them. The frame logs
   how long a show and a hide took, under `SWOOP_SHELL_DEBUG`. Nothing in
   the launcher changed.
+- **A tool made by `swoop new` gets a frame of its own on a Mac.**
+  `mytool/bin/mytool start` installs it beside swoop's: a copy of the
+  kit's frame in `~/.local/share/mytool/frame`, signed under the tool's
+  `id`, and two launchd agents, `<id>.shell` and `<id>.clipd`, with their
+  logs in `~/Library/Logs/mytool`. Each tool has its own frame process,
+  its own key, its own folders and its own entry under Accessibility.
+  `mytool start`, `stop`, `restart` and `status` look after it; `restart`
+  installs again, which is how the tool takes a newer frame after the kit
+  is updated. Before, `start` printed swoop's install lines. `new` prints
+  the start line, and writes `ctrl+alt+space` as the new tool's hotkey,
+  so its frame and swoop's do not want the same key.
+- **`swoop-clipd pid`** prints the process id of the watcher of the tool
+  it runs as, and nothing when none runs. The watcher now writes its id
+  into the lock file it holds, in the tool's own folder.
+
+### Changed
+
+- **Stopping one tool's frame never stops another's.** Every tool's
+  frame is the same program, and so is every watcher. The installer and
+  `<name> start|stop|restart|status` selected by the program's name, so
+  with two tools on one Mac an install of one stopped the frame and the
+  watcher of the other, and `status` could show the other tool's frame
+  as its own. They now select by the tool: a service by its label,
+  `<id>.shell`; a frame started by hand by the launcher it runs,
+  `SWOOP_LAUNCHER`; a watcher by the lock it holds. A frame started by
+  hand with no `SWOOP_LAUNCHER`, with `swoop` found on `PATH`, is no
+  longer found: start it with the variable set, as the README now shows.
+  A watcher from an older version cannot say which process it is; over
+  one of those, an install stops every watcher once, as before.
 
 ## [0.13.0] - 2026-10-02
 

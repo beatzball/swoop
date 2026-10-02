@@ -97,6 +97,14 @@ export SWOOP_TOOL_NAME="$tool_name"
 #              <id>.shell.plist exists: launchctl on <id>.shell and
 #              <id>.clipd
 #
+# A tool made by `<name> new` has no installer: its folder holds a tool
+# file and a command, and the programs are the kit's, somewhere else. For
+# that tool `start` is the installer. It gives the tool a frame of its own
+# and writes its two agents, through the kit's scripts/launchd.sh, and
+# `restart` does it again, so the frame is the kit's newest. Its frame
+# runs beside the frame of any other tool: each has its own process, its
+# own key, its own folders and its own Accessibility entry.
+#
 # <name> tool [key] prints what the file says, filled in: every line, or
 # the one value. It is how the frame and the scripts learn the tool's
 # name without a parser of their own.
@@ -107,14 +115,44 @@ export SWOOP_TOOL_NAME="$tool_name"
 # Written for the bash macOS ships, 3.2: no arrays under set -u, no
 # readlink -f.
 swoop_service() {
-  local verb="$1" domain agents pid path how label plist
+  local verb="$1" domain agents kit own launcher toolfile pid path how label plist
   case "$(uname -s)" in
     Darwin) ;;
     *) echo "$tool_name $verb: there is no frame on this OS yet; run $tool_name in a terminal" >&2; return 1 ;;
   esac
   domain="gui/$(id -u)"
   agents="$HOME/Library/LaunchAgents"
-  pid="$(pgrep -x swoop-shell-mac 2>/dev/null | head -1)"
+  kit="${here%/*}"
+  # Which processes are a tool's, and how its agents are written, is the
+  # kit's scripts/launchd.sh. A kit copied without it still stops and
+  # starts a service; it cannot find a frame started by hand, or install.
+  # shellcheck source=scripts/launchd.sh
+  [ ! -f "$kit/scripts/launchd.sh" ] || . "$kit/scripts/launchd.sh"
+
+  # The command this tool is run by, which is what its frame runs. The
+  # kit's own tool, the one whose file is beside this bin/, is run by
+  # this script. A tool with its folder elsewhere is run by its own
+  # command, bin/<name> beside its tool file, as `new` makes it.
+  own=""
+  if [ "$SWOOP_TOOL" = "$here/../tool" ] || [ "$SWOOP_TOOL" -ef "$here/../tool" ]; then
+    own=1
+    launcher="$here/swoop"
+    toolfile=""
+  else
+    toolfile="$(cd -P "$root" 2>/dev/null && pwd)" || toolfile="$root"
+    launcher="$toolfile/bin/$tool_name"
+    toolfile="$toolfile/${SWOOP_TOOL##*[\\/]}"
+  fi
+
+  # This tool's frame, and no other tool's: every tool's frame is the
+  # same program, so its name says nothing. The frame is the one launchd
+  # runs under this tool's label, ours or Homebrew's, or else one started
+  # by hand that runs this tool's launcher.
+  pid="$(_swoop_service_pid "$tool_id.shell")"
+  [ -n "$pid" ] || pid="$(_swoop_service_pid "homebrew.mxcl.$tool_name")"
+  if [ -z "$pid" ] && type swoop_frames >/dev/null 2>&1; then
+    pid="$(swoop_frames "$launcher" swoop-shell-mac | head -1)"
+  fi
   path=""
   [ -z "$pid" ] || path="$(ps -o comm= -p "$pid" 2>/dev/null)"
 
@@ -122,7 +160,10 @@ swoop_service() {
   # plist of ours is firmer evidence than brew's list, which names the tool
   # on any Mac that has the formula, used or not.
   how=""
-  case "$path" in
+  # Only the kit's own tool: a tool with its folder elsewhere may run a
+  # frame by hand from a kit that Homebrew installed, and brew has no
+  # service of that tool's name.
+  [ -z "$own" ] || case "$path" in
     */Cellar/*|/opt/homebrew/*|/home/linuxbrew/*) how=homebrew ;;
   esac
   [ -n "$how" ] || [ ! -f "$agents/$tool_id.shell.plist" ] || how=launchd
@@ -135,6 +176,18 @@ swoop_service() {
     _swoop_status "$how" "$pid" "$path"
     [ -n "$how" ] || { _swoop_not_installed; return 1; }
     return 0
+  fi
+  # A tool with no installer of its own: start installs, when its frame's
+  # service is not loaded, and restart installs again. Stop is the same
+  # for every tool.
+  if [ -z "$own" ] && [ "$how" != homebrew ]; then
+    case "$verb" in
+      restart) _swoop_install; return ;;
+      start)
+        if ! launchctl print "$domain/$tool_id.shell" >/dev/null 2>&1; then
+          _swoop_install; return
+        fi ;;
+    esac
   fi
   case "$how" in
     homebrew)
@@ -171,7 +224,58 @@ swoop_service() {
   esac
 }
 
+# The process launchd runs under a label, or nothing when the label is
+# not loaded or has no process now. Reads domain from the caller.
+_swoop_service_pid() { # label
+  launchctl print "$domain/$1" 2>/dev/null | sed -n 's/^[[:space:]]*pid = \([0-9][0-9]*\)$/\1/p' | head -1
+}
+
+# The frame and the two agents of a tool that runs the kit's programs
+# from a folder of its own. Reads kit, launcher, toolfile and verb from
+# swoop_service, which calls it.
+_swoop_install() {
+  local src frame
+  if [ ! -x "$launcher" ]; then
+    echo "$tool_name $verb: there is no command at $launcher. The frame runs the tool's own command: bin/$tool_name beside its tool file, as \`new\` makes it" >&2
+    return 1
+  fi
+  # The kit's frame: beside this script in a release and under Homebrew,
+  # where swift left it in a checkout.
+  src="$here/swoop-shell-mac"
+  [ -x "$src" ] || src="$kit/shell/mac/.build/release/swoop-shell-mac"
+  if [ ! -x "$src" ]; then
+    echo "$tool_name $verb: the kit in $kit has no frame. A release for the Mac has one; in a checkout, \`make shell-mac\` builds it" >&2
+    return 1
+  fi
+  if [ ! -x "$here/swoop-clipd" ]; then
+    echo "$tool_name $verb: the kit in $kit has no clipboard watcher. In a checkout, \`make build\` builds the kit's programs" >&2
+    return 1
+  fi
+  if ! type swoop_launchd >/dev/null 2>&1; then
+    echo "$tool_name $verb: the kit in $kit has no scripts/launchd.sh, which writes the agents" >&2
+    return 1
+  fi
+  frame="$(swoop_own_frame "$src" "$tool_name" "$tool_id")" || return 1
+  swoop_launchd "$kit" "$frame" "$launcher" "$toolfile" || return 1
+  cat <<MSG
+
+$tool_title is installed. Press $(_swoop_hotkey).
+It starts again at login. Logs: $HOME/Library/Logs/$tool_name.
+$tool_name stop, $tool_name restart and $tool_name status look after it.
+To macOS its frame is a program of its own, $frame:
+a paste asks for Accessibility for that one, once.
+MSG
+}
+
+# Reads own from swoop_service.
 _swoop_not_installed() {
+  if [ -z "$own" ]; then
+    cat >&2 <<MSG
+$tool_name: the frame is not installed. On a Mac, install it with:
+  $tool_name start
+MSG
+    return 0
+  fi
   cat >&2 <<MSG
 $tool_name: the frame is not installed. Install it one of these ways:
   brew install beatzball/tap/$tool_name && brew services start $tool_name
@@ -180,13 +284,11 @@ $tool_name: the frame is not installed. Install it one of these ways:
 MSG
 }
 
-# One line for the frame, one for the watcher. Reads agents and here from
-# the caller.
-_swoop_status() { # how pid path
-  local how="$1" pid="$2" path="$3" hotkey="" version="?" plist wpid wpath
-  plist="$agents/$tool_id.shell.plist"
-  # The frame's own order: SWOOP_HOTKEY in its environment, then the
-  # config file, then the tool's own. See shell/mac Config.hotkey.
+# The key that opens the frame, in the frame's own order: SWOOP_HOTKEY in
+# its environment, which is its plist's, then the config file, then the
+# tool's own. See shell/mac Config.hotkey. Reads agents from the caller.
+_swoop_hotkey() {
+  local hotkey="" plist="$agents/$tool_id.shell.plist"
   [ ! -f "$plist" ] || hotkey="$(sed -n 's:.*<key>SWOOP_HOTKEY</key><string>\(.*\)</string>.*:\1:p' "$plist")"
   [ -n "$hotkey" ] || hotkey="$(awk -F= '
     /^[ \t]*#/ { next }
@@ -194,6 +296,15 @@ _swoop_status() { # how pid path
     k == "hotkey" { v = substr($0, index($0, "=") + 1); gsub(/^[ \t]+|[ \t]+$/, "", v) }
     END { print v }' "${XDG_CONFIG_HOME:-$HOME/.config}/$tool_name/config" 2>/dev/null)"
   [ -n "$hotkey" ] || hotkey="$tool_hotkey"
+  echo "$hotkey"
+}
+
+# One line for the frame, one for the watcher. Reads agents and here from
+# the caller.
+_swoop_status() { # how pid path
+  local how="$1" pid="$2" path="$3" hotkey version="?" plist wpid wpath
+  plist="$agents/$tool_id.shell.plist"
+  hotkey="$(_swoop_hotkey)"
   [ ! -f "$root/VERSION" ] || version="$(tr -d '[:space:]' < "$root/VERSION")"
   # Where the frame is when it is not running: what its plist would run,
   # or the one beside this script, as a release and Homebrew keep it.
@@ -206,10 +317,14 @@ _swoop_status() { # how pid path
   else
     echo "frame:   not running, hotkey $hotkey, version $version, ${path:-?}, installed by ${how:-nothing}"
   fi
-  wpid="$(pgrep -f 'swoop-clipd run' 2>/dev/null | head -1)"
+  # This tool's watcher: the one that holds the lock in the tool's own
+  # folder. A watcher too old to say which process it is still holds it.
+  wpid="$(swoop-clipd pid 2>/dev/null)" || wpid=""
   if [ -n "$wpid" ]; then
     wpath="$(ps -o comm= -p "$wpid" 2>/dev/null)"
     echo "watcher: running, pid $wpid, ${wpath:-?}"
+  elif swoop-clipd status >/dev/null 2>&1; then
+    echo "watcher: running, pid not known: it is from an older version"
   else
     echo "watcher: not running, $here/swoop-clipd"
   fi
@@ -253,6 +368,8 @@ swoop_new() {
 
 Run it in this terminal; Esc quits:
   $name/bin/$name
+On a Mac, give it the frame, a panel on a key of its own:
+  $name/bin/$name start
 MSG
   # The command runs the kit's launcher by name. PATH here starts with
   # this script's own folder, which the person's shell may not have.
@@ -260,13 +377,14 @@ MSG
     cat <<MSG
 It runs swoop, the kit's launcher, which is not on your PATH. Until it is:
   PATH="$here:\$PATH" $name/bin/$name
+  PATH="$here:\$PATH" $name/bin/$name start
 MSG
   fi
   cat <<MSG
 
 Its rows come from $name/extensions; $name/tool has its name, title, id
-and hotkey. $name/README.md says how to change both, and how to give it
-the frame on a Mac.
+and hotkey. $name/README.md says how to change both, and has the rest
+about the frame.
 MSG
 }
 

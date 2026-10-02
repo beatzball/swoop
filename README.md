@@ -129,15 +129,16 @@ a floating panel with swoop in it, drawn by libghostty, on a global hotkey.
 
 ```sh
 make build shell-mac
-PATH="$PWD/bin:$PATH" shell/mac/.build/release/swoop-shell-mac
+SWOOP_LAUNCHER="$PWD/bin/swoop" shell/mac/.build/release/swoop-shell-mac
 ```
 
 Then press alt+shift+space. Esc closes it, Enter opens what you picked, a
 click elsewhere hides it, and the next press is a fresh launcher with an
-empty bar. `SWOOP_HOTKEY=alt+space` picks another key; `SWOOP_LAUNCHER`
-points at a different `swoop`. It needs no Ghostty.app. One permission,
-Accessibility, and only to paste emoji and snippets for you: macOS asks
-the first time.
+empty bar. `SWOOP_HOTKEY=alt+space` picks another key. `SWOOP_LAUNCHER`
+names the launcher the frame runs, and it is how `swoop status` and a
+later `make install` know a frame started by hand as swoop's. It needs no
+Ghostty.app. One permission, Accessibility, and only to paste emoji and
+snippets for you: macOS asks the first time.
 
 cmd+[ and cmd+] move the divider between the list and the preview, 5% a
 step, and the width is remembered in `~/.config/swoop/config` (`preview =
@@ -520,6 +521,7 @@ under `~/.config` and none of swoop's rows:
 ```sh
 swoop new mytool        # bin/swoop new mytool, from a checkout
 mytool/bin/mytool       # three rows; type to filter, Enter runs, Esc quits
+mytool/bin/mytool start # on a Mac: its own frame, beside swoop's
 ```
 
 The folder holds `tool`, the file with its name, title, id and hotkey;
@@ -531,6 +533,12 @@ README. The files come from `templates/tool` in this repository, and
 An extension learns the tool it runs under from `SWOOP_TOOL_NAME`, which
 the launcher sets from the `tool` file, so one that keeps a file of its
 own puts it in that tool's folder and runs unchanged under any tool.
+
+`start` gives the tool a frame of its own on a Mac: a copy of the kit's
+frame signed under the tool's `id`, and two launchd agents under that
+id. It runs beside swoop's, each with its own process, key, folders and
+Accessibility entry; `mytool stop` leaves swoop running, and `swoop
+status` and `mytool status` each show their own.
 
 [Build Your Own Tool](https://swoop.sh/docs/build-your-own) has the rest:
 what each file is for, how to add an extension, how to name the frame,
