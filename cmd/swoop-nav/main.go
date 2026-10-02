@@ -11,6 +11,7 @@
 //	swoop-nav key name                fzf: transform on a key an extension claims
 //	swoop-nav keys [status]           those keys, for bin/swoop to bind; who has which
 //	swoop-nav keys for name           the key that opens extension name's pane
+//	swoop-nav late                    the lists that missed the last slow start, for status
 //	swoop-nav landed [kind]           fzf: transform on result-final, once armed
 //	swoop-nav step up|down [kind [from [turned]]]
 //	                                  fzf: transform after a move of the cursor
@@ -44,7 +45,7 @@ const recentCount = 5
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|click|key|keys|esc|change|landed|step|back|rows|window|divider ...")
+		fmt.Fprintln(os.Stderr, "usage: swoop-nav enter|actions|click|key|keys|late|esc|change|landed|step|back|rows|window|divider ...")
 		os.Exit(2)
 	}
 	nav.PreviewPercent = settings.PreviewPercent()
@@ -63,6 +64,13 @@ func main() {
 			return
 		}
 		keys(len(os.Args) > 2 && os.Args[2] == "status")
+		return
+	}
+	if os.Args[1] == "late" {
+		// For `<name> status`. No line at all when no start was ever slow.
+		for _, line := range lastLate() {
+			fmt.Println(line)
+		}
 		return
 	}
 	path := os.Getenv(envState)

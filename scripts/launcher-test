@@ -571,8 +571,12 @@ esac
         # 1. the root list, and typing filters it
         def root():
             # On a Mac the root list holds every app, sorted by title, so
-            # the fake rows are off screen until typing narrows it.
-            L.wait_state(lambda s: s["totalCount"] > 3, what="the launcher's list")
+            # the fake rows are off screen until typing narrows it. This is
+            # the first run of bin/'s programs when they were just built,
+            # and the system may take seconds to let each one start; the
+            # launcher waits for the list it keeps for the run for up to
+            # ten of them (ext.ListStart), so this wait is longer than that.
+            L.wait_state(lambda s: s["totalCount"] > 3, timeout=30.0, what="the launcher's list")
             L.press("fake", lambda s: s["query"] == "fake" and has(s, "Fake Things") and has(s, "Fake Plain Row"), what="the fake view row and plain row after typing 'fake'")
             L.press(" plain", lambda s: s["query"] == "fake plain" and s["matchCount"] == 1 and "Fake Plain Row" in cur(s), what="one match for 'fake plain', the plain row")
         check("root list and filter", root)
@@ -1344,6 +1348,58 @@ SWOOP_TOOL="$(dirname "$0")/tool" exec swoop "$@"
             finally:
                 t.kill()
         check("a tool of one's own: its name, its rows, its folders", own_tool)
+
+        # 18. a slow start (#222). The first run of a program that is new
+        # on the machine can take seconds, and a list that missed its two
+        # seconds then left the first list without its rows until a key
+        # was pressed. A list kept for the run has the start's limit: one
+        # that takes three seconds is in the list, and was asked once. A
+        # list asked on every keystroke keeps its two seconds: one that
+        # outlasts them at the start is asked again as fzf starts, and its
+        # row comes with no key pressed. The log says which one was late
+        def slow_start():
+            root = os.path.join(tmp, "slowstart")
+            asked = os.path.join(root, "asked")
+            first = os.path.join(root, "first")
+            for name in ("slowkept", "slowlive"):
+                os.makedirs(os.path.join(root, "ext", name))
+            write_exe(os.path.join(root, "ext", "slowkept", "slowkept"), f"""#!/usr/bin/env bash
+[ "$1" = list ] || exit 0
+echo asked >> '{asked}'
+sleep 3
+printf 'a\\tcommand\\t\\tSlow Kept Row\\tkept for the run\\n'
+""")
+            with open(os.path.join(root, "ext", "slowkept", "cache"), "w") as f:
+                f.write("run\n")
+            # Its first list outlasts the limit and is stopped; every one
+            # after that answers at once.
+            write_exe(os.path.join(root, "ext", "slowlive", "slowlive"), f"""#!/usr/bin/env bash
+[ "$1" = list ] || exit 0
+if [ ! -e '{first}' ]; then
+  : > '{first}'
+  exec sleep 3
+fi
+printf 'b\\tcommand\\t\\tSlow Live Row\\tasked again\\n'
+""")
+            slow_env = dict(env, SWOOP_EXTENSIONS=os.path.join(root, "ext"), XDG_STATE_HOME=os.path.join(root, "state"))
+            w = Launcher(slow_env)
+            w.key = key
+            try:
+                # No key is sent. The wait is longer than the start, which
+                # here is the three seconds of the kept list.
+                w.wait_state(lambda s: has(s, "Slow Kept Row") and has(s, "Slow Live Row"), timeout=30.0, what="the kept row, and the late list's row with no key pressed")
+                with open(asked) as f:
+                    times = len(f.read().splitlines())
+                if times != 1:
+                    fail(f"the kept list was asked {times} times, want once: it has the start's limit", w.buf)
+                if glob.glob(os.path.join(tmp, "swoop-state.*.late")):
+                    fail("the late file was left behind", w.buf)
+                report = subprocess.run([os.path.join(ROOT, "bin", "swoop-nav"), "late"], env=slow_env, capture_output=True, text=True).stdout
+                if "slowlive: list took longer than 2s" not in report or "slowkept" in report:
+                    fail(f"the late report should name slowlive and nothing else of this check's:\n{report}", w.buf)
+            finally:
+                w.kill()
+        check("a slow start: the kept list waits, a late list is asked again", slow_start)
     finally:
         L.kill()
         # The worker may still be around on a fast failure.

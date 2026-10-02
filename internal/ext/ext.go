@@ -47,6 +47,31 @@ const EnvExtDir = "SWOOP_EXT_DIR"
 // the whole list. Two seconds is generous; a source near it should cache.
 var listTimeout = 2 * time.Second
 
+// startTimeout bounds the list of an extension whose rows are kept for
+// the run (CacheFile), when the launcher asks for it as it starts. That
+// list is not one of a keystroke's: it is the launcher's own first paint,
+// asked once, and a run without it has no applications. A warm list is
+// 10 ms. The first run of a program that is new on the machine is not:
+// macOS checks each new program once, one at a time, a fifth to a third
+// of a second each, and the launcher starts every extension together, so
+// the last of them has been seen to wait 8 seconds right after a build
+// with the machine busy. Ten seconds waits that out, and still ends a
+// start that a stuck extension would hold for good.
+var startTimeout = 10 * time.Second
+
+// LateError is a call that was stopped because it took longer than its
+// limit. It is an error of its own so a caller can tell an extension that
+// was slow, and is worth asking again, from one that failed.
+type LateError struct {
+	Name  string // the extension
+	Verb  string // list, view, send
+	Limit time.Duration
+}
+
+func (e *LateError) Error() string {
+	return fmt.Sprintf("%s: %s took longer than %s", e.Name, e.Verb, e.Limit)
+}
+
 // Extension is one discovered extension.
 type Extension struct {
 	Name string
@@ -226,7 +251,14 @@ func (e Extension) List(query string) ([]protocol.Item, error) {
 	if query != "" {
 		args = append(args, query)
 	}
-	return e.rows(args...)
+	return e.rows(listTimeout, args...)
+}
+
+// ListStart runs `<exe> list` with no text, as List does, with the limit
+// of the launcher's start in place of a keystroke's: for the rows kept
+// for the run (see Once), asked as the launcher starts. See startTimeout.
+func (e Extension) ListStart() ([]protocol.Item, error) {
+	return e.rows(startTimeout, "list")
 }
 
 // View runs `<exe> view <id> [query]`: the rows of the pane that opens
@@ -238,11 +270,11 @@ func (e Extension) View(viewID, query string) ([]protocol.Item, error) {
 	if query != "" {
 		args = append(args, query)
 	}
-	return e.rows(args...)
+	return e.rows(listTimeout, args...)
 }
 
-func (e Extension) rows(args ...string) ([]protocol.Item, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), listTimeout)
+func (e Extension) rows(limit time.Duration, args ...string) ([]protocol.Item, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), limit)
 	defer cancel()
 	cmd := e.command(ctx, args...)
 	var stderr bytes.Buffer
@@ -250,7 +282,7 @@ func (e Extension) rows(args ...string) ([]protocol.Item, error) {
 	out, err := cmd.Output()
 	if err != nil {
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-			return nil, fmt.Errorf("%s: %s took longer than %s", e.Name, args[0], listTimeout)
+			return nil, &LateError{Name: e.Name, Verb: args[0], Limit: limit}
 		}
 		msg := strings.TrimSpace(stderr.String())
 		if msg == "" {
@@ -272,31 +304,32 @@ func (e Extension) rows(args ...string) ([]protocol.Item, error) {
 	return items, nil
 }
 
-// ListAll runs every extension's list at once and returns all their rows.
-// Each failure is one line on stderr and no rows from that extension; the
-// others still count. The order of the result is by extension name, then
-// the extension's own order.
-func ListAll(exts []Extension, query string) []protocol.Item {
+// ListEach runs list for every extension, all at once, and returns the
+// rows of those that answered, their names, and the errors of the rest;
+// the others still count. The order of the rows is by extension name,
+// then the extension's own order. Nothing is printed: what to say about a
+// failure, and whether to ask again, is the caller's.
+func ListEach(exts []Extension, list func(Extension) ([]protocol.Item, error)) (items []protocol.Item, names []string, errs []error) {
 	results := make([][]protocol.Item, len(exts))
+	failed := make([]error, len(exts))
 	var wg sync.WaitGroup
 	for i, e := range exts {
 		wg.Add(1)
 		go func(i int, e Extension) {
 			defer wg.Done()
-			items, err := e.List(query)
-			if err != nil {
-				fmt.Fprintln(os.Stderr, tool.Name()+":", err)
-				return
-			}
-			results[i] = items
+			results[i], failed[i] = list(e)
 		}(i, e)
 	}
 	wg.Wait()
-	var all []protocol.Item
-	for _, r := range results {
-		all = append(all, r...)
+	for i, e := range exts {
+		if failed[i] != nil {
+			errs = append(errs, failed[i])
+			continue
+		}
+		names = append(names, e.Name)
+		items = append(items, results[i]...)
 	}
-	return all
+	return items, names, errs
 }
 
 // Run runs `<exe> run <id> [action]` with the terminal's own streams, so
@@ -318,7 +351,7 @@ func (e Extension) Run(rawID, action string) error {
 // without the verb answers with an error or nothing, and either means "no
 // actions" to the caller.
 func (e Extension) Actions(rawID string) []protocol.Item {
-	items, err := e.rows("actions", rawID)
+	items, err := e.rows(listTimeout, "actions", rawID)
 	if err != nil {
 		return nil
 	}

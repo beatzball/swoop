@@ -1,12 +1,14 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/beatzball/swoop/internal/ext"
 	"github.com/beatzball/swoop/internal/nav"
@@ -202,5 +204,47 @@ func TestPicturesSendsOnlyTheRowsThatAsked(t *testing.T) {
 	out, _ := os.ReadFile(filepath.Join(bin, "out"))
 	if strings.TrimSpace(string(out)) != filepath.Join(bin, "pictures") {
 		t.Fatalf("swoop-icons was sent the pictures to %q", out)
+	}
+}
+
+// A list that missed its limit as the launcher started is in the late
+// log and leaves the file bin/swoop looks for; one that failed some other
+// way, or was late on a keystroke, does neither. The report is the lines
+// of the newest slow start only.
+func TestLateListsAreLoggedAtTheStart(t *testing.T) {
+	state, tmp := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+	once := filepath.Join(tmp, "once")
+	slow := &ext.LateError{Name: "apps", Verb: "list", Limit: 10 * time.Second}
+	broken := errors.New("notes: list: no such folder")
+
+	failed([]error{slow, broken}, false, once)
+	failed([]error{broken}, true, once)
+	if _, err := os.Stat(once + lateMark); err == nil {
+		t.Fatal("the late file was left with no late list at the start")
+	}
+	if got := lastLate(); len(got) != 0 {
+		t.Fatalf("the report with nothing late at a start: %q", got)
+	}
+
+	// An older slow start, which the report leaves out.
+	old := time.Now().Add(-time.Hour).Format(time.RFC3339)
+	if err := os.MkdirAll(filepath.Dir(latePath()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(latePath(), []byte(old+"\ttasks: list took longer than 2s\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	failed([]error{slow, broken}, true, once)
+	if _, err := os.Stat(once + lateMark); err != nil {
+		t.Fatalf("no late file after a late list at the start: %v", err)
+	}
+	got := lastLate()
+	if len(got) != 1 || !strings.HasPrefix(got[0], "late:    apps: list took longer than 10s as the launcher started, ") {
+		t.Fatalf("the report: %q", got)
+	}
+	data, err := os.ReadFile(latePath())
+	if err != nil || strings.Count(string(data), "\n") != 2 || strings.Contains(string(data), "notes") {
+		t.Fatalf("the log: %q, %v", data, err)
 	}
 }

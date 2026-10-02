@@ -210,7 +210,7 @@ func (e Extension) Send(rawID, text string) error {
 	cmd.Stderr = os.Stderr
 	err := cmd.Run()
 	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		return fmt.Errorf("%s: send took longer than %s", e.Name, listTimeout)
+		return &LateError{Name: e.Name, Verb: "send", Limit: listTimeout}
 	}
 	return err
 }

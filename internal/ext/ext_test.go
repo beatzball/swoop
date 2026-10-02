@@ -2,6 +2,7 @@ package ext
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/tool"
 )
 
@@ -189,14 +191,21 @@ func TestListFailureAndTimeoutAreErrors(t *testing.T) {
 	}
 }
 
-func TestListAllKeepsTheGoodOnes(t *testing.T) {
+func TestListEachKeepsTheGoodOnes(t *testing.T) {
 	skipOnWindows(t)
 	dir := t.TempDir()
 	fake(t, dir, "good", `[ "$1" = list ] && printf 'x\tcommand\t\tGood\t\n'; exit 0`)
 	fake(t, dir, "bad", `exit 1`)
-	items := ListAll(Discover([]string{dir}), "")
+	items, names, errs := ListEach(Discover([]string{dir}), func(e Extension) ([]protocol.Item, error) { return e.List("") })
 	if len(items) != 1 || items[0].Title != "Good" {
 		t.Fatalf("want only the good extension's row, got %+v", items)
+	}
+	if len(names) != 1 || names[0] != "good" {
+		t.Fatalf("want only the good extension named, got %v", names)
+	}
+	var le *LateError
+	if len(errs) != 1 || !strings.Contains(errs[0].Error(), "bad: list") || errors.As(errs[0], &le) {
+		t.Fatalf("want the bad extension's error, and not as a late one, got %v", errs)
 	}
 }
 
@@ -282,8 +291,30 @@ func TestListTimeoutIsAnError(t *testing.T) {
 	dir := t.TempDir()
 	fake(t, dir, "slow", `sleep 5; printf 'x\tcommand\t\tSlow\t\n'`)
 	e := Discover([]string{dir})[0]
-	if _, err := e.List(""); err == nil || !strings.Contains(err.Error(), "took longer than") {
-		t.Fatalf("want a timeout error, got %v", err)
+	_, err := e.List("")
+	var le *LateError
+	if !errors.As(err, &le) || !strings.Contains(err.Error(), "slow: list took longer than 200ms") {
+		t.Fatalf("want a late error, got %v", err)
+	}
+}
+
+// The list kept for the run has the start's limit, not a keystroke's: one
+// that outlasts a keystroke's limit is still taken as the launcher starts.
+func TestListStartHasTheStartsLimit(t *testing.T) {
+	skipOnWindows(t)
+	oldList, oldStart := listTimeout, startTimeout
+	listTimeout, startTimeout = 200*time.Millisecond, 10*time.Second
+	defer func() { listTimeout, startTimeout = oldList, oldStart }()
+	dir := t.TempDir()
+	fake(t, dir, "slow", `sleep 0.5; printf 'x\tcommand\t\tSlow %s\t\n' "${2:-no text}"`)
+	e := Discover([]string{dir})[0]
+	var le *LateError
+	if _, err := e.List(""); !errors.As(err, &le) {
+		t.Fatalf("a keystroke's list: want a late error, got %v", err)
+	}
+	items, err := e.ListStart()
+	if err != nil || len(items) != 1 || items[0].Title != "Slow no text" {
+		t.Fatalf("the start's list: %+v, %v", items, err)
 	}
 }
 
