@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+  # By hand, to show a flake in the launcher test is gone: the test step
+  # runs that many times in a row on each runner, and stops at the first
+  # failure.
+  #   gh workflow run ci.yml --ref <branch> -f launcher_runs=20
+  workflow_dispatch:
+    inputs:
+      launcher_runs:
+        description: How many times in a row to run the launcher test
+        default: "1"
 
 # Actions are pinned to a commit, with the tag in a comment, because a tag can
 # be moved and a commit cannot. Dependabot bumps both together. The token gets
@@ -72,9 +81,21 @@ jobs:
       - name: fzf for the launcher test
         if: runner.os == 'macOS'
         run: brew install fzf
+      # Once, or as many times in a row as a dispatch by hand asks for.
+      # The number comes in through the environment, never pasted into the
+      # script, and anything that is not a number is refused.
       - name: launcher test
         if: runner.os != 'Windows'
-        run: scripts/launcher-test
+        env:
+          LAUNCHER_RUNS: ${{ inputs.launcher_runs || '1' }}
+        run: |
+          case "$LAUNCHER_RUNS" in
+            ''|*[!0-9]*) echo "launcher_runs must be a number: $LAUNCHER_RUNS"; exit 1 ;;
+          esac
+          for i in $(seq 1 "$LAUNCHER_RUNS"); do
+            echo "launcher test, run $i of $LAUNCHER_RUNS"
+            scripts/launcher-test
+          done
       # The frame's build directory, libghostty and all, so a run with the
       # same dependencies does an incremental build (about 20 s) instead
       # of a full one (about 70 s). Keyed on the resolved dependencies and
