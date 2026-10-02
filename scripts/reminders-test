@@ -28,7 +28,10 @@ export SWOOP_TEST_LOG="$log" SWOOP_TEST_DELAY=1
 export SWOOP_STATE="$tmp/swoop-state" FZF_API_KEY=test-key
 unset FZF_SOCK
 # The extension is one of the bundle this checkout's tool ships, and keeps
-# its cache in that tool's state folder.
+# its cache in that tool's state folder. It learns the tool's name from
+# SWOOP_TOOL_NAME, which the launcher sets; a name left in the caller's
+# environment would be another tool's.
+unset SWOOP_TOOL_NAME
 dir="$XDG_STATE_HOME/$("$root/bin/swoop" tool name)/reminders"
 cache="$dir/reminders.tsv"
 reminders="$root/extensions/reminders/reminders"
@@ -220,5 +223,26 @@ loading_enter() {
   "$reminders" run loading || fail "Enter on Loading failed"
 }
 check "Enter on Loading does nothing" loading_enter
+
+# Under a tool of another name the cache is in that tool's state folder,
+# and the first tool's is left alone: SWOOP_TOOL_NAME is the folder.
+other_tool() {
+  : > "$log"
+  local theirs="$XDG_STATE_HOME/mytool/reminders" _
+  cp "$cache" "$tmp/cache.before"
+  SWOOP_TOOL_NAME=mytool "$reminders" view reminders > "$tmp/out"
+  grep -q $'^loading\ttoggle\t.*Loading reminders' "$tmp/out" || fail "another tool did not start with an empty cache: $(cat "$tmp/out")"
+  for _ in $(seq 1 50); do
+    [ -f "$theirs/reminders.tsv" ] && [ ! -d "$theirs/fetch.lock" ] && break
+    sleep 0.1
+  done
+  [ -f "$theirs/reminders.tsv" ] || fail "no cache in the other tool's state folder: $(ls "$XDG_STATE_HOME")"
+  cmp -s "$cache" "$tmp/cache.before" || fail "another tool's fetch wrote this tool's cache"
+  # Into a variable first: grep -q stops reading at its match, and under
+  # pipefail the writer's broken pipe would be the pipeline's failure.
+  said="$(SWOOP_TOOL_NAME=mytool "$reminders" preview perm)"
+  case "$said" in "mytool asks Reminders"*) ;; *) fail "the permission text does not name the tool: $said" ;; esac
+}
+check "SWOOP_TOOL_NAME: another tool's cache is in its own folder" other_tool
 
 echo "reminders-test: ok"

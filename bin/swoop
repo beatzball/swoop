@@ -30,8 +30,7 @@ export PATH="$here:$PATH"
 # when the tool's folder is not this script's own: a tool built on the kit
 # is that folder and a shim that sets SWOOP_TOOL and runs this script.
 # Exported, so every program this run starts reads the same file; see
-# internal/tool, which reads it in Go. Nothing here reads the file to
-# open the launcher: only the verbs below do.
+# internal/tool, which reads it in Go.
 case "${SWOOP_TOOL:-}" in
   '') SWOOP_TOOL="$here/../tool" ;;
   /*|[A-Za-z]:[\\/]*) ;;
@@ -77,6 +76,15 @@ swoop_tool() {
   [ -n "$tool_id" ] || tool_id="dev.$tool_name"
   [ -n "$tool_hotkey" ] || tool_hotkey="alt+shift+space"
 }
+# Read once, for the verbs below and for the extensions: SWOOP_TOOL_NAME
+# is the tool's name, the word in its folders, so an extension that keeps
+# a file of its own puts it under ~/.local/share/<name> or
+# ~/.local/state/<name> with no reader of the tool file in it. A script
+# cannot ask internal/tool, and asking this launcher would be a second
+# bash on a cursor move. Always the file's: a name left in the
+# environment by another tool's launcher does not carry over.
+swoop_tool
+export SWOOP_TOOL_NAME="$tool_name"
 
 # <name> start|stop|restart|status: the frame's service, whichever way it
 # was installed, so nobody has to remember brew services or launchctl.
@@ -92,6 +100,9 @@ swoop_tool() {
 # <name> tool [key] prints what the file says, filled in: every line, or
 # the one value. It is how the frame and the scripts learn the tool's
 # name without a parser of their own.
+#
+# <name> new <tool> makes a tool of one's own: a folder called <tool>,
+# here, copied from the kit's templates/tool. See swoop_new.
 #
 # Written for the bash macOS ships, 3.2: no arrays under set -u, no
 # readlink -f.
@@ -204,9 +215,66 @@ _swoop_status() { # how pid path
   fi
 }
 
+# new <tool>: a tool of one's own, as a folder of that name in the current
+# directory. The files are the kit's templates/tool, beside bin/ and not
+# beside the tool file: a template is the kit's, whichever tool asks.
+# Every file there is copied, with @NAME@ in its path and in its text
+# replaced by the name, so a file added to the template needs no change
+# here. Nothing is written over: a folder or file of that name already
+# here stops it.
+swoop_new() {
+  local LC_ALL=C name="${1:-}" tpl="$here/../templates/tool" f to
+  case "$name" in
+    '') echo "usage: $tool_name new <name>" >&2; return 2 ;;
+    [!A-Za-z0-9]*|*[!A-Za-z0-9._+-]*)
+      echo "new: \"$name\" is not one plain word (letters, digits, . _ - +)" >&2; return 2 ;;
+    # The command would be bin/<name>, and a link to it on PATH would
+    # answer for one of the kit's own programs.
+    swoop|swoop-*)
+      echo "new: $name is one of the kit's own programs; pick another name" >&2; return 2 ;;
+  esac
+  [ -f "$tpl/tool" ] || { echo "new: no template at $tpl" >&2; return 1; }
+  if [ -e "$name" ] || [ -L "$name" ]; then
+    echo "new: $name is already here; nothing was changed" >&2; return 1
+  fi
+  echo "made $name/"
+  while IFS= read -r f; do
+    f="${f#./}"
+    to="$name/${f//@NAME@/$name}"
+    # Said and stopped at the first file that cannot be written: the
+    # caller's `||` turns errexit off in here.
+    if ! mkdir -p "$(dirname "$to")" || ! sed "s/@NAME@/$name/g" "$tpl/$f" > "$to"; then
+      echo "new: could not write $to" >&2; return 1
+    fi
+    [ ! -x "$tpl/$f" ] || chmod +x "$to"
+    echo "  ${to#"$name"/}"
+  done < <(cd "$tpl" && find . -type f ! -name .DS_Store | sort)
+  cat <<MSG
+
+Run it in this terminal; Esc quits:
+  $name/bin/$name
+MSG
+  # The command runs the kit's launcher by name. PATH here starts with
+  # this script's own folder, which the person's shell may not have.
+  if ! PATH="${PATH#"$here":}" command -v swoop >/dev/null 2>&1; then
+    cat <<MSG
+It runs swoop, the kit's launcher, which is not on your PATH. Until it is:
+  PATH="$here:\$PATH" $name/bin/$name
+MSG
+  fi
+  cat <<MSG
+
+Its rows come from $name/extensions; $name/tool has its name, title, id
+and hotkey. $name/README.md says how to change both, and how to give it
+the frame on a Mac.
+MSG
+}
+
 case "${1:-}" in
+  new)
+    swoop_new "${2:-}" || status=$?
+    exit "$status" ;;
   tool)
-    swoop_tool
     case "${2:-}" in
       '') printf 'name %s\ntitle %s\nid %s\nhotkey %s\n' "$tool_name" "$tool_title" "$tool_id" "$tool_hotkey" ;;
       name) echo "$tool_name" ;;
@@ -224,7 +292,6 @@ case "${1:-}" in
     shift
     exec swoop-nav keys "$@" ;;
   start|stop|restart|status)
-    swoop_tool
     swoop_service "$1" || status=$?
     # Which extension has which key, and any claim that lost.
     [ "$1" != status ] || swoop-nav keys status || true

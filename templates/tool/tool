@@ -1,0 +1,17 @@
+# tool: what this tool is. swoopkit's launcher, its programs and its frame
+# read these four lines and spell none of them. A key, a space, the value.
+
+# The word in every folder (~/.config/@NAME@, ~/.local/share/@NAME@,
+# ~/.local/state/@NAME@) and the command a person types. One plain word.
+name @NAME@
+
+# The name as shown: the frame's menu, a notification. Spaces are fine.
+title @NAME@
+
+# The prefix of the launchd labels on a Mac, <id>.shell and <id>.clipd.
+# A domain of yours, backwards, is the custom: com.example.@NAME@
+id dev.@NAME@
+
+# The key that opens the frame, until the person picks one of their own.
+# Two tools on one Mac need two keys.
+hotkey alt+shift+space

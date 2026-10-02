@@ -511,6 +511,31 @@ launcher opens and `preview` on every cursor move.
 [Writing an Extension](https://swoop.sh/docs/writing-an-extension) builds
 one from nothing, a step at a time, and tries each step in the launcher.
 
+## Build your own tool
+
+swoop is one tool on swoopkit, and the kit makes others. One command
+makes a tool of your own, a folder with its own name, its own folders
+under `~/.config` and none of swoop's rows:
+
+```sh
+swoop new mytool        # bin/swoop new mytool, from a checkout
+mytool/bin/mytool       # three rows; type to filter, Enter runs, Esc quits
+```
+
+The folder holds `tool`, the file with its name, title, id and hotkey;
+`extensions/hello/hello`, one extension in ten lines of shell; `bin/mytool`,
+the command, which names the tool file and runs the kit's launcher; and a
+README. The files come from `templates/tool` in this repository, and
+`make test` makes a tool from them and checks it.
+
+An extension learns the tool it runs under from `SWOOP_TOOL_NAME`, which
+the launcher sets from the `tool` file, so one that keeps a file of its
+own puts it in that tool's folder and runs unchanged under any tool.
+
+[Build Your Own Tool](https://swoop.sh/docs/build-your-own) has the rest:
+what each file is for, how to add an extension, how to name the frame,
+and how to ship it.
+
 ## License
 
 [MIT](LICENSE)

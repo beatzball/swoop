@@ -12,6 +12,8 @@
 #   bin/          the Go tools and the launcher script; on darwin, the
 #                 frame too
 #   extensions/   the bundled extensions
+#   templates/    what `<name> new` copies to make a tool of one's own;
+#                 the launcher looks for it beside bin/
 #   tool          the file that names the tool, beside extensions/, where
 #                 the launcher and every program look for it
 #   scripts/      launchd.sh and uninstall, so an install from a release can
@@ -51,6 +53,7 @@ mkdir -p "$dir/bin" "$dir/scripts" "$out"
   go build -trimpath -ldflags '-s -w' -o "$dir/bin/" ./cmd/...)
 cp "$root/bin/swoop" "$dir/bin/"
 cp -R "$root/extensions" "$dir/extensions"
+cp -R "$root/templates" "$dir/templates"
 cp "$root/scripts/launchd.sh" "$root/scripts/uninstall" "$dir/scripts/"
 cp "$root/VERSION" "$root/LICENSE" "$root/tool" "$dir/"
 

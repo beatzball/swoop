@@ -11,8 +11,8 @@
 # list is read through EventKit, the framework Reminders itself sits on,
 # in a tenth of a second; asked through Apple Events, Reminders takes ten
 # seconds for every property of every reminder, and a minute for the list.
-# EventKit needs Reminders under Privacy & Security for the app swoop runs
-# in; without it, the list is read the slow way. Changes (complete, delete,
+# EventKit needs Reminders under Privacy & Security for the app the tool
+# runs in; without it, the list is read the slow way. Changes (complete, delete,
 # add) go through Apple Events, one reminder each.
 #
 # The view never waits for Reminders: the launcher gives a view two
@@ -27,7 +27,12 @@ set -euo pipefail
 
 [ "$(uname)" = Darwin ] || exit 0
 
-dir="${XDG_STATE_HOME:-$HOME/.local/state}/swoop/reminders"
+# The tool this runs under, the word in its folders. The launcher gives
+# it in SWOOP_TOOL_NAME; run by hand, with no launcher, it is the kit's
+# own. The cache is in that tool's state folder, and what the view says
+# about permission names that tool.
+tool="${SWOOP_TOOL_NAME:-swoop}"
+dir="${XDG_STATE_HOME:-$HOME/.local/state}/$tool/reminders"
 cache="$dir/reminders.tsv"
 lock="$dir/fetch.lock"
 # denied is left by a fetch that failed, most likely for want of
@@ -250,8 +255,8 @@ case "${1:-}" in
         echo 'with today, tomorrow, a weekday or 2026-10-01 to give it a day.'
         ;;
       perm)
-        echo 'swoop asks Reminders through osascript. Turn on Reminders'
-        echo 'for the app swoop runs in, under Privacy & Security.'
+        echo "$tool asks Reminders through osascript. Turn on Reminders"
+        echo "for the app $tool runs in, under Privacy & Security."
         echo
         # A switch that shows on may hold a grant for an earlier build.
         # The Reminders pane has no minus button, so the reset is tccutil.

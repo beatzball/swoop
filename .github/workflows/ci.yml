@@ -60,8 +60,10 @@ jobs:
       - name: shellcheck
         if: runner.os == 'Linux'
         # Every shell file: the launcher, the extensions, and the scripts
-        # that say they are bash. scripts/launcher-test is Python.
-        run: shellcheck bin/swoop $(grep -Il -e '^#!/usr/bin/env bash' -e '^# shellcheck shell=bash' extensions/*/* scripts/*)
+        # that say they are bash. scripts/launcher-test is Python. The
+        # template's command and its extension are sh, and a person's
+        # first copy of either, so they are held to the same.
+        run: shellcheck bin/swoop templates/tool/bin/* templates/tool/extensions/*/* $(grep -Il -e '^#!/usr/bin/env bash' -e '^# shellcheck shell=bash' extensions/*/* scripts/*)
       - name: release-gate tests
         if: runner.os == 'Linux'
         run: scripts/release-gate-test
@@ -75,6 +77,13 @@ jobs:
       - name: contract test
         if: runner.os != 'Windows'
         run: scripts/contract-test
+      # `new` and the template it copies: a tool made in a temp folder
+      # and held to what the template promises. Bash and fakes, no fzf.
+      # Not on Windows: the made command is told apart by its mode bits
+      # and reached through a link, and Git Bash has neither.
+      - name: template test
+        if: runner.os != 'Windows'
+        run: scripts/template-test
       # The launcher end to end, through a pseudo-terminal. Needs a recent
       # fzf: the distro's is too old for transform and become, so Linux
       # takes fzf's own release, the one scripts/get would install.
