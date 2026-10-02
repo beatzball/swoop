@@ -173,6 +173,49 @@ final class LauncherController: NSObject, NSWindowDelegate,
         if let terminal { panel.makeFirstResponder(terminal) }
     }
 
+    /// Press key in the launcher, by fzf's name for the key, and show the
+    /// panel first when it is hidden: how the menu's Settings… opens the
+    /// Settings pane. The launcher in a hidden panel is already running,
+    /// so the key lands on it as it would on an open one. A key with no
+    /// bytes here is not pressed; false says so.
+    @discardableResult
+    func press(_ key: String) -> Bool {
+        guard let text = Self.text(for: key) else {
+            log("press \(key): not a key the frame can send")
+            return false
+        }
+        if !panel.isVisible { show() }
+        // A text binding, the same way cmd+, is sent: straight to the
+        // launcher. The view's paste would wrap the bytes as pasted text,
+        // and fzf would put them in the bar.
+        let sent = terminal?.performBindingAction("text:" + text) ?? false
+        log("press \(key), sent \(sent)")
+        return sent
+    }
+
+    /// What a terminal sends for a key an extension may claim, written as
+    /// a `text:` binding takes it: tab, shift-tab, f1 to f12, and alt with
+    /// one lower-case letter, digit, comma, full stop or slash. The same
+    /// set as ext.ValidKey, and nil for anything else.
+    static func text(for key: String) -> String? {
+        switch key {
+        case "tab": return "\\x09"
+        case "shift-tab": return "\\x1b[Z"
+        default: break
+        }
+        let function = ["OP", "OQ", "OR", "OS", "[15~", "[17~", "[18~", "[19~", "[20~", "[21~", "[23~", "[24~"]
+        if key.hasPrefix("f"), let n = Int(key.dropFirst()), function.indices.contains(n - 1) {
+            return "\\x1b" + function[n - 1]
+        }
+        if key.hasPrefix("alt-"), key.utf8.count == 5, let c = key.unicodeScalars.last,
+           ("a"..."z").contains(c) || ("0"..."9").contains(c) || ",./".unicodeScalars.contains(c)
+        {
+            // alt is Esc and then the key.
+            return "\\x1b" + String(c)
+        }
+        return nil
+    }
+
     /// Put the panel away and keep the launcher as it is.
     func hide() {
         log("hide")

@@ -216,6 +216,13 @@ case "${1:-}" in
       *) echo "tool: no such key: $2; it is one of name, title, id, hotkey" >&2; exit 2 ;;
     esac
     exit 0 ;;
+  keys)
+    # The keys the extensions claim; `keys for <extension>` is the one key
+    # that opens that extension's pane, or no line. The frame asks this
+    # for its menu's Settings item: it has no list of extensions and no
+    # key of its own, and only this script knows where the extensions are.
+    shift
+    exec swoop-nav keys "$@" ;;
   start|stop|restart|status)
     swoop_tool
     swoop_service "$1" || status=$?

@@ -809,6 +809,13 @@ esac
             for line in ("tab opens Ask AI, from ai", "tab: prompter claims it too, and ai has it", "alt-p opens Prompter, from prompter"):
                 if line not in report:
                     fail(f"the key report lacks {line!r}:\n{report}", L.buf)
+            # The frame's menu asks the launcher for the key of one
+            # extension's pane, for Settings…: the one it has, not the
+            # one it lost, and no line for an extension with no key.
+            for name, want in (("settings", "alt-,\n"), ("prompter", "alt-p\n"), ("fake", "")):
+                said = subprocess.run([os.path.join(ROOT, "bin", "swoop"), "keys", "for", name], env=env, capture_output=True, text=True)
+                if said.returncode != 0 or said.stdout != want:
+                    fail(f"keys for {name} said {said.stdout!r} (exit {said.returncode}), want {want!r}", L.buf)
 
             def tab_opens(row, prompt, what):
                 # Each key waits for the other's whole chain, not for its
@@ -1290,6 +1297,11 @@ SWOOP_TOOL="$(dirname "$0")/tool" exec swoop "$@"
             said = subprocess.run([shim, "tool"], env=own, capture_output=True, text=True).stdout
             if said != "name mytool\ntitle My Tool\nid dev.mytool\nhotkey " + subprocess.run([shim, "tool", "hotkey"], env=own, capture_output=True, text=True).stdout:
                 fail(f"mytool tool said:\n{said}")
+            # No Settings extension, so no key for its pane, and the
+            # frame's menu has no Settings… item.
+            asked = subprocess.run([shim, "keys", "for", "settings"], env=own, capture_output=True, text=True)
+            if asked.returncode != 0 or asked.stdout != "":
+                fail(f"mytool keys for settings said {asked.stdout!r} (exit {asked.returncode}), want nothing")
             if os.uname().sysname != "Darwin":
                 # Where there is no frame, the verbs say so under the
                 # tool's own name. On a Mac they ask launchd, which

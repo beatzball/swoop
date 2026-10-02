@@ -84,4 +84,26 @@ enum Launcher {
         }
         return nil
     }()
+
+    /// The key that opens the pane of the extension called name, by fzf's
+    /// name for it ("alt-,"), or nil when no extension that is on has such
+    /// a key. Asked of the launcher, `<launcher> keys for <name>`, each
+    /// time: the frame has no list of extensions and no key of its own,
+    /// and an extension can be put in or turned off while the frame runs.
+    static func key(for name: String) -> String? {
+        guard let path else { return nil }
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: path)
+        task.arguments = ["keys", "for", name]
+        let out = Pipe()
+        task.standardOutput = out
+        // No terminal, as in Tool.current: a launcher too old to know the
+        // verb gives up at once, and says no key.
+        task.standardInput = FileHandle.nullDevice
+        guard (try? task.run()) != nil else { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        let key = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        return task.terminationStatus == 0 && !key.isEmpty ? key : nil
+    }
 }

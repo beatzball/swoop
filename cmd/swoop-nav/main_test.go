@@ -123,6 +123,41 @@ func TestRootRowsListsOnceAndKeeps(t *testing.T) {
 	}
 }
 
+// The key for an extension's pane is the first it claims and has: not one
+// an earlier extension has, not one nobody may claim, and none at all for
+// an extension that is off, claims nothing, or is not there. The frame's
+// menu shows Settings only when this names a key.
+func TestKeyFor(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("bash scripts do not run as executables on Windows")
+	}
+	dir, cfg := t.TempDir(), t.TempDir()
+	t.Setenv("SWOOP_EXTENSIONS", dir)
+	t.Setenv("XDG_CONFIG_HOME", cfg)
+	fakeExt(t, dir, "ask", "", map[string]string{"key": "tab ask Ask\n"})
+	fakeExt(t, dir, "plain", "", nil)
+	fakeExt(t, dir, "prefs", "", map[string]string{"key": "ctrl-c prefs\ntab prefs\nalt-, prefs Prefs\n"})
+	fakeExt(t, dir, "shadow", "", map[string]string{"key": "tab shadow\n"})
+	want := map[string]string{"ask": "tab", "prefs": "alt-,", "plain": "", "shadow": "", "absent": ""}
+	for name, key := range want {
+		if got := keyFor(name); got != key {
+			t.Errorf("keyFor(%q) = %q, want %q", name, got, key)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(cfg, tool.Name()), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(cfg, tool.Name(), "config"), []byte("off = ask, prefs\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Off, prefs has no key; and with ask off, Tab is the next one's.
+	for name, key := range map[string]string{"prefs": "", "ask": "", "shadow": "tab"} {
+		if got := keyFor(name); got != key {
+			t.Errorf("with ask and prefs off, keyFor(%q) = %q, want %q", name, got, key)
+		}
+	}
+}
+
 // With no extensions at all the root is an empty list, not an error.
 func TestRootRowsWithNoExtensions(t *testing.T) {
 	t.Setenv("SWOOP_EXTENSIONS", t.TempDir())
