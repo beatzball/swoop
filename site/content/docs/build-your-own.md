@@ -61,15 +61,15 @@ mytool/
 name mytool
 title mytool
 id dev.mytool
-hotkey alt+shift+space
+hotkey ctrl+alt+space
 ```
 
 | key | what it names |
 |---|---|
 | `name` | the tool's folders, `~/.config/mytool`, `~/.local/share/mytool` and `~/.local/state/mytool`, and its command. One plain word |
 | `title` | the name as shown: the frame's menu, a notification. Spaces are fine |
-| `id` | the prefix of the launchd labels on a Mac, `<id>.shell` and `<id>.clipd`. A domain of yours, backwards |
-| `hotkey` | the key that opens the frame, until the person picks one |
+| `id` | the prefix of the launchd labels on a Mac, `<id>.shell` and `<id>.clipd`, and of the frame's signature. A domain of yours, backwards |
+| `hotkey` | the key that opens the frame, until the person picks one. `new` gives it a key that is not swoop's, so the two run side by side |
 
 A key left out is filled in: the title is the name, the id is
 `dev.<name>`. `mytool/bin/mytool tool` prints the four lines as the kit
@@ -153,20 +153,47 @@ runs what tool it is, so the `title` in its menu, the `id` of its launchd
 labels and the `hotkey` that opens it are your `tool` file's, with
 nothing to build.
 
-`SWOOP_LAUNCHER` tells the frame which launcher to run. Point it at your
-command:
+Your tool's command installs it:
+
+```sh
+mytool/bin/mytool start
+```
+
+`start` gives the tool a frame of its own and runs it, now and at every
+login:
+
+- a copy of the kit's frame in `~/.local/share/mytool/frame`, signed
+  under your `id`, so macOS sees a program of its own: its own entry
+  under Accessibility in System Settings, and its own grant
+- two launchd agents, `<id>.shell` for the frame and `<id>.clipd` for
+  the clipboard watcher, with their logs in `~/Library/Logs/mytool`
+
+```sh
+mytool/bin/mytool status     # is it running, where from, on which key
+mytool/bin/mytool restart    # install it again: after a new version of the kit
+mytool/bin/mytool stop       # until the next login, or the next start
+```
+
+It runs beside swoop's frame, and beside any other tool's. Each tool has
+its own frame process, its own key, its own folders and its own two
+agents, and a `start`, a `stop` or a `restart` of one leaves the others
+running: `swoop status` and `mytool status` each show their own. To take
+a frame out for good, `stop` it and delete its two files in
+`~/Library/LaunchAgents`.
+
+Two tools on one Mac need two keys. `new` writes `ctrl+alt+space` in your
+`tool` file, which is not swoop's key. A person changes it for
+themselves with `hotkey = ...` in `~/.config/mytool/config`.
+
+The kit's frame is `swoop-shell-mac` in the kit's `bin` folder, beside
+`swoop`, in a release and under Homebrew; in a checkout `make shell-mac`
+builds it at `shell/mac/.build/release/swoop-shell-mac`, and `start`
+finds it there. To try a frame with nothing installed, run it by hand,
+with `SWOOP_LAUNCHER` naming the command it runs:
 
 ```sh
 SWOOP_LAUNCHER="$PWD/mytool/bin/mytool" swoop-shell-mac
 ```
-
-`swoop-shell-mac` is in the kit's `bin` folder, beside `swoop`, in a
-release and under Homebrew; in a checkout `make shell-mac` builds it at
-`shell/mac/.build/release/swoop-shell-mac`.
-
-Two tools on one Mac need two keys. If swoop runs there too, give your
-`tool` file another `hotkey`: `ctrl+alt+space`, say. A person changes it
-for themselves with `hotkey = ...` in `~/.config/mytool/config`.
 
 ## Ship it
 
@@ -211,6 +238,9 @@ resource bundles it needs beside it, and adds `scripts/launchd.sh`, which
 writes the two launchd agents that run the frame and the clipboard
 watcher at login, labelled with your `id`. Once a tool is installed that
 way, `mytool start`, `stop`, `restart` and `status` look after its frame.
+A tool shipped whole has the frame in its own `bin`, so nothing is
+copied: the copy is for a tool that runs the kit's programs from
+somewhere else, as the one `new` makes does.
 
 The installer `scripts/get`, the release workflow and the Homebrew
 formula that `scripts/tap-formula` writes are swoop's own: they spell

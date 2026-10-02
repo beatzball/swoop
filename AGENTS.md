@@ -160,7 +160,8 @@ The unit tests cover the rules; two harnesses cover the wiring, which is
 where the bugs have been.
 
 - `make test`: gofmt, vet, the unit tests, `scripts/launchd-test`, the
-  installer's launchd steps against a fake launchctl, and
+  installer's launchd steps against a fake launchctl, for two tools side
+  by side, and
   `scripts/contract-test`, which runs `swoop-check` on every bundled
   extension. Runs everywhere in seconds. Clean before every pull request
 - `make e2e`: `scripts/launcher-test` drives `bin/swoop` through a

@@ -14,4 +14,4 @@ id dev.@NAME@
 
 # The key that opens the frame, until the person picks one of their own.
 # Two tools on one Mac need two keys.
-hotkey alt+shift+space
+hotkey ctrl+alt+space

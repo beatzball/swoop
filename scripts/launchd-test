@@ -1,14 +1,22 @@
 #!/usr/bin/env bash
 # launchd-test: scripts/launchd.sh against a pretend launchd. A fake
-# launchctl, pkill and pgrep on PATH keep a state the real ones would
-# (which services are loaded, which processes run) and log every call.
+# launchctl, ps, pkill and kill keep a state the real ones would (which
+# services are loaded, which processes run) and log every call.
 # swoop_launchd runs against them, and the log must show the order that
 # the two stray-watcher bugs taught: both services unloaded before any
 # process is killed, every process gone before any service is started.
 #
-# The second half drives `<name> start|stop|restart|status` in bin/swoop
-# against the same fakes, plus a fake brew, ps and uname: which install it
+# The second part drives `<name> start|stop|restart|status` in bin/swoop
+# against the same fakes, plus a fake brew and uname: which install it
 # recognises, and which commands it runs for each.
+#
+# The third part is two tools on one machine: the kit's own, and one made
+# by `<name> new` that runs the kit's programs. Each has its own frame,
+# its own watcher and its own agents, and a start, a stop or an install of
+# one never touches a process of the other. Every tool's frame is the
+# same program and so is every watcher, which is why the first part has
+# another tool's processes running too: nothing may be stopped by the
+# name of its program.
 #
 # The install under test is a tool of its own, with a `tool` file that
 # names it mytool: every label, folder and message below must come from
@@ -19,41 +27,63 @@ set -euo pipefail
 # A hotkey from the caller's environment would land in the plist and in
 # `<name> status`; the checks below expect the config file's. A tool file
 # from the caller's environment would name another tool than the test's.
-unset SWOOP_HOTKEY XDG_CONFIG_HOME SWOOP_TOOL
+unset SWOOP_HOTKEY XDG_CONFIG_HOME SWOOP_TOOL SWOOP_TOOL_NAME SWOOP_LAUNCHER
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tmp="$(mktemp -d "${TMPDIR:-/tmp}/swoop-launchd-test.XXXXXX")"
 trap 'rm -rf "$tmp"' EXIT
+# The paths as the launcher sees them, with every link followed: on a Mac
+# the temp folder is behind one.
+tmp="$(cd -P "$tmp" && pwd)"
 export HOME="$tmp/home"
-mkdir -p "$HOME" "$tmp/bin" "$tmp/dir/bin"
+mkdir -p "$HOME" "$tmp/bin" "$tmp/dir/bin" "$tmp/dir/scripts" "$tmp/work"
 state="$tmp/state"     # one line per loaded service: "<label> <state>"
-procs="$tmp/procs"     # one line per running process name
+# One line per running process, as `ps -E` prints one: the process id,
+# the program and its arguments, then its environment. A service's
+# process ends with XPC_SERVICE_NAME=<label>, as launchd sets it. A
+# watcher has TOOL=<name>: the tool whose lock it holds. The ids are past
+# any a real system gives out, so a real kill could find nothing.
+procs="$tmp/procs"
 log="$tmp/log"
 : > "$state"; : > "$procs"; : > "$log"
+echo 9000100 > "$procs.pid"
 export SWOOP_TEST_STATE="$state" SWOOP_TEST_PROCS="$procs" SWOOP_TEST_LOG="$log"
 
-# The fakes. launchctl print succeeds while the label is loaded; bootout
-# unloads; bootstrap loads it as running and starts its process; kickstart
+# The fakes. launchctl print succeeds while the label is loaded, and says
+# the process id when the service has a process; bootout unloads and ends
+# that process; bootstrap loads it as running and starts the frame at
+# once, and the watcher a moment later (see the fake watcher); kickstart
 # needs it loaded.
 cat > "$tmp/bin/launchctl" <<'EOF'
 #!/usr/bin/env bash
 echo "launchctl $*" >> "$SWOOP_TEST_LOG"
+without() { # pattern file
+  grep -v "$1" "$2" > "$2.new" || true
+  mv "$2.new" "$2"
+}
 case "$1" in
   print)
     label="${2##*/}"
     grep -q "^$label " "$SWOOP_TEST_STATE" || exit 113
-    echo "	state = $(grep "^$label " "$SWOOP_TEST_STATE" | cut -d' ' -f2)" ;;
+    echo "	state = $(grep "^$label " "$SWOOP_TEST_STATE" | cut -d' ' -f2)"
+    pid="$(grep " XPC_SERVICE_NAME=$label\$" "$SWOOP_TEST_PROCS" | head -1 | cut -d' ' -f1)"
+    [ -z "$pid" ] || echo "	pid = $pid" ;;
   bootout)
     label="${2##*/}"
     grep -q "^$label " "$SWOOP_TEST_STATE" || exit 3
-    grep -v "^$label " "$SWOOP_TEST_STATE" > "$SWOOP_TEST_STATE.new" || true
-    mv "$SWOOP_TEST_STATE.new" "$SWOOP_TEST_STATE" ;;
+    without "^$label " "$SWOOP_TEST_STATE"
+    without " XPC_SERVICE_NAME=$label\$" "$SWOOP_TEST_PROCS"
+    rm -f "$SWOOP_TEST_PROCS.spawn.$label" ;;
   bootstrap)
     label="$(basename "$3" .plist)"
     echo "$label running" >> "$SWOOP_TEST_STATE"
     case "$label" in
-      *.shell) echo swoop-shell-mac >> "$SWOOP_TEST_PROCS" ;;
-      *.clipd) rm -f "$SWOOP_TEST_PROCS.status" ;;
+      *.shell)
+        program="$(sed -n '/<key>ProgramArguments<\/key>/,/<\/array>/s:.*<string>\(.*\)</string>.*:\1:p' "$3" | head -1)"
+        launcher="$(sed -n 's:.*<key>SWOOP_LAUNCHER</key><string>\(.*\)</string>.*:\1:p' "$3")"
+        pid=$(($(cat "$SWOOP_TEST_PROCS.pid") + 1)); echo "$pid" > "$SWOOP_TEST_PROCS.pid"
+        echo "$pid $program SWOOP_LAUNCHER=$launcher XPC_SERVICE_NAME=$label" >> "$SWOOP_TEST_PROCS" ;;
+      *.clipd) echo 0 > "$SWOOP_TEST_PROCS.spawn.$label" ;;
     esac ;;
   kickstart)
     label="${3##*/}"
@@ -61,6 +91,9 @@ case "$1" in
   *) exit 2 ;;
 esac
 EOF
+# The one place left that stops by the program's name: a watcher too old
+# to say which process it is. It takes every tool's watcher, as the real
+# one would.
 cat > "$tmp/bin/pkill" <<'EOF'
 #!/usr/bin/env bash
 echo "pkill $*" >> "$SWOOP_TEST_LOG"
@@ -69,20 +102,32 @@ grep -q "$pattern" "$SWOOP_TEST_PROCS" || exit 1
 grep -v "$pattern" "$SWOOP_TEST_PROCS" > "$SWOOP_TEST_PROCS.new" || true
 mv "$SWOOP_TEST_PROCS.new" "$SWOOP_TEST_PROCS"
 EOF
-# pgrep prints a pid: the process's line number, which the fake ps reads
-# back to say where that process's program is.
-cat > "$tmp/bin/pgrep" <<'EOF'
-#!/usr/bin/env bash
-pattern="${2:-$1}"
-grep -n "$pattern" "$SWOOP_TEST_PROCS" | cut -d: -f1 | grep .
+# kill is the shell's own, so the fake is a function. The launcher's
+# shell gets it too, through the file bash reads as it starts a script: a
+# function in the environment would not pass the made tool's command,
+# which is sh, and on Linux that sh drops it.
+cat > "$tmp/bash_env" <<'EOF'
+kill() {
+  local p
+  echo "kill $*" >> "$SWOOP_TEST_LOG"
+  for p in "$@"; do
+    grep -v "^$p " "$SWOOP_TEST_PROCS" > "$SWOOP_TEST_PROCS.new" || true
+    mv "$SWOOP_TEST_PROCS.new" "$SWOOP_TEST_PROCS"
+  done
+}
 EOF
+export BASH_ENV="$tmp/bash_env"
+# shellcheck source=/dev/null
+. "$tmp/bash_env"
+# ps: every process with its environment, or the program of one process.
 cat > "$tmp/bin/ps" <<'EOF'
 #!/usr/bin/env bash
-pid="${4:-}"
-case "$(sed -n "${pid}p" "$SWOOP_TEST_PROCS")" in
-  swoop-shell-mac) echo "$SWOOP_TEST_FRAME" ;;
-  "swoop-clipd run") echo "$SWOOP_TEST_DIR/bin/swoop-clipd" ;;
-  *) exit 1 ;;
+case " $* " in
+  *" -p "*)
+    for pid in "$@"; do :; done
+    line="$(grep "^$pid " "$SWOOP_TEST_PROCS")" || exit 1
+    echo "$line" | cut -d' ' -f2 ;;
+  *) cat "$SWOOP_TEST_PROCS" ;;
 esac
 EOF
 # brew services list names the tool only when SWOOP_TEST_BREW_LISTS is set.
@@ -108,69 +153,142 @@ cat > "$tmp/bin/id" <<'EOF'
 #!/usr/bin/env bash
 echo 501
 EOF
-# The fake watcher binary, in the install's bin. `status` says running
-# only from its third call after a bootstrap: launchd takes a moment to
-# spawn, and an installer that starts the frame without waiting for the
-# lock must fail here.
+# Signing: codesign writes down what it was asked, and security lists the
+# one certificate named in SWOOP_TEST_IDENTITY, when it is set.
+cat > "$tmp/bin/codesign" <<'EOF'
+#!/usr/bin/env bash
+echo "codesign $*" >> "$SWOOP_TEST_LOG"
+EOF
+cat > "$tmp/bin/security" <<'EOF'
+#!/usr/bin/env bash
+[ -z "${SWOOP_TEST_IDENTITY:-}" ] || echo "  1) 0000000000000000000000000000000000000000 \"$SWOOP_TEST_IDENTITY\""
+echo "     valid identities found"
+EOF
+# The fake watcher binary, in the kit's bin. It answers for the tool it
+# is asked as: the file in SWOOP_TOOL, or the one beside its bin/. That
+# tool's watcher is the process with TOOL=<name>, which stands for the
+# lock in the tool's own folder. `status` says whether one runs; `pid`
+# says which, but for a watcher marked UNSIGNED, one from before the lock
+# file named its holder.
+#
+# launchd takes a moment to spawn: after a bootstrap of <id>.clipd the
+# watcher is there only from the third time this is asked, and an
+# installer that starts the frame without waiting for the lock must fail
+# here.
 cat > "$tmp/dir/bin/swoop-clipd" <<'FAKE'
 #!/usr/bin/env bash
 echo "swoop-clipd $*" >> "$SWOOP_TEST_LOG"
-[ "$1" = status ] || exit 0
-n=0; [ -f "$SWOOP_TEST_PROCS.status" ] && n="$(cat "$SWOOP_TEST_PROCS.status")"
-n=$((n + 1)); echo "$n" > "$SWOOP_TEST_PROCS.status"
-if [ "$n" -ge 3 ] && grep -q '\.clipd ' "$SWOOP_TEST_STATE"; then
-  grep -q 'swoop-clipd run' "$SWOOP_TEST_PROCS" || echo "swoop-clipd run" >> "$SWOOP_TEST_PROCS"
-  echo running; exit 0
+file="${SWOOP_TOOL:-$(dirname "$0")/../tool}"
+name="$(sed -n 's/^name //p' "$file")"
+label="$(sed -n 's/^id //p' "$file").clipd"
+spawn="$SWOOP_TEST_PROCS.spawn.$label"
+if [ -f "$spawn" ] && ! grep -q " run TOOL=$name\( \|\$\)" "$SWOOP_TEST_PROCS"; then
+  n=$(($(cat "$spawn") + 1)); echo "$n" > "$spawn"
+  if [ "$n" -ge 3 ]; then
+    pid=$(($(cat "$SWOOP_TEST_PROCS.pid") + 1)); echo "$pid" > "$SWOOP_TEST_PROCS.pid"
+    echo "$pid $0 run TOOL=$name XPC_SERVICE_NAME=$label" >> "$SWOOP_TEST_PROCS"
+    echo "watcher up $label" >> "$SWOOP_TEST_LOG"
+    rm -f "$spawn"
+  fi
 fi
-echo "not running"; exit 1
+line="$(grep " run TOOL=$name\( \|\$\)" "$SWOOP_TEST_PROCS" | head -1)"
+case "$1" in
+  status)
+    [ -n "$line" ] || { echo "not running"; exit 1; }
+    echo running ;;
+  pid)
+    [ -n "$line" ] || exit 1
+    case "$line" in *" UNSIGNED"*) exit 1 ;; esac
+    echo "${line%% *}" ;;
+esac
 FAKE
-chmod +x "$tmp/bin/"* "$tmp/dir/bin/swoop-clipd"
+# The status verb asks swoop-nav which extension has which key.
+cat > "$tmp/dir/bin/swoop-nav" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+cp "$tmp/bin/fzf" "$tmp/dir/bin/fzf"
+chmod +x "$tmp/bin/"* "$tmp/dir/bin/"*
 # sleep is real but the loops end at once when the fakes say "gone".
 export PATH="$tmp/bin:$PATH"
 
-# The tool: the kit's launcher, as a release ships it, beside a tool file
-# with a name, a title and an id of its own.
+# The kit, as a release ships it: the launcher, the frame with a resource
+# bundle beside it, launchd.sh, the templates, and a tool file with a
+# name, a title and an id of its own.
 id=com.example.mytool
 printf 'name mytool\ntitle My Tool\nid %s\nhotkey ctrl+alt+m\n' "$id" > "$tmp/dir/tool"
 cp "$root/bin/swoop" "$tmp/dir/bin/swoop"
+cp "$root/scripts/launchd.sh" "$tmp/dir/scripts/"
+cp -R "$root/templates" "$tmp/dir/templates"
+frame="$tmp/dir/bin/swoop-shell-mac"
+# A script, not an empty file: Git Bash on Windows answers `-x` by the
+# shebang, and a start looks for the frame with `-x`.
+printf '#!/usr/bin/env bash\nexit 0\n' > "$frame"; chmod +x "$frame"
+mkdir "$tmp/dir/bin/Resources.bundle"; touch "$tmp/dir/bin/Resources.bundle/terminfo"
 
-# The starting state: both services loaded and running from a previous
-# install, plus a watcher started by hand, the case that used to win.
+fail() { echo "launchd-test: $*" >&2; echo "--- log:" >&2; cat "$log" >&2; echo "--- processes:" >&2; cat "$procs" >&2; exit 1; }
+line() { grep -n "^$1" "$log" | head -1 | cut -d: -f1; }
+running() { grep -c "$1" "$procs" || true; }
+
+# The starting state. Both services are loaded from a previous install.
+# The frame runs under launchd; a second frame of this tool was started
+# by hand; and the watcher that holds the lock was started outside
+# launchd, the case that used to win. Then what must be left alone: a
+# shell that has this tool's launcher in its environment, and another
+# tool's frame and watcher, which are the same two programs.
 printf '%s.shell running\n%s.clipd running\n' "$id" "$id" > "$state"
-printf 'swoop-shell-mac\nswoop-clipd run\nswoop-clipd run\n' > "$procs"
-touch "$tmp/dir/bin/fzf" "$tmp/frame"
-chmod +x "$tmp/dir/bin/"* "$tmp/frame"
-
-fail() { echo "launchd-test: $*" >&2; echo "--- log:" >&2; cat "$log" >&2; exit 1; }
+cat > "$procs" <<EOF
+9000001 $frame SWOOP_LAUNCHER=$tmp/dir/bin/swoop XPC_SERVICE_NAME=$id.shell
+9000002 shell/mac/.build/release/swoop-shell-mac SWOOP_LAUNCHER=$tmp/dir/bin/swoop
+9000003 $tmp/dir/bin/swoop-clipd run TOOL=mytool
+9000004 /bin/zsh -l SWOOP_LAUNCHER=$tmp/dir/bin/swoop
+9000005 $frame SWOOP_LAUNCHER=/elsewhere/other/bin/other XPC_SERVICE_NAME=dev.other.shell
+9000006 $tmp/dir/bin/swoop-clipd run TOOL=other XPC_SERVICE_NAME=dev.other.clipd
+EOF
+others() { # what must still run, whatever was done to mytool
+  grep -q '^9000004 ' "$procs" || fail "$1: a shell with the launcher in its environment was killed"
+  grep -q '^9000005 ' "$procs" || fail "$1: another tool's frame was stopped"
+  grep -q '^9000006 ' "$procs" || fail "$1: another tool's watcher was stopped"
+}
 
 # shellcheck source=scripts/launchd.sh
 . "$root/scripts/launchd.sh"
-out="$(swoop_launchd "$tmp/dir" "$tmp/frame" 2>&1)" || fail "swoop_launchd failed: $out"
+out="$(swoop_launchd "$tmp/dir" "$frame" 2>&1)" || fail "swoop_launchd failed: $out"
 
 # The order. Line numbers in the log: the last bootout must come before
-# the first pkill, and the last pkill before the first bootstrap.
+# the first kill, and the last kill before the first bootstrap.
 last_bootout="$(grep -n '^launchctl bootout' "$log" | tail -1 | cut -d: -f1)"
-first_pkill="$(grep -n '^pkill' "$log" | head -1 | cut -d: -f1)"
-last_pkill="$(grep -n '^pkill' "$log" | tail -1 | cut -d: -f1)"
+first_kill="$(grep -n '^kill' "$log" | head -1 | cut -d: -f1)"
+last_kill="$(grep -n '^kill' "$log" | tail -1 | cut -d: -f1)"
 first_bootstrap="$(grep -n '^launchctl bootstrap' "$log" | head -1 | cut -d: -f1)"
-if [ -z "$last_bootout" ] || [ -z "$first_pkill" ] || [ -z "$first_bootstrap" ]; then
+if [ -z "$last_bootout" ] || [ -z "$first_kill" ] || [ -z "$first_bootstrap" ]; then
   fail "missing a step"
 fi
-[ "$last_bootout" -lt "$first_pkill" ] || fail "a process was killed before both services were unloaded"
-[ "$last_pkill" -lt "$first_bootstrap" ] || fail "a service was started before every process was killed"
-frame_bootstrap="$(grep -n "^launchctl bootstrap .*$id.shell" "$log" | head -1 | cut -d: -f1)"
-lock_held="$(grep -n '^swoop-clipd status' "$log" | sed -n 3p | cut -d: -f1)"
+[ "$last_bootout" -lt "$first_kill" ] || fail "a process was killed before both services were unloaded"
+[ "$last_kill" -lt "$first_bootstrap" ] || fail "a service was started before every process was killed"
+frame_bootstrap="$(line "launchctl bootstrap .*$id.shell")"
+lock_held="$(line "watcher up $id.clipd")"
 if [ -z "$frame_bootstrap" ] || [ -z "$lock_held" ]; then
-  fail "the frame was not started, or the watcher's lock never checked"
+  fail "the frame was not started, or launchd's watcher never came up"
 fi
 [ "$lock_held" -lt "$frame_bootstrap" ] || fail "the frame was started before launchd's watcher held the lock"
 grep -q "^launchctl bootout gui/501/$id.shell" "$log" || fail "the frame's service was not unloaded"
 grep -q "^launchctl bootout gui/501/$id.clipd" "$log" || fail "the watcher's service was not unloaded"
 
+# What was stopped: this tool's frame started by hand, by the launcher it
+# runs, and this tool's watcher, by the lock it holds. Nothing by the
+# name of a program, and nothing of another tool's.
+grep -q '^kill 9000002$' "$log" || fail "the frame started by hand was not stopped"
+grep -q '^kill 9000003$' "$log" || fail "the watcher started outside launchd was not stopped"
+[ "$(grep -c '^kill' "$log")" = 2 ] || fail "more was killed than this tool's two strays"
+if grep -q '^pkill' "$log"; then fail "a process was stopped by the name of its program"; fi
+others "an install"
+
 # The end state: both running, exactly one of each process, no stray.
 [ "$(grep -c running "$state")" = 2 ] || fail "not both services running: $(cat "$state")"
-[ "$(grep -c 'swoop-clipd run' "$procs")" = 1 ] || fail "watchers: $(grep -c 'swoop-clipd run' "$procs")"
-[ "$(grep -c 'swoop-shell-mac' "$procs")" = 1 ] || fail "frames: $(grep -c swoop-shell-mac "$procs")"
+[ "$(running ' run TOOL=mytool ')" = 1 ] || fail "watchers: $(running ' run TOOL=mytool ')"
+[ "$(running " SWOOP_LAUNCHER=$tmp/dir/bin/swoop XPC_SERVICE_NAME=$id.shell")" = 1 ] || fail "no frame under launchd"
+[ "$(running "swoop-shell-mac SWOOP_LAUNCHER=$tmp/dir/bin/swoop")" = 1 ] || fail "frames: $(running "swoop-shell-mac SWOOP_LAUNCHER=$tmp/dir/bin/swoop")"
 
 # The plists: the program, the PATH with the install's bin first, the launcher.
 plist="$HOME/Library/LaunchAgents/$id.shell.plist"
@@ -179,114 +297,298 @@ plist="$HOME/Library/LaunchAgents/$id.shell.plist"
 grep -q "<key>Label</key><string>$id.shell</string>" "$plist" || fail "the frame's label is not the tool's id"
 grep -q "<string>$HOME/Library/Logs/mytool/shell.log</string>" "$plist" || fail "the frame's log is not in the tool's own folder"
 [ -d "$HOME/Library/Logs/mytool" ] || fail "no log folder of the tool's own"
-grep -q "<string>$tmp/frame</string>" "$plist" || fail "frame plist does not run the frame"
+grep -q "<string>$frame</string>" "$plist" || fail "frame plist does not run the frame"
 grep -q "<key>PATH</key><string>$tmp/dir/bin:" "$plist" || fail "PATH does not start with the install's bin"
 grep -q "<key>SWOOP_LAUNCHER</key><string>$tmp/dir/bin/swoop</string>" "$plist" || fail "no SWOOP_LAUNCHER"
+# The tool file is the one beside the programs: nothing has to name it.
+if grep -q SWOOP_TOOL "$plist"; then fail "the kit's own tool was given a tool file by name"; fi
 grep -q "<string>$tmp/dir/bin/swoop-clipd</string>" "$HOME/Library/LaunchAgents/$id.clipd.plist" || fail "watcher plist does not run the watcher"
 
 # The second run, the "make install again" case: same result.
 : > "$log"
-out="$(swoop_launchd "$tmp/dir" "$tmp/frame" 2>&1)" || fail "second swoop_launchd failed: $out"
-[ "$(grep -c 'swoop-clipd run' "$procs")" = 1 ] || fail "second run: watchers $(grep -c 'swoop-clipd run' "$procs")"
+out="$(swoop_launchd "$tmp/dir" "$frame" 2>&1)" || fail "second swoop_launchd failed: $out"
+[ "$(running ' run TOOL=mytool ')" = 1 ] || fail "second run: watchers $(running ' run TOOL=mytool ')"
+[ "$(running "swoop-shell-mac SWOOP_LAUNCHER=$tmp/dir/bin/swoop")" = 1 ] || fail "second run: frames"
 [ "$(grep -c running "$state")" = 2 ] || fail "second run: services $(cat "$state")"
+if grep -q '^pkill' "$log"; then fail "second run: a process was stopped by the name of its program"; fi
+others "a second install"
 
-# The verbs. bin/swoop finds the fakes first: it puts only its own bin/
-# ahead of PATH, and none of these live there. It is the checkout's
-# launcher, told which tool it is the way a tool's own shim tells it:
-# SWOOP_TOOL names the file.
-export SWOOP_TEST_FRAME="$tmp/frame" SWOOP_TEST_DIR="$tmp/dir" SWOOP_NO_CLIPD=1
-export SWOOP_TOOL="$tmp/dir/tool"
-launcher="$root/bin/swoop"
-verb() { # expected-exit args...
+# A watcher from before the lock file named its holder: it holds the
+# lock and nobody can say which process it is. Only then is every
+# watcher stopped, by name, so that launchd's own can take the lock.
+launchctl bootout "gui/501/$id.clipd"
+echo "9000007 $tmp/dir/bin/swoop-clipd run TOOL=mytool UNSIGNED" >> "$procs"
+: > "$log"
+out="$(swoop_launchd "$tmp/dir" "$frame" 2>&1)" || fail "swoop_launchd over an old watcher failed: $out"
+grep -q '^pkill -f swoop-clipd run$' "$log" || fail "a watcher too old to name itself was left holding the lock"
+if grep -q '^9000007 ' "$procs"; then fail "the old watcher still runs"; fi
+[ "$(running ' run TOOL=mytool ')" = 1 ] || fail "over an old watcher: watchers $(running ' run TOOL=mytool ')"
+[ "$(grep -c running "$state")" = 2 ] || fail "over an old watcher: services $(cat "$state")"
+# The other tool's watcher went with it; launchd would start it again.
+echo "9000006 $tmp/dir/bin/swoop-clipd run TOOL=other XPC_SERVICE_NAME=dev.other.clipd" >> "$procs"
+
+# The verbs. A launcher finds the fakes first: it puts only its own bin/
+# ahead of PATH, and none of these live there.
+export SWOOP_NO_CLIPD=1
+verb() { # expected-exit launcher args...
   local want="$1" got=0; shift
   : > "$log"
-  out="$("$launcher" "$@" 2>&1)" || got=$?
-  [ "$got" = "$want" ] || fail "mytool $*: exit $got, want $want: $out"
-  if grep -q '^fzf' "$log"; then fail "mytool $* opened the launcher"; fi
+  out="$("$@" 2>&1)" || got=$?
+  [ "$got" = "$want" ] || fail "$*: exit $got, want $want: $out"
+  if grep -q '^fzf' "$log"; then fail "$* opened the launcher"; fi
 }
 
-# What the file says, and what it leaves for the launcher to fill in.
-verb 0 tool
+# What the file says, and what it leaves for the launcher to fill in. It
+# is the checkout's launcher, told which tool it is the way a tool's own
+# command tells it: SWOOP_TOOL names the file.
+export SWOOP_TOOL="$tmp/dir/tool"
+verb 0 "$root/bin/swoop" tool
 [ "$out" = "name mytool
 title My Tool
 id $id
 hotkey ctrl+alt+m" ] || fail "tool: $out"
-verb 0 tool title
+verb 0 "$root/bin/swoop" tool title
 [ "$out" = "My Tool" ] || fail "tool title: $out"
-verb 2 tool colour
+verb 2 "$root/bin/swoop" tool colour
 printf 'name mytool\n' > "$tmp/name-only"
-out="$(SWOOP_TOOL="$tmp/name-only" "$launcher" tool id)"
+out="$(SWOOP_TOOL="$tmp/name-only" "$root/bin/swoop" tool id)"
 [ "$out" = dev.mytool ] || fail "a file with a name alone: the id is $out, want dev.mytool"
+unset SWOOP_TOOL
+
+# From here the tool's own launcher, the one its agents run: its tool
+# file is the one beside its bin/.
+mytool="$tmp/dir/bin/swoop"
 
 # The hotkey in status: the tool's own until the settings file names one,
 # and the settings file is in the tool's own folder.
-verb 0 status
+verb 0 "$mytool" status
 case "$out" in *"hotkey ctrl+alt+m"*) ;; *) fail "status does not show the tool's own hotkey: $out" ;; esac
 mkdir -p "$HOME/.config/mytool"
 echo "hotkey = ctrl+space" > "$HOME/.config/mytool/config"
-line() { grep -n "^$1" "$log" | head -1 | cut -d: -f1; }
 
 # launchd, both running: restart kicks the watcher, then the frame.
-verb 0 restart
+verb 0 "$mytool" restart
 k_clipd="$(line "launchctl kickstart -k gui/501/$id.clipd")"
 k_shell="$(line "launchctl kickstart -k gui/501/$id.shell")"
 if [ -z "$k_clipd" ] || [ -z "$k_shell" ]; then fail "restart did not kickstart both"; fi
 [ "$k_clipd" -lt "$k_shell" ] || fail "restart kicked the frame before the watcher"
 if grep -q '^brew services restart' "$log"; then fail "a launchd install was restarted with brew"; fi
 
-# stop: the frame, then the watcher, and nothing left loaded.
-verb 0 stop
+# stop: the frame, then the watcher, and nothing of this tool's left
+# loaded. The other tool's keep running.
+verb 0 "$mytool" stop
 b_shell="$(line "launchctl bootout gui/501/$id.shell")"
 b_clipd="$(line "launchctl bootout gui/501/$id.clipd")"
 if [ -z "$b_shell" ] || [ -z "$b_clipd" ]; then fail "stop did not boot out both"; fi
 [ "$b_shell" -lt "$b_clipd" ] || fail "stop took the watcher down before the frame"
 [ ! -s "$state" ] || fail "stop left services loaded: $(cat "$state")"
-grep -v swoop-shell-mac "$procs" > "$procs.new" || true; mv "$procs.new" "$procs"
+others "a stop"
 
-verb 0 status
+# Stopped, with another tool's frame running: that frame is not this
+# tool's, whatever its program is called.
+verb 0 "$mytool" status
 case "$out" in *"frame:   not running, hotkey ctrl+space"*"installed by launchd"*) ;; *) fail "status, stopped: $out" ;; esac
-case "$out" in *"$tmp/frame"*) ;; *) fail "status does not say where the frame is: $out" ;; esac
+case "$out" in *"$frame"*) ;; *) fail "status does not say where the frame is: $out" ;; esac
+case "$out" in *"watcher: not running"*) ;; *) fail "status, stopped, watcher: $out" ;; esac
 
 # start: the watcher's agent, then the frame's.
-verb 0 start
+verb 0 "$mytool" start
 s_clipd="$(line "launchctl bootstrap gui/501 .*$id.clipd.plist")"
 s_shell="$(line "launchctl bootstrap gui/501 .*$id.shell.plist")"
 if [ -z "$s_clipd" ] || [ -z "$s_shell" ]; then fail "start did not bootstrap both"; fi
 [ "$s_clipd" -lt "$s_shell" ] || fail "start started the frame before the watcher"
 [ "$(grep -c running "$state")" = 2 ] || fail "start: services $(cat "$state")"
-verb 0 start
+verb 0 "$mytool" start
 grep -q '^launchctl bootstrap' "$log" && fail "start bootstrapped a service already running"
+# launchd spawns the watcher in its own time: ask until it is up.
+for _ in 1 2 3; do "$tmp/dir/bin/swoop-clipd" status > /dev/null && break; done
 
-verb 0 status
-case "$out" in *"frame:   running, pid "*"hotkey ctrl+space"*"$tmp/frame, installed by launchd"*) ;; *) fail "status, running: $out" ;; esac
-case "$out" in *"watcher: running, pid "*) ;; *) fail "status, watcher: $out" ;; esac
+verb 0 "$mytool" status
+mypid="$(grep " XPC_SERVICE_NAME=$id.shell\$" "$procs" | cut -d' ' -f1)"
+mywatcher="$(grep " run TOOL=mytool " "$procs" | cut -d' ' -f1)"
+case "$out" in *"frame:   running, pid $mypid, hotkey ctrl+space"*"$frame, installed by launchd"*) ;; *) fail "status, running: $out" ;; esac
+case "$out" in *"watcher: running, pid $mywatcher, "*) ;; *) fail "status, watcher: $out" ;; esac
 
-# Homebrew, told by the running frame's path: brew services, no launchctl.
-SWOOP_TEST_FRAME=/opt/homebrew/Cellar/mytool/1.0.0/libexec/bin/swoop-shell-mac verb 0 restart
+# A frame started by hand: told by the launcher it runs.
+verb 0 "$mytool" stop
+echo "9000008 ./swoop-shell-mac SWOOP_LAUNCHER=$mytool" >> "$procs"
+verb 0 "$mytool" status
+case "$out" in *"frame:   running, pid 9000008, "*) ;; *) fail "status, a frame started by hand: $out" ;; esac
+kill 9000008
+
+# Homebrew, told by the running frame's path: brew services, no launchctl
+# that changes anything.
+echo "homebrew.mxcl.mytool running" >> "$state"
+echo "9000009 /opt/homebrew/Cellar/mytool/1.0.0/libexec/bin/swoop-shell-mac SWOOP_LAUNCHER=/opt/homebrew/opt/mytool/libexec/bin/swoop XPC_SERVICE_NAME=homebrew.mxcl.mytool" >> "$procs"
+verb 0 "$mytool" restart
 grep -q '^brew services restart mytool$' "$log" || fail "a Homebrew frame was not restarted with brew services"
-if grep -q '^launchctl' "$log"; then fail "a Homebrew frame was restarted with launchctl"; fi
+if grep -q '^launchctl \(bootout\|bootstrap\|kickstart\)' "$log"; then fail "a Homebrew frame was restarted with launchctl"; fi
+verb 0 "$mytool" status
+case "$out" in *"frame:   running, pid 9000009, "*"installed by homebrew"*) ;; *) fail "status, a Homebrew frame: $out" ;; esac
+launchctl bootout gui/501/homebrew.mxcl.mytool
 
 # Homebrew, told by brew's list: no frame running and no plist of ours.
 rm -f "$HOME/Library/LaunchAgents/$id".*.plist
-grep -v swoop-shell-mac "$procs" > "$procs.new" || true; mv "$procs.new" "$procs"
-SWOOP_TEST_BREW_LISTS=1 verb 0 stop
+SWOOP_TEST_BREW_LISTS=1 verb 0 "$mytool" stop
 grep -q '^brew services stop mytool$' "$log" || fail "brew's list did not make stop a brew services stop"
-SWOOP_TEST_BREW_LISTS=1 verb 0 status
+SWOOP_TEST_BREW_LISTS=1 verb 0 "$mytool" status
 case "$out" in *"installed by homebrew"*) ;; *) fail "status, Homebrew: $out" ;; esac
 
-# Neither: say how to install it, and exit 1.
-verb 1 restart
+# Neither: say how to install it, and exit 1. The other tool's frame runs
+# all the while, and is no sign of an install of this one.
+verb 1 "$mytool" restart
 case "$out" in "mytool: the frame is not installed"*) ;; *) fail "no install, restart said: $out" ;; esac
-verb 1 status
+verb 1 "$mytool" status
+case "$out" in *"frame:   not running"*) ;; *) fail "no install, status: $out" ;; esac
 
 # Linux and Windows: no frame yet.
-SWOOP_TEST_UNAME=Linux verb 1 restart
+SWOOP_TEST_UNAME=Linux verb 1 "$mytool" restart
 case "$out" in "mytool restart: there is no frame on this OS yet"*) ;; *) fail "Linux restart said: $out" ;; esac
+
+# Two tools. The first is the kit's own, installed again the way its
+# installer does it. The second is made by `new`, in a folder elsewhere:
+# its command runs the kit's launcher, found by name, so the kit's bin is
+# on PATH, as it is in the shell of anyone who installed the kit.
+kill 9000005 9000006
+out="$(swoop_launchd "$tmp/dir" "$frame" 2>&1)" || fail "swoop_launchd before the second tool failed: $out"
+mypid="$(grep " XPC_SERVICE_NAME=$id.shell\$" "$procs" | cut -d' ' -f1)"
+mywatcher="$(grep " run TOOL=mytool " "$procs" | cut -d' ' -f1)"
+if [ -z "$mypid" ] || [ -z "$mywatcher" ]; then fail "the first tool is not running: $(cat "$procs")"; fi
+mine() { # the first tool's two processes, the very same ones
+  grep -q "^$mypid " "$procs" || fail "$1: the first tool's frame was stopped"
+  grep -q "^$mywatcher " "$procs" || fail "$1: the first tool's watcher was stopped"
+  if grep -q "^launchctl bootout gui/501/$id\." "$log"; then fail "$1: the first tool's services were unloaded"; fi
+  if grep -q "^launchctl kickstart .*/$id\." "$log"; then fail "$1: the first tool's services were restarted"; fi
+  if grep -q '^pkill' "$log"; then fail "$1: a process was stopped by the name of its program"; fi
+}
+
+export PATH="$tmp/bin:$tmp/dir/bin:${PATH#"$tmp/bin":}"
+cd "$tmp/work"
+verb 0 "$mytool" new other
+case "$out" in *"other/bin/other start"*) ;; *) fail "new did not say how to start the frame: $out" ;; esac
+other="$tmp/work/other/bin/other"
+oid=dev.other
+copy="$HOME/.local/share/other/frame/swoop-shell-mac"
+oplist="$HOME/Library/LaunchAgents/$oid.shell.plist"
+verb 0 "$other" tool id
+[ "$out" = "$oid" ] || fail "the made tool's id is $out"
+
+# Before a start there is nothing of its own, and the first tool's frame
+# is not taken for it.
+verb 1 "$other" status
+case "$out" in *"frame:   not running"*"installed by nothing"*) ;; *) fail "the made tool, before a start: $out" ;; esac
+case "$out" in *"other: the frame is not installed"*"other start"*) ;; *) fail "the made tool was not told to start: $out" ;; esac
+case "$out" in *"brew install"*) fail "the made tool was sent to another tool's installers: $out" ;; esac
+verb 1 "$other" stop
+mine "a stop of a tool not installed"
+
+# start is the made tool's installer: a frame of its own, signed under
+# its own id, and its own two agents, beside the first tool's.
+verb 0 "$other" start
+mine "the made tool's start"
+[ -x "$copy" ] || fail "the made tool has no frame of its own: $out"
+[ -f "$HOME/.local/share/other/frame/Resources.bundle/terminfo" ] || fail "the frame's resource bundle was not copied beside it"
+grep -q "^codesign -f -s - -i $oid.shell $HOME/.local/share/other/frame.new/swoop-shell-mac\$" "$log" || fail "the made tool's frame was not signed under its own id"
+[ -f "$oplist" ] || fail "no frame plist under the made tool's id: $(ls "$HOME/Library/LaunchAgents")"
+grep -q "<string>$copy</string>" "$oplist" || fail "the made tool's plist does not run its own frame"
+grep -q "<key>SWOOP_LAUNCHER</key><string>$other</string>" "$oplist" || fail "the made tool's frame does not run its own command"
+grep -q "<key>SWOOP_TOOL</key><string>$tmp/work/other/tool</string>" "$oplist" || fail "the made tool's frame is not given its tool file"
+grep -q "<key>PATH</key><string>$tmp/dir/bin:" "$oplist" || fail "the made tool's PATH does not start with the kit's bin"
+grep -q "<string>$HOME/Library/Logs/other/shell.log</string>" "$oplist" || fail "the made tool's log is not in its own folder"
+grep -q "<string>$tmp/dir/bin/swoop-clipd</string>" "$HOME/Library/LaunchAgents/$oid.clipd.plist" || fail "the made tool's watcher is not the kit's"
+grep -q "<key>SWOOP_TOOL</key><string>$tmp/work/other/tool</string>" "$HOME/Library/LaunchAgents/$oid.clipd.plist" || fail "the made tool's watcher is not given its tool file"
+[ "$(find "$HOME/Library/LaunchAgents" -name '*.plist' | wc -l | tr -d ' ')" = 4 ] || fail "not two agents for each tool: $(ls "$HOME/Library/LaunchAgents")"
+[ "$(grep -c running "$state")" = 4 ] || fail "not four services running: $(cat "$state")"
+case "$out" in *"other is installed. Press ctrl+alt+space."*) ;; *) fail "start did not say what was installed: $out" ;; esac
+opid="$(grep " XPC_SERVICE_NAME=$oid.shell\$" "$procs" | cut -d' ' -f1)"
+owatcher="$(grep " run TOOL=other " "$procs" | cut -d' ' -f1)"
+if [ -z "$opid" ] || [ -z "$owatcher" ]; then fail "the made tool is not running: $(cat "$procs")"; fi
+
+# Each status shows its own frame and its own watcher.
+verb 0 "$other" status
+case "$out" in *"frame:   running, pid $opid, hotkey ctrl+alt+space"*"$copy, installed by launchd"*) ;; *) fail "the made tool's status: $out" ;; esac
+case "$out" in *"watcher: running, pid $owatcher, "*) ;; *) fail "the made tool's status, watcher: $out" ;; esac
+verb 0 "$mytool" status
+case "$out" in *"frame:   running, pid $mypid, "*"$frame, installed by launchd"*) ;; *) fail "the first tool's status, beside the made tool: $out" ;; esac
+case "$out" in *"watcher: running, pid $mywatcher, "*) ;; *) fail "the first tool's status, watcher: $out" ;; esac
+
+# A start of a tool that runs changes nothing.
+verb 0 "$other" start
+if grep -q '^launchctl bootstrap\|^codesign' "$log"; then fail "start installed a tool already running"; fi
+mine "a second start"
+
+# Stop one: the other keeps running.
+verb 0 "$other" stop
+mine "the made tool's stop"
+grep -q "^launchctl bootout gui/501/$oid.shell" "$log" || fail "the made tool's frame was not stopped"
+grep -q "^launchctl bootout gui/501/$oid.clipd" "$log" || fail "the made tool's watcher was not stopped"
+[ "$(cat "$state")" = "$id.clipd running
+$id.shell running" ] || fail "after the made tool's stop: $(cat "$state")"
+if grep -q "^$opid \|^$owatcher " "$procs"; then fail "the made tool still runs after its stop"; fi
+verb 0 "$other" status
+case "$out" in *"frame:   not running"*"$copy, installed by launchd"*) ;; *) fail "the made tool's status, stopped: $out" ;; esac
+verb 0 "$mytool" status
+case "$out" in *"frame:   running, pid $mypid, "*) ;; *) fail "the first tool's status after the other's stop: $out" ;; esac
+
+# And the other way: stop the first, the made tool keeps running. Its
+# start after a stop installs again, with the certificate of its own name
+# when the keychain has one.
+SWOOP_TEST_IDENTITY=other-dev verb 0 "$other" start
+grep -q "^codesign -f -s other-dev -i $oid.shell " "$log" || fail "the made tool's frame was not signed with its own certificate"
+opid="$(grep " XPC_SERVICE_NAME=$oid.shell\$" "$procs" | cut -d' ' -f1)"
+owatcher="$(grep " run TOOL=other " "$procs" | cut -d' ' -f1)"
+verb 0 "$mytool" stop
+grep -q "^$opid " "$procs" || fail "the first tool's stop stopped the made tool's frame"
+grep -q "^$owatcher " "$procs" || fail "the first tool's stop stopped the made tool's watcher"
+if grep -q "^launchctl bootout gui/501/$oid\." "$log"; then fail "the first tool's stop unloaded the made tool's services"; fi
+verb 0 "$mytool" start
+
+# restart installs again, so the frame is the kit's newest, and takes
+# this tool's strays with it: a frame started by hand on its command.
+# The first tool's frame started by hand stays.
+for _ in 1 2 3; do "$tmp/dir/bin/swoop-clipd" status > /dev/null && break; done
+mypid="$(grep " XPC_SERVICE_NAME=$id.shell\$" "$procs" | cut -d' ' -f1)"
+mywatcher="$(grep " run TOOL=mytool " "$procs" | cut -d' ' -f1)"
+echo "9000010 $frame SWOOP_LAUNCHER=$other" >> "$procs"
+echo "9000011 $frame SWOOP_LAUNCHER=$mytool" >> "$procs"
+verb 0 "$other" restart
+mine "the made tool's restart"
+grep -q '^codesign ' "$log" || fail "restart did not make the frame again"
+grep -q '^kill 9000010$' "$log" || fail "restart left the made tool's frame started by hand"
+grep -q '^9000011 ' "$procs" || fail "restart stopped the first tool's frame started by hand"
+[ "$(grep -c running "$state")" = 4 ] || fail "after a restart: $(cat "$state")"
+[ "$(running " SWOOP_LAUNCHER=$other")" = 1 ] || fail "after a restart: the made tool's frames $(running " SWOOP_LAUNCHER=$other")"
+[ "$(running ' run TOOL=other ')" = 1 ] || fail "after a restart: the made tool's watchers $(running ' run TOOL=other ')"
+opid="$(grep " XPC_SERVICE_NAME=$oid.shell\$" "$procs" | cut -d' ' -f1)"
+owatcher="$(grep " run TOOL=other " "$procs" | cut -d' ' -f1)"
+
+# The first tool's installer, run beside the made tool: the made tool's
+# frame and watcher are the same two programs, and both stay.
+: > "$log"
+out="$(swoop_launchd "$tmp/dir" "$frame" 2>&1)" || fail "swoop_launchd beside the made tool failed: $out"
+grep -q '^kill 9000011$' "$log" || fail "the installer left the first tool's frame started by hand"
+grep -q "^$opid " "$procs" || fail "the first tool's installer stopped the made tool's frame"
+grep -q "^$owatcher " "$procs" || fail "the first tool's installer stopped the made tool's watcher"
+if grep -q "^launchctl bootout gui/501/$oid\." "$log"; then fail "the first tool's installer unloaded the made tool's services"; fi
+if grep -q '^pkill' "$log"; then fail "the first tool's installer stopped a process by the name of its program"; fi
+[ "$(grep -c running "$state")" = 4 ] || fail "after the first tool's installer: $(cat "$state")"
+
+# What a start needs, and what it says without it: the tool's own command
+# where `new` puts it, and a kit that has a frame.
+mkdir -p "$tmp/work/bare"
+printf 'name bare\n' > "$tmp/work/bare/tool"
+SWOOP_TOOL="$tmp/work/bare/tool" verb 1 "$mytool" start
+case "$out" in "bare start: there is no command at $tmp/work/bare/bin/bare"*) ;; *) fail "a tool with no command of its own: $out" ;; esac
+verb 0 "$mytool" new third
+rm "$frame"
+verb 1 "$tmp/work/third/bin/third" start
+case "$out" in "third start: the kit in $tmp/dir has no frame"*) ;; *) fail "a kit with no frame: $out" ;; esac
+[ ! -e "$HOME/Library/LaunchAgents/dev.third.shell.plist" ] || fail "agents were written for a tool with no frame"
+cd "$root"
 
 # The checkout's own tool file: what the launcher says with no SWOOP_TOOL is
 # what the file at the root says, line for line.
-unset SWOOP_TOOL
-out="$("$launcher" tool)"
+out="$("$root/bin/swoop" tool)"
 [ "$out" = "$(grep -v '^#' "$root/tool" | grep .)" ] || fail "the checkout's tool file and \`tool\` disagree: $out"
 
 echo "launchd-test: ok"

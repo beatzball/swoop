@@ -10,6 +10,7 @@
 //	swoop-clipd delete <id>     remove one entry
 //	swoop-clipd clear           remove every entry
 //	swoop-clipd status          say whether a watcher runs
+//	swoop-clipd pid             the process id of this tool's watcher
 //	swoop-clipd types           the marks on the clipboard right now
 //	swoop-clipd frontmost       the bundle id of the app in front
 //
@@ -40,7 +41,7 @@ const interval = 300 * time.Millisecond
 
 func main() {
 	if len(os.Args) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: swoop-clipd start|run|list [query]|get <id>|delete <id>|clear|status|types|frontmost")
+		fmt.Fprintln(os.Stderr, "usage: swoop-clipd start|run|list [query]|get <id>|delete <id>|clear|status|pid|types|frontmost")
 		os.Exit(2)
 	}
 	store := clip.Default()
@@ -57,6 +58,17 @@ func main() {
 			fmt.Println("not running")
 			os.Exit(1)
 		}
+	case "pid":
+		// The watcher of the tool this runs as, and of no other: two
+		// tools on one machine each have a watcher, the same program, and
+		// a script that stops one must not stop the other. Nothing is
+		// printed, and the exit is 1, when no watcher runs or when the
+		// one that runs is too old to have said who it is.
+		pid, ok := holder(store)
+		if !ok {
+			os.Exit(1)
+		}
+		fmt.Println(pid)
 	case "list":
 		q := ""
 		if len(os.Args) > 2 {
@@ -119,6 +131,9 @@ func run(store clip.Store) error {
 		return err
 	}
 	defer unlock()
+	if err := sign(store); err != nil {
+		return err
+	}
 	pb, err := openPasteboard()
 	if err != nil {
 		return err

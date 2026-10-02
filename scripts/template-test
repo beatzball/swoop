@@ -56,8 +56,12 @@ made() {
   [ -z "$left" ] || fail "a path still holds the placeholder: $left"
   left="$(grep -rl '@NAME@' mytool || true)"
   [ -z "$left" ] || fail "a file still holds the placeholder: $left"
-  # What it says to do next is the command that works.
-  case "$out" in *"mytool/bin/mytool"*) ;; *) fail "new did not say how to run it: $out" ;; esac
+  # What it says to do next is the command that works, and the one that
+  # gives the tool its frame. scripts/launchd-test runs that start.
+  case "$out" in *"  mytool/bin/mytool
+"*) ;; *) fail "new did not say how to run it: $out" ;; esac
+  case "$out" in *"  mytool/bin/mytool start
+"*) ;; *) fail "new did not say how to start the frame: $out" ;; esac
 }
 check "new: every file of the template, named for the tool" made
 
@@ -67,7 +71,10 @@ named() {
   [ "$out" = "name mytool
 title mytool
 id dev.mytool
-hotkey alt+shift+space" ] || fail "mytool tool said: $out"
+hotkey ctrl+alt+space" ] || fail "mytool tool said: $out"
+  # A key of its own: the made tool's frame runs beside the frame of the
+  # tool that made it, and one key cannot open both.
+  [ "$("$launcher" tool hotkey)" != ctrl+alt+space ] || fail "the made tool has the key of the tool that made it"
   # A link from a folder on PATH is how the command is installed. Where a
   # link is a copy, as in Git Bash, there is nothing to follow.
   mkdir -p "$tmp/links"
