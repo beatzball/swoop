@@ -85,7 +85,9 @@ check "the command: the tool file's four lines, through a link too" named
 
 rows() {
   local hello=mytool/extensions/hello/hello out got=0
-  # TODO(#225): run swoop-check on mytool/extensions/hello/hello here.
+  # The conformance test for CONTRACT.md, on the extension the template
+  # ships: the made tool's own tool file names it, as the launcher would.
+  out="$(SWOOP_TOOL="$PWD/mytool/tool" PATH="$with_kit" swoop-check -limit 10s mytool/extensions/hello/ 2>&1)" || fail "swoop-check on hello: $out"
   out="$(SWOOP_TOOL_NAME=mytool "$hello" list)" || fail "hello list failed"
   [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" = 3 ] || fail "want three rows: $out"
   # Five fields, the id and the title filled in, on every row.
