@@ -98,16 +98,22 @@ BUDGETS = {
     # The parts of those keys, one process each.
     #
     # The root's rows for a text: every extension that is not kept for
-    # the run is asked, side by side. The laptop is at 16.
-    "nav.rows": 60,
+    # the run is asked, side by side. The laptop is at 16. The hosted
+    # macOS runner starts a process at about five times the laptop's
+    # cost, not three: its first run on 2026-10-02 was 74, so the budget
+    # is sized for that runner, and a laptop past 60 is the thing to see
+    # in the comparison, not here.
+    "nav.rows": 120,
     # swoop-nav deciding what a key does, and a view's own filter: no
     # other process started, 2 to 3 ms on the laptop. 15 is a tenth of
     # the key it is part of, so it stays the small part.
     "nav.": 15,
     "view.": 15,
     # swoop-preview, the extension's shim, and the tool behind it: three
-    # processes, 7 on the laptop.
-    "preview.": 30,
+    # processes, 7 on the laptop, 42 to 46 on the hosted macOS runner on
+    # 2026-10-02 (the same five times, three processes). #213 names the
+    # shim as the first cost to take back.
+    "preview.": 80,
     # An extension's `list`. They run side by side at the start, so Open
     # waits for the slowest. The issue's 50 ms; the slowest is at 6 on
     # the laptop, so this one has room and a slow new extension has not.
