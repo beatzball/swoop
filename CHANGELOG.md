@@ -34,6 +34,30 @@ so here.
   real, for an extension whose run is safe to do once. `make test` and
   CI run it on every bundled extension, through `scripts/contract-test`,
   in a home of its own.
+- **`swoop new <name>` makes a tool of your own.** One command makes a
+  folder with a `tool` file filled in with the name, one extension in ten
+  lines of shell that lists three rows and runs one, the command
+  `bin/<name>`, and a README. `<name>/bin/<name>` opens it in a terminal:
+  its three rows and none of swoop's, in folders of its own. The files
+  come from `templates/tool` in the repository, which ships in every
+  release beside `extensions`, and `make test` makes a tool from them and
+  checks it. `new` takes one plain word and writes over nothing. The
+  site has a page for it, [Build Your Own
+  Tool](https://swoop.sh/docs/build-your-own): what the folder holds, how
+  to add an extension, how to name the frame, and how to ship it.
+- **`SWOOP_TOOL_NAME`, the tool's name, for an extension.** The launcher
+  reads it from the `tool` file and sets it for everything it runs, so an
+  extension that keeps a file of its own puts it under
+  `~/.local/share/<name>` or `~/.local/state/<name>` without reading the
+  file itself. It joins the contract's variables.
+
+### Changed
+
+- **Define Word and Reminders keep their files in the folder of the tool
+  they run under.** Both spelled swoop's. They take the folder from
+  `SWOOP_TOOL_NAME` now, so under a tool of your own the words you looked
+  up and the cache of reminders are that tool's. Under swoop nothing
+  moves.
 
 ### Fixed
 

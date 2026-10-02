@@ -1400,6 +1400,44 @@ printf 'b\\tcommand\\t\\tSlow Live Row\\tasked again\\n'
             finally:
                 w.kill()
         check("a slow start: the kept list waits, a late list is asked again", slow_start)
+        # 19. the template: `new` makes a tool from templates/tool, and
+        # the command it made opens it. The template's three rows and no
+        # others, each naming the tool, which the extension has from
+        # SWOOP_TOOL_NAME and the launcher from the tool file; the
+        # preview; Enter runs the row. scripts/template-test holds the
+        # files to the template; this is the made tool in a real fzf
+        def template():
+            work = os.path.join(tmp, "made")
+            os.makedirs(work)
+            # None of the harness's extensions, and a name left in the
+            # environment that is not this tool's: the launcher's wins.
+            own = dict(env, SWOOP_TOOL_NAME="another")
+            own.pop("SWOOP_EXTENSIONS")
+            made = subprocess.run([os.path.join(ROOT, "bin", "swoop"), "new", "madetool"], cwd=work, env=own, capture_output=True, text=True)
+            if made.returncode != 0:
+                fail(f"new madetool exited {made.returncode}: {made.stdout}{made.stderr}")
+            shim = os.path.join(work, "madetool", "bin", "madetool")
+            t = Launcher(own, script=shim)
+            t.key = key
+            try:
+                st = t.wait_state(lambda s: s["totalCount"] == 3 and s.get("current"), what="the template's three rows")
+                rows = [m["text"] for m in st["matches"]]
+                if sum("Hello " in r and "a row of madetool" in r for r in rows) != 3:
+                    fail(f"the template's rows, each naming the tool: {rows}", t.buf)
+                t.press("two", lambda s: s["query"] == "two" and s["matchCount"] == 1 and "Hello two" in cur(s), screen=r"Enter says hello two", what="one row, with its preview")
+                t.clear()
+                t.send("\r")
+                # The run's own line, printed once fzf has gone: what the
+                # state cannot hold, so it is waited for on the screen.
+                t.expect(r"hello two", what="the row's run saying which row")
+                code = t.wait_exit()
+                if code != 0:
+                    fail(f"madetool exited {code}", t.buf)
+                if "swoop-nav:" in t.buf or "swoop-run:" in t.buf:
+                    fail("the made tool printed an error", t.buf)
+            finally:
+                t.kill()
+        check("the template: new makes a tool that opens, lists and runs", template)
     finally:
         L.kill()
         # The worker may still be around on a fast failure.

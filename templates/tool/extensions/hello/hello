@@ -1,0 +1,13 @@
+#!/bin/sh
+# hello: three rows, a preview for each, and a run that says which one.
+# A row is five fields with tabs between: id, kind, icon, title, subtitle.
+# SWOOP_TOOL_NAME is the tool this runs under; the launcher sets it.
+case "${1:-}" in
+  list)
+    for n in one two three; do
+      printf '%s\tgreeting\t\tHello %s\ta row of %s\n' "$n" "$n" "${SWOOP_TOOL_NAME:-this tool}"
+    done ;;
+  preview) echo "Enter says hello $2." ;;
+  run) echo "hello $2" ;;
+  *) echo "usage: hello list | preview <id> | run <id>" >&2; exit 2 ;;
+esac

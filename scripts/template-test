@@ -1,0 +1,190 @@
+#!/usr/bin/env bash
+# template-test: `<name> new` and the template it copies, templates/tool.
+# It makes a tool in a temp folder the way a person would, and holds the
+# result to what the page and the template's README promise: the files,
+# the command, the tool file's four lines, the extension's rows. Then the
+# refusals: nothing is ever written over.
+#
+# The last part is SWOOP_TOOL_NAME, the tool's name as the launcher gives
+# it to an extension: that the launcher sets it from the tool file, and
+# that define keeps its words in the folder of the tool it runs under.
+# scripts/reminders-test holds reminders to the same, with its fakes.
+#
+# No fzf and no built tools: the launcher's verbs are bash, and where it
+# would start a program a fake stands in. scripts/launcher-test opens the
+# made tool in a real fzf. It runs everywhere, in seconds, as part of
+# `make test`.
+set -euo pipefail
+# A tool file or a name from the caller's environment would be another
+# tool's.
+unset SWOOP_TOOL SWOOP_TOOL_NAME SWOOP_EXTENSIONS
+# Not inside a frame, even when this runs from one: a launcher on its way
+# out tells the frame named here to put its panel away.
+unset SWOOP_SHELL SWOOP_SHELL_PID
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+tmp="$(mktemp -d "${TMPDIR:-/tmp}/swoop-template-test.XXXXXX")"
+trap 'rm -rf "$tmp"' EXIT
+export HOME="$tmp/home" XDG_DATA_HOME="$tmp/data"
+mkdir -p "$HOME" "$tmp/work"
+cd "$tmp/work"
+launcher="$root/bin/swoop"
+template="$root/templates/tool"
+# What a person's shell has once the kit is installed: its launcher, by
+# name. The made command runs it by name.
+with_kit="$root/bin:$PATH"
+
+fail() { echo "template-test: FAIL: $*" >&2; exit 1; }
+check() { printf '  %s ...' "$1"; "$2"; echo " ok"; }
+
+made() {
+  local out f want got left
+  out="$("$launcher" new mytool 2>&1)" || fail "new mytool failed: $out"
+  for f in tool README.md bin/mytool extensions/hello/hello; do
+    [ -f "mytool/$f" ] || fail "no mytool/$f: $(find mytool -type f)"
+  done
+  [ -x mytool/bin/mytool ] || fail "the command cannot be run"
+  [ -x mytool/extensions/hello/hello ] || fail "the extension cannot be run"
+  # Every file of the template, and nothing of the placeholder left in a
+  # path or in a text.
+  want="$(cd "$template" && find . -type f ! -name .DS_Store | wc -l | tr -d ' ')"
+  got="$(find mytool -type f | wc -l | tr -d ' ')"
+  [ "$got" = "$want" ] || fail "the template has $want files, the tool $got"
+  # Into a variable, not grep -q on a pipe: grep -q stops reading at its
+  # match, and under pipefail the writer's broken pipe would hide it.
+  left="$(find mytool -name '*@NAME@*')"
+  [ -z "$left" ] || fail "a path still holds the placeholder: $left"
+  left="$(grep -rl '@NAME@' mytool || true)"
+  [ -z "$left" ] || fail "a file still holds the placeholder: $left"
+  # What it says to do next is the command that works.
+  case "$out" in *"mytool/bin/mytool"*) ;; *) fail "new did not say how to run it: $out" ;; esac
+}
+check "new: every file of the template, named for the tool" made
+
+named() {
+  local out got=0
+  out="$(PATH="$with_kit" mytool/bin/mytool tool)" || fail "mytool tool failed"
+  [ "$out" = "name mytool
+title mytool
+id dev.mytool
+hotkey alt+shift+space" ] || fail "mytool tool said: $out"
+  # A link from a folder on PATH is how the command is installed. Where a
+  # link is a copy, as in Git Bash, there is nothing to follow.
+  mkdir -p "$tmp/links"
+  ln -s "$tmp/work/mytool/bin/mytool" "$tmp/links/mytool"
+  if [ -L "$tmp/links/mytool" ]; then
+    out="$(PATH="$tmp/links:$with_kit" mytool tool name)" || fail "the linked command failed"
+    [ "$out" = mytool ] || fail "through a link the tool is $out"
+  fi
+  # With no launcher to run, one line that says so.
+  out="$(PATH=/usr/bin:/bin mytool/bin/mytool tool 2>&1)" || got=$?
+  [ "$got" = 127 ] || fail "with no kit on PATH: exit $got, want 127: $out"
+  case "$out" in "mytool: swoop, the launcher of swoopkit, is not on PATH") ;; *) fail "with no kit on PATH it said: $out" ;; esac
+}
+check "the command: the tool file's four lines, through a link too" named
+
+rows() {
+  local hello=mytool/extensions/hello/hello out got=0
+  # The conformance test for CONTRACT.md, on the extension the template
+  # ships: the made tool's own tool file names it, as the launcher would.
+  out="$(SWOOP_TOOL="$PWD/mytool/tool" PATH="$with_kit" swoop-check -limit 10s mytool/extensions/hello/ 2>&1)" || fail "swoop-check on hello: $out"
+  out="$(SWOOP_TOOL_NAME=mytool "$hello" list)" || fail "hello list failed"
+  [ "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" = 3 ] || fail "want three rows: $out"
+  # Five fields, the id and the title filled in, on every row.
+  printf '%s\n' "$out" | awk -F '\t' 'NF != 5 || $1 == "" || $2 == "" || $4 == "" { bad = 1 } END { exit bad }' ||
+    fail "a row is not id, kind, icon, title, subtitle: $out"
+  [ "$(printf '%s\n' "$out" | grep -c 'a row of mytool$')" = 3 ] || fail "the rows do not name the tool: $out"
+  out="$("$hello" preview two)" || fail "hello preview failed"
+  [ -n "$out" ] || fail "an empty preview"
+  out="$("$hello" run two)" || fail "hello run failed"
+  [ "$out" = "hello two" ] || fail "run said: $out"
+  # A verb it does not have is a non-zero exit, as the contract asks.
+  "$hello" actions two >/dev/null 2>&1 || got=$?
+  [ "$got" != 0 ] || fail "a verb the extension does not have exited 0"
+}
+check "the extension: three rows, a preview, a run" rows
+
+page() {
+  # The site's page shows the extension whole. What it shows is the
+  # template's file, line for line, so the page cannot drift from what
+  # `new` makes.
+  local doc="$root/site/content/docs/build-your-own.md" shown
+  shown="$(awk '/^```sh$/ { getline; if ($0 == "#!/bin/sh") { on = 1 } } /^```$/ { on = 0 } on' "$doc")"
+  [ "$shown" = "$(cat "$template/extensions/hello/hello")" ] ||
+    fail "the page's hello is not the template's: $(diff <(printf '%s\n' "$shown") "$template/extensions/hello/hello" || true)"
+}
+check "the page shows the template's extension, line for line" page
+
+refused() {
+  local out got before
+  before="$(find mytool -type f -exec cksum {} + | sort)"
+  got=0; out="$("$launcher" new mytool 2>&1)" || got=$?
+  [ "$got" = 1 ] || fail "new over a folder that is there: exit $got: $out"
+  [ "$(find mytool -type f -exec cksum {} + | sort)" = "$before" ] || fail "new changed a tool that was already there"
+  : > taken
+  got=0; out="$("$launcher" new taken 2>&1)" || got=$?
+  if ! { [ "$got" = 1 ] && [ ! -s taken ] && [ -f taken ]; }; then fail "new over a file that is there: exit $got: $out"; fi
+  got=0; out="$("$launcher" new 2>&1)" || got=$?
+  [ "$got" = 2 ] || fail "new with no name: exit $got: $out"
+  got=0; out="$("$launcher" new 'my tool' 2>&1)" || got=$?
+  if ! { [ "$got" = 2 ] && [ ! -e 'my tool' ]; }; then fail "new with a name of two words: exit $got: $out"; fi
+  got=0; out="$("$launcher" new ../up 2>&1)" || got=$?
+  if ! { [ "$got" = 2 ] && [ ! -e ../up ]; }; then fail "new with a path for a name: exit $got: $out"; fi
+  got=0; out="$("$launcher" new swoop-nav 2>&1)" || got=$?
+  if ! { [ "$got" = 2 ] && [ ! -e swoop-nav ]; }; then fail "new with a name of the kit's own: exit $got: $out"; fi
+}
+check "new writes over nothing, and takes one plain word" refused
+
+second() {
+  # The template is the kit's, whichever tool asks: the made tool makes
+  # another, and it is named for itself.
+  local out
+  out="$(PATH="$with_kit" mytool/bin/mytool new other 2>&1)" || fail "mytool new other failed: $out"
+  out="$(PATH="$with_kit" other/bin/other tool name)"
+  [ "$out" = other ] || fail "the second tool is $out"
+}
+check "a made tool makes another" second
+
+exported() {
+  # A copy of the launcher beside fakes of the two programs it starts, so
+  # no built tool and no fzf is needed. The fake swoop-nav writes down
+  # the name it was given; the fake fzf leaves as Esc does.
+  local kit="$tmp/kit" log="$tmp/nav.log" got=0
+  mkdir -p "$kit/bin"
+  cp "$launcher" "$kit/bin/swoop"
+  cat > "$kit/bin/swoop-nav" <<'EOF'
+#!/usr/bin/env bash
+echo "$1 ${SWOOP_TOOL_NAME:-}" >> "$TEMPLATE_TEST_LOG"
+[ "$1" != window ] || echo "right,58%"
+EOF
+  cat > "$kit/bin/fzf" <<'EOF'
+#!/usr/bin/env bash
+cat > /dev/null
+exit 130
+EOF
+  chmod +x "$kit/bin/"*
+  : > "$log"
+  SWOOP_TOOL_NAME=another TEMPLATE_TEST_LOG="$log" SWOOP_NO_CLIPD=1 PATH="$kit/bin:$PATH" \
+    mytool/bin/mytool < /dev/null > /dev/null 2>&1 || got=$?
+  [ "$got" = 0 ] || fail "the launcher exited $got"
+  grep -q '^rows mytool$' "$log" || fail "the launcher did not give its programs the tool's name: $(cat "$log")"
+  if grep -qv ' mytool$' "$log"; then fail "a name from the environment carried over: $(cat "$log")"; fi
+}
+check "SWOOP_TOOL_NAME: the launcher sets it from the tool file" exported
+
+words() {
+  # define reads the words looked up newest first with tail -r, which is
+  # BSD's: a Mac's, as the dictionary it shows is.
+  if [ "$(uname)" != Darwin ]; then printf ' skipped, not a Mac ...'; return 0; fi
+  local define="$root/extensions/define/define" out
+  mkdir -p "$XDG_DATA_HOME/mytool/define"
+  echo fakeword > "$XDG_DATA_HOME/mytool/define/recent"
+  out="$(SWOOP_TOOL_NAME=mytool "$define" view define)" || fail "define view failed"
+  case "$out" in fakeword$'\t'*) ;; *) fail "define did not read the tool's own folder: $out" ;; esac
+  # With no launcher there is no name, and the folder is the kit's own.
+  out="$("$define" view define)" || fail "define view failed with no name"
+  [ -z "$out" ] || fail "with no name define read another tool's folder: $out"
+}
+check "SWOOP_TOOL_NAME: define keeps its words in the tool's folder" words
+
+echo "template-test: ok"

@@ -29,6 +29,7 @@ export const siteConfig = {
       items: [
         { label: 'Writing an Extension', slug: 'writing-an-extension' },
         { label: 'The Extension Contract', slug: 'contract' },
+        { label: 'Build Your Own Tool', slug: 'build-your-own' },
       ],
     },
   ],

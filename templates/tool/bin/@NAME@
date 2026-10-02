@@ -1,0 +1,23 @@
+#!/bin/sh
+# @NAME@: the command. It names this tool's file and runs `swoop`, the
+# launcher of swoopkit, which reads the rest from that file: the rows come
+# from ../extensions, and the folders take the name the file gives.
+set -eu
+
+# Follow links first: a link to this file from a folder on PATH is how the
+# command is installed, and the tool file is beside the real one.
+src="$0"
+while [ -L "$src" ]; do
+  link="$(readlink "$src")"
+  case "$link" in
+    /*) src="$link" ;;
+    *) src="$(dirname "$src")/$link" ;;
+  esac
+done
+here="$(cd -P "$(dirname "$src")" && pwd)"
+
+command -v swoop >/dev/null || {
+  echo "@NAME@: swoop, the launcher of swoopkit, is not on PATH" >&2
+  exit 127
+}
+SWOOP_TOOL="$here/../tool" exec swoop "$@"

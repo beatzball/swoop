@@ -31,6 +31,7 @@ test:
 	go vet ./...
 	go test ./...
 	scripts/launchd-test
+	scripts/template-test
 	scripts/reminders-test
 	scripts/codesign-test
 	scripts/contract-test

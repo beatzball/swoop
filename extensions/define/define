@@ -8,7 +8,10 @@
 # Dictionary.app.
 set -euo pipefail
 
-recent="${XDG_DATA_HOME:-$HOME/.local/share}/swoop/define/recent"
+# The words looked up, in the data folder of the tool this runs under.
+# The launcher gives its name in SWOOP_TOOL_NAME; run by hand, with no
+# launcher, it is the kit's own.
+recent="${XDG_DATA_HOME:-$HOME/.local/share}/${SWOOP_TOOL_NAME:-swoop}/define/recent"
 words=/usr/share/dict/words
 
 row() { printf '%s\t%s\t%s\t%s\t%s\n' "$1" "$2" "$3" "$4" "$5"; }
