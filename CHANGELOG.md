@@ -9,6 +9,20 @@ so here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The launcher test no longer fails now and then on a slow runner.** It
+  looked like an Esc lost after a key opened a pane; the key was read.
+  `scripts/launcher-test` did not read the terminal while it asked fzf
+  for its state, so fzf stood still for two seconds in the middle of a
+  draw, and a list that landed in that time could be left off the
+  screen. The test now reads the terminal while it waits for fzf's
+  answer, waits for a key's whole chain before the next key where that
+  matters, prints the last keys and what each did to fzf's state when a
+  check fails, and runs in a quarter of the time. CI can run it many
+  times in a row:
+  `gh workflow run ci.yml --ref <branch> -f launcher_runs=20`.
+
 ## [0.11.0] - 2026-10-02
 
 The core knows no extension by name: the apps, Ask AI and Settings are extensions like any other, built from four small files anyone can use.

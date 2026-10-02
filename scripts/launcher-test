@@ -17,6 +17,7 @@ searched. That is enough to say "this word appeared after that key",
 which is what every check here is.
 """
 
+import collections
 import datetime
 import glob
 import json
@@ -37,8 +38,23 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ESC = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]|\x1b[()][A-Z0-9]|\x1b[=>]|\x1b\][^\x07]*\x07|\x1b\\|\x1bP[^\x1b]*\x1b\\")
 
 
+# The last keys sent and each change they made in fzf's state, with the
+# time of each. A failure prints it, so a run on a slow runner says what
+# the key's chain did, and not only where the test stopped waiting.
+TRACE = collections.deque(maxlen=60)
+T0 = time.time()
+
+
+def note(text):
+    TRACE.append(f"{time.time() - T0:8.3f}  {text}")
+
+
 def fail(msg, tail=""):
     print("launcher-test: FAIL:", msg, file=sys.stderr)
+    if TRACE:
+        print("--- the last keys, and fzf's state after each change:", file=sys.stderr)
+        for line in TRACE:
+            print(line, file=sys.stderr)
     if tail:
         print("--- last screen output:", file=sys.stderr)
         print(tail[-2500:], file=sys.stderr)
@@ -62,16 +78,26 @@ def has(s, text):
     return any(text in m["text"] for m in s.get("matches", []))
 
 
+def at_rest(s):
+    """Whether the cursor is on a row it can rest on: a row, and not a
+    header (kind "group", the second field), which swoop-nav step moves
+    it off in the same chain as the move that came to it."""
+    return bool(s.get("current")) and (cur(s).split("\t") + [""])[1] != "group"
+
+
 def down_to(ln, text, what, most=10):
     """Move the cursor down until the current row holds `text`, `most`
     rows at the most. Each Down waits for the cursor to leave the row it
-    was on, so the next one is not sent before this one has moved it."""
+    was on and come to rest, so the next one is not sent before this one
+    has moved it. To rest, because Down onto a header is two moves: seen
+    on the header between them, the cursor had left its row, and the next
+    look found it moved again with no key sent."""
     for _ in range(most):
-        st = ln.wait_state(lambda s: s.get("current"), what="a row under the cursor")
+        st = ln.wait_state(at_rest, what="a row under the cursor")
         if text in cur(st):
             return
         idx = st["current"]["index"]
-        ln.press("\x1b[B", lambda s: s.get("current") and s["current"]["index"] != idx, what=f"the cursor moving down, on the way to {what}")
+        ln.press("\x1b[B", lambda s: at_rest(s) and s["current"]["index"] != idx, what=f"the cursor moving down, on the way to {what}")
     fail(f"no {what}: {ln.state()}", ln.buf)
 
 
@@ -90,23 +116,26 @@ class Launcher:
         self._buf = ""
         self._stripped_upto = 0
         self.eof = False
+        self.seen = None
+
+    def take(self):
+        """Read what the terminal holds now, appending to the buffer."""
+        try:
+            data = os.read(self.fd, 65536)
+        except OSError:
+            data = b""
+        if not data:
+            self.eof = True
+            return
+        self.raw += data.decode("utf-8", "replace")
 
     def read(self, seconds):
         """Read for up to `seconds`, appending to the buffer."""
         end = time.time() + seconds
-        while time.time() < end:
+        while time.time() < end and not self.eof:
             r, _, _ = select.select([self.fd], [], [], 0.05)
-            if not r:
-                continue
-            try:
-                data = os.read(self.fd, 65536)
-            except OSError:
-                self.eof = True
-                return
-            if not data:
-                self.eof = True
-                return
-            self.raw += data.decode("utf-8", "replace")
+            if r:
+                self.take()
 
     @property
     def buf(self):
@@ -120,6 +149,7 @@ class Launcher:
         return self._buf
 
     def send(self, text):
+        note(f"keys  {text!r}")
         os.write(self.fd, text.encode() if isinstance(text, str) else text)
 
     def expect(self, pattern, timeout=10.0, what=None):
@@ -147,43 +177,92 @@ class Launcher:
         match count, the row under the cursor, and with a limit the first
         that many matches. Exact where the screen stream is not: a redraw
         in flight can show the old list under the new prompt, but fzf
-        knows what it holds."""
+        knows what it holds.
+
+        The terminal is read while the answer is on its way. fzf draws
+        with its lock held and answers this request under the same lock.
+        With nobody reading, a frame larger than the pseudo-terminal's
+        buffer stopped the draw, and fzf stood still for the two seconds
+        this request had. That is not only slow. A reload that landed in
+        those seconds was handed to fzf's matcher in the same instant as
+        the search of the old list its key had asked for; the matcher
+        keeps one of two requests that wait together, either one, and
+        when it kept the old list's, that list stayed on the screen under
+        the new one's count. It looked like a lost Esc, and was not
+        (#216)."""
         if self.sock is None:
             socks = glob.glob(os.path.join(os.environ["SWOOP_TEST_TMP"], "swoop-state.*.sock"))
             if not socks:
                 return None
             self.sock = socks[0]
         try:
-            c = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            c.settimeout(2)
-            c.connect(self.sock)
-            path = f"/?limit={limit}" if limit else "/"
-            c.sendall(f"GET {path} HTTP/1.0\r\nx-api-key: {self.key}\r\n\r\n".encode())
-            data = b""
-            while True:
-                chunk = c.recv(65536)
-                if not chunk:
-                    break
-                data += chunk
-            c.close()
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as c:
+                c.settimeout(2)
+                c.connect(self.sock)
+                path = f"/?limit={limit}" if limit else "/"
+                c.sendall(f"GET {path} HTTP/1.0\r\nx-api-key: {self.key}\r\n\r\n".encode())
+                data = b""
+                end = time.time() + 2
+                while True:
+                    left = end - time.time()
+                    if left <= 0:
+                        return None
+                    r, _, _ = select.select([c] if self.eof else [c, self.fd], [], [], left)
+                    if self.fd in r:
+                        self.take()
+                    if c in r:
+                        chunk = c.recv(65536)
+                        if not chunk:
+                            break
+                        data += chunk
         except OSError:
             return None
         body = data.split(b"\r\n\r\n", 1)[-1]
         try:
-            return json.loads(body)
+            st = json.loads(body)
         except ValueError:
             return None
+        # fzf answers a request it could not get to with an error, and
+        # that is no state.
+        if "query" not in st:
+            return None
+        seen = (st["reading"], st["query"], st["totalCount"], st["matchCount"], cur(st).split("\t")[0])
+        if seen != self.seen:
+            self.seen = seen
+            note("state reading=%s query=%r total=%d matches=%d cursor=%r" % seen)
+        return st
+
+    def settled(self, s):
+        """Whether the chain of the last key is done, and the launcher
+        ready for the next one: fzf holds the whole list, and swoop-nav
+        has no cursor left to place. A chain that lands on another pane's
+        list writes where the cursor goes to the state file ("land", see
+        nav.Landing), and swoop-nav landed takes it out again once the
+        cursor is there, which is the last thing such a chain does. Rows
+        under the cursor say less: they are the chain's middle."""
+        if s["reading"]:
+            return False
+        try:
+            with open(self.sock[:-len(".sock")]) as f:
+                text = f.read()
+        except OSError:
+            return False
+        try:
+            return not text or "land" not in json.loads(text)
+        except ValueError:
+            return False
 
     def wait_state(self, pred, timeout=10.0, what="", limit=1000):
         """Wait until fzf's state satisfies pred; returns it. The state
         carries up to `limit` matches, for a pred that looks past the
-        current row."""
+        current row. The looks come close together: each is a few
+        milliseconds, and the failure trace is made of them."""
         end = time.time() + timeout
         while time.time() < end:
             st = self.state(limit)
             if st and pred(st):
                 return st
-            self.read(0.1)
+            self.read(0.02)
         fail(f"fzf never reached: {what}; last state {self.state()}", self.buf)
 
     def press(self, keys, until=None, screen=None, what="", timeout=10.0):
@@ -202,7 +281,9 @@ class Launcher:
         No chain ends in fzf's wait, which drops keys (see nav.LandEvent),
         so a key sent before a pop or a tick has landed is read, not lost.
         A pop's cursor lands by an event after its list shows; a pred that
-        names the row under the cursor waits for that too."""
+        names the row under the cursor waits for that too, and one that
+        asks settled() waits for the whole chain, which is what to wait
+        on before a key that must not meet the chain's tail."""
         if until:
             before = self.state(1000)
             if before and until(before):
@@ -520,8 +601,9 @@ esac
 
         # 3. the action menu
         def actions():
-            # ctrl-k on the highlighted view row
-            L.press("\x0b", lambda s: has(s, "Copy Fake") and has(s, "Delete Fake"), screen=r"actions > ", what="the actions menu")
+            # ctrl-k on the highlighted view row. Esc follows, so the wait
+            # is for the menu's whole chain, not its rows alone.
+            L.press("\x0b", lambda s: has(s, "Copy Fake") and has(s, "Delete Fake") and L.settled(s), screen=r"actions > ", what="the actions menu")
             L.press("\x1b", lambda s: s["query"] == "fake things" and "Fake Things" in cur(s), what="back at the root with the text")
         check("action menu", actions)
 
@@ -722,8 +804,11 @@ esac
                     fail(f"the key report lacks {line!r}:\n{report}", L.buf)
 
             def tab_opens(row, prompt, what):
-                L.press("\t", lambda s: row in cur(s), screen=prompt, what=what)
-                L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search"), what="the root list after Esc")
+                # Each key waits for the other's whole chain, not for its
+                # rows alone: Esc goes to a pane that is all there, and
+                # the next key to a root whose cursor has been placed.
+                L.press("\t", lambda s: row in cur(s) and L.settled(s), screen=prompt, what=what)
+                L.press("\x1b", lambda s: s["query"] == "" and has(s, "Fake Search") and L.settled(s), what="the root list after Esc")
             tab_opens("ext/ai/new", r"Ask AI > ", "Tab opening Ask AI while it is on")
             flip_extension(L, config, "ai", want_off=True)
             tab_opens("ext/prompter/inbox", r"Prompter > ", "Tab opening the other extension's pane with Ask AI off")
@@ -1090,7 +1175,7 @@ esac
             try:
                 a.wait_state(lambda s: s["totalCount"] > 3, what="the launcher's list")
                 a.press("quokka", lambda s: s["query"] == "quokka" and s["matchCount"] == 1 and "Quokka" in cur(s), what="the fake app's row")
-                a.press("\x0b", lambda s: s["totalCount"] == 3 and has(s, "Open") and has(s, "Copy path"), screen=r"Quokka actions > ", what="the app's three actions")
+                a.press("\x0b", lambda s: s["totalCount"] == 3 and has(s, "Open") and has(s, "Copy path") and a.settled(s), screen=r"Quokka actions > ", what="the app's three actions")
                 a.press("\x1b", lambda s: s["query"] == "quokka" and "Quokka" in cur(s), what="the app's row again after Esc")
                 a.send("\r")
                 code = a.wait_exit()
