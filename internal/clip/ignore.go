@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // IgnorePath is the list of apps whose copies are never kept: one bundle
@@ -18,7 +20,7 @@ func IgnorePath() string {
 		home, _ := os.UserHomeDir()
 		base = filepath.Join(home, ".config")
 	}
-	return filepath.Join(base, "swoop", "clipboard.ignore")
+	return filepath.Join(base, tool.Name(), "clipboard.ignore")
 }
 
 // DefaultIgnore is what the watcher uses when no list exists: the password

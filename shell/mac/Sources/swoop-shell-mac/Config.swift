@@ -1,15 +1,13 @@
 import Foundation
 
-/// The launcher's own settings file, ~/.config/swoop/config: one
+/// The launcher's own settings file, ~/.config/<name>/config: one
 /// `key = value` per line, `#` a comment. The frame reads one key from it,
 /// the hotkey, and watches the file so that a change made in the Settings
 /// pane takes effect with no restart. The Go side (internal/settings)
 /// writes it; this reads the same shape.
 enum Config {
     static var path: String {
-        let env = ProcessInfo.processInfo.environment
-        let base = env["XDG_CONFIG_HOME"] ?? (env["HOME"] ?? "") + "/.config"
-        return base + "/swoop/config"
+        Tool.configDir + "/config"
     }
 
     /// The value of key in the file, or nil when the file or the key is
@@ -29,11 +27,12 @@ enum Config {
     }
 
     /// The hotkey to register: SWOOP_HOTKEY in the environment wins, for
-    /// scripts and tests; then the file; then the default.
+    /// scripts and tests; then the file; then the tool's own, from its
+    /// tool file.
     static func hotkey() -> String {
         if let env = ProcessInfo.processInfo.environment["SWOOP_HOTKEY"], !env.isEmpty { return env }
         if let v = get("hotkey"), !v.isEmpty { return v }
-        return "alt+shift+space"
+        return Tool.current.hotkey
     }
 
     /// Calls `changed` on the main queue whenever the file's modification

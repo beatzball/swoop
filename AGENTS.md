@@ -99,6 +99,18 @@ and could be moved to its own repository without surgery:
 | `swoop` | wire the above into one `fzf` call |
 | `swoop-shell-<os>` | the only per-OS code: a window, a hotkey, a terminal surface |
 
+The programs in that table, the extension contract and the frame are
+**swoopkit**, the toolkit. swoop is one tool built on it: the kit plus the
+bundled extensions plus the file `tool` at the repository root, which says
+the tool's `name`, `title`, `id` and `hotkey`. The kit spells none of
+those. A folder (`~/.config/<name>`), a launchd label (`<id>.shell`), a
+title on screen, a signing identity or a default hotkey always comes from
+that file: `internal/tool` in Go, `bin/swoop tool [key]` in a script and
+in the frame. What does carry the kit's prefix, under every tool, is the
+kit's own: the program names and the `SWOOP_*` variables, which are the
+contract with an extension. `grep -rn swoop internal cmd shell bin scripts`
+finds those and nothing that is one tool's.
+
 - Tools talk through stdout lines. The line format is a `spec` issue. Do not
   add a field without changing the spec first
 - Nothing under `cmd/` imports another `cmd/`. Shared code goes in `internal/`

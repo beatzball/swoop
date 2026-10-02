@@ -154,7 +154,7 @@ const settingsPane = "x-apple.systempreferences:com.apple.preference.security?Pr
 
 func trusted() bool { return C.sw_trusted() != 0 }
 
-// askTrust puts swoop in the Accessibility list and opens the pane, so
+// askTrust puts the frame in the Accessibility list and opens the pane, so
 // the first run without the permission shows where to grant it.
 func askTrust() error {
 	C.sw_ask()

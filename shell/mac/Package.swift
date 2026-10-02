@@ -1,6 +1,6 @@
 // swift-tools-version: 5.9
-// The macOS frame: the only per-OS code in swoop. A floating panel, a global
-// hotkey, and a libghostty terminal surface that runs `swoop`. It holds no
+// The macOS frame: the only per-OS code in swoopkit. A floating panel, a global
+// hotkey, and a libghostty terminal surface that runs the launcher. It holds no
 // launcher logic; see the "Design: the per-OS frame" issue.
 import PackageDescription
 

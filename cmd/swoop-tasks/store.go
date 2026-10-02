@@ -1,4 +1,4 @@
-// The tasks file. One markdown checklist, ~/.local/share/swoop/tasks.md:
+// The tasks file. One markdown checklist, ~/.local/share/<name>/tasks.md:
 //
 //   - [ ] buy milk due: 2026-09-29
 //   - [x] call the bank
@@ -6,7 +6,7 @@
 // A task is a line that starts with "- [ ]" (open) or "- [x]" (done),
 // then its text, then an optional "due:" and a date. Every other line, a
 // heading, a note, a blank, is kept as it is: the file is the user's, and
-// swoop only ever changes the one line it was asked to change.
+// The tool only ever changes the one line it was asked to change.
 package main
 
 import (
@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // Task is one checklist line.
@@ -69,7 +71,7 @@ func oneLine(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// path is the file, ~/.local/share/swoop/tasks.md, or under
+// path is the file, ~/.local/share/<name>/tasks.md, or under
 // XDG_DATA_HOME when that is set, like the clipboard history.
 func path() string {
 	base := os.Getenv("XDG_DATA_HOME")
@@ -80,7 +82,7 @@ func path() string {
 		}
 		base = filepath.Join(home, ".local", "share")
 	}
-	return filepath.Join(base, "swoop", "tasks.md")
+	return filepath.Join(base, tool.Name(), "tasks.md")
 }
 
 // File is the tasks file in memory, line by line.
@@ -165,7 +167,7 @@ func (f *File) Save() error {
 }
 
 // donePath is the log of when each task was ticked: a time and the
-// task's line, tab-separated, in ~/.local/state/swoop/tasks-done.tsv, or
+// task's line, tab-separated, in ~/.local/state/<name>/tasks-done.tsv, or
 // under XDG_STATE_HOME. The done view reads it to put the most recently
 // done first. It is beside the tasks file, not in it: the checklist stays
 // a plain one that any editor can change, and losing the log loses only
@@ -179,7 +181,7 @@ func donePath() string {
 		}
 		base = filepath.Join(home, ".local", "state")
 	}
-	return filepath.Join(base, "swoop", "tasks-done.tsv")
+	return filepath.Join(base, tool.Name(), "tasks-done.tsv")
 }
 
 // loadDone reads the log: when each line was ticked, in nanoseconds. No

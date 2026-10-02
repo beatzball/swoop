@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/beatzball/swoop/internal/protocol"
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // monday is the clock the tests read: Monday 28 September 2026, mid
@@ -322,7 +323,7 @@ func useDir(t *testing.T) string {
 	t.Setenv("XDG_DATA_HOME", d)
 	// The log of when each task was ticked goes here.
 	t.Setenv("XDG_STATE_HOME", filepath.Join(d, "state"))
-	return filepath.Join(d, "swoop", "tasks.md")
+	return filepath.Join(d, tool.Name(), "tasks.md")
 }
 
 func TestAddTickUndoDelete(t *testing.T) {

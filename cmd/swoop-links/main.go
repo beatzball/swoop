@@ -2,7 +2,7 @@
 // the root. A link is a URL, a path, or a deeplink, with an app to open
 // it with if the default is not wanted. A link that holds {argument} is
 // a pane: Enter asks for text, and Enter again opens the link with the
-// text in its place. The links are one file, ~/.config/swoop/quicklinks.tsv,
+// text in its place. The links are one file, ~/.config/<name>/quicklinks.tsv,
 // edited by hand, by `add`, or by `import` of a JSON export.
 //
 //	swoop-links list [query]         the root rows, one per link
@@ -66,7 +66,7 @@ func main() {
 		}
 		err = importJSON(arg(2))
 	case "defaults":
-		_, err = os.Stdout.WriteString(defaults)
+		_, err = os.Stdout.WriteString(header() + defaults)
 	default:
 		usageExit()
 	}

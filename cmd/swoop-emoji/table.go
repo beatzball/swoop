@@ -83,7 +83,7 @@ func find(entries []Entry, char string) (Entry, bool) {
 	return Entry{}, false
 }
 
-// keywordsPath is the user's own keywords, ~/.config/swoop/emoji.keywords.
+// keywordsPath is the user's own keywords, ~/.config/<name>/emoji.keywords.
 func keywordsPath() string {
 	dir := settings.Dir()
 	if dir == "" {

@@ -17,7 +17,7 @@ import (
 // they set for their children. libghostty, in the frame, sets
 // TERM_PROGRAM=ghostty like Ghostty.app does, so the frame needs no
 // setting. tmux is deliberately not on the list: it passes the escapes
-// through only when told to, and swoop does not run under it.
+// through only when told to, and the launcher does not run under it.
 func Enabled() bool {
 	return enabled(os.Getenv)
 }

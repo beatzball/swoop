@@ -1,13 +1,19 @@
 #!/usr/bin/env bash
 # uninstall: stop and remove the two launchd agents that `scripts/install`
 # wrote. The history file, the settings, and the checkout stay.
+#
+# The labels and the title come from the tool file, through the launcher
+# beside this script: in a checkout and in a release alike, ../bin/swoop.
 set -euo pipefail
 
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 agents="$HOME/Library/LaunchAgents"
 domain="gui/$(id -u)"
+id="$("$root/bin/swoop" tool id)"
+title="$("$root/bin/swoop" tool title)"
 
-for label in dev.swoop.shell dev.swoop.clipd; do
+for label in "$id.shell" "$id.clipd"; do
   launchctl bootout "$domain/$label" >/dev/null 2>&1 && echo "stopped $label" || echo "$label was not running"
   rm -f "$agents/$label.plist"
 done
-echo "swoop is uninstalled. Your history and settings are still in place."
+echo "$title is uninstalled. Your history and settings are still in place."

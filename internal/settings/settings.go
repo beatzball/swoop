@@ -1,4 +1,4 @@
-// Package settings reads and writes ~/.config/swoop/config, the one file
+// Package settings reads and writes ~/.config/<name>/config, the one file
 // for the launcher's own choices: what the user changed with a key and
 // wants to find the same way next time. One `key = value` per line,
 // `#` starts a comment, unknown keys are kept as they are. The frame's
@@ -13,9 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/beatzball/swoop/internal/tool"
 )
 
-// Path is the file: $XDG_CONFIG_HOME/swoop/config, or ~/.config/swoop/config.
+// Path is the file: $XDG_CONFIG_HOME/<name>/config, or ~/.config/<name>/config.
 func Path() string {
 	dir := os.Getenv("XDG_CONFIG_HOME")
 	if dir == "" {
@@ -25,7 +27,7 @@ func Path() string {
 		}
 		dir = filepath.Join(home, ".config")
 	}
-	return filepath.Join(dir, "swoop", "config")
+	return filepath.Join(dir, tool.Name(), "config")
 }
 
 // Preview is the key for the preview window's width, in percent of the
@@ -45,14 +47,15 @@ const Render = "render"
 // Hotkey is the key that opens the frame, "mod+mod+key"; the frame reads
 // it at start and whenever the file changes. SWOOP_HOTKEY in the frame's
 // environment overrides it.
-const (
-	Hotkey        = "hotkey"
-	HotkeyDefault = "alt+shift+space"
-)
+const Hotkey = "hotkey"
+
+// HotkeyDefault is the key until the user picks one: the tool's own, from
+// its tool file.
+func HotkeyDefault() string { return tool.Read().Hotkey }
 
 // AI names what answers in the Ask AI pane: a preset ("claude"), ollama
 // with a model ("ollama:llama3.2"), or a command line of your own. Unset,
-// the line in ~/.config/swoop/ai, then the defaults.
+// the line in ~/.config/<name>/ai, then the defaults.
 const AI = "ai"
 
 // Ollama names the ollama model the defaults use when they fall through

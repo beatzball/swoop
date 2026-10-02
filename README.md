@@ -14,6 +14,19 @@ that prints lines.
 The plan, every design decision, and the work in progress live in the
 [issues](https://github.com/beatzball/swoop/issues). Start there.
 
+swoop is one tool built on **swoopkit**, the toolkit in this repository:
+the launcher script, `swoop-nav`, `swoop-run`, `swoop-preview`,
+`swoop-match` and the other small programs, the extension contract, and
+the frame. The kit has no rows and no name of its own to show. A tool is a
+folder with an `extensions` folder and, beside it, one file called `tool`
+that says what the tool is: `name` for its folders (`~/.config/<name>` and
+the rest) and its command, `title` for what the frame shows, `id` for its
+launchd labels, `hotkey` for the key that opens it. swoop is that file
+plus the bundled extensions; a tool of your own is another file and your
+own extensions, with the kit's programs unchanged. The programs and the
+`SWOOP_*` variables keep their names under every tool, so an extension
+written for one runs under another.
+
 ## Install
 
 With Homebrew, on a Mac or on Linux:

@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 func TestWeekStart(t *testing.T) {
@@ -21,7 +23,7 @@ func TestWeekStart(t *testing.T) {
 }
 
 func TestGetAndSetKeepOtherLines(t *testing.T) {
-	text := "# swoop\npreview = 60\n\nhotkey = alt+space\n"
+	text := "# mine\npreview = 60\n\nhotkey = alt+space\n"
 	if got := get(text, "preview", "58"); got != "60" {
 		t.Fatalf("get = %q", got)
 	}
@@ -29,7 +31,7 @@ func TestGetAndSetKeepOtherLines(t *testing.T) {
 		t.Fatalf("fallback = %q", got)
 	}
 	out := set(text, "preview", "65")
-	want := "# swoop\npreview = 65\n\nhotkey = alt+space\n"
+	want := "# mine\npreview = 65\n\nhotkey = alt+space\n"
 	if out != want {
 		t.Fatalf("set replaced wrong:\n%q\nwant\n%q", out, want)
 	}
@@ -54,7 +56,7 @@ func TestPreviewPercentFromFile(t *testing.T) {
 	if got := PreviewPercent(); got != 70 {
 		t.Fatalf("after Set: %d", got)
 	}
-	data, _ := os.ReadFile(filepath.Join(dir, "swoop", "config"))
+	data, _ := os.ReadFile(filepath.Join(dir, tool.Name(), "config"))
 	if string(data) != "preview = 70\n" {
 		t.Fatalf("file: %q", data)
 	}

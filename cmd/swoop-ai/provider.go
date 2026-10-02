@@ -40,7 +40,7 @@ const (
 
 // resolve reads the ai setting and turns it into a provider: a preset by
 // name, a preset with a model after a colon, or a line of the user's own.
-// With no setting, the line in ~/.config/swoop/ai, then claude if it is
+// With no setting, the line in ~/.config/<name>/ai, then claude if it is
 // on PATH, then ollama with the model pickOllama chooses.
 func resolve() (provider, error) {
 	web := settings.Get(settings.Web, settings.WebDefault) == "on"

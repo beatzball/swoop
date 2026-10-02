@@ -1,24 +1,26 @@
 #!/usr/bin/env bash
-# codesign-identity: make sure this Mac has swoop-dev, a self-signed
+# codesign-identity: make sure this Mac has <name>-dev, a self-signed
 # code-signing certificate in the login keychain, and print its name.
+# <name> is the tool's, from the file `tool`, which the launcher reads.
 # `make shell-mac` signs the frame with it (scripts/sign-frame).
 #
 # Why: a frame signed ad-hoc, as the linker leaves it, is a new program
 # to macOS on every build, and an Accessibility grant belongs to that one
 # build. The switch in System Settings still shows on, but every check
-# fails. Signed with one certificate and one identifier, dev.swoop.shell,
+# fails. Signed with one certificate and one identifier, <id>.shell,
 # every build is the same program to macOS, and the grant carries over.
 #
 # The first run makes the certificate and asks macOS to trust it for code
 # signing, for this user only. That shows one password prompt. Every run
 # after that finds it and changes nothing. A certificate left untrusted
 # (the prompt was cancelled) is trusted on the next run, not made again.
-# The certificate names nothing but swoop-dev.
+# The certificate names nothing but <name>-dev.
 #
 # Written for the bash macOS ships, 3.2.
 set -euo pipefail
 
-name=swoop-dev
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+name="$("$root/bin/swoop" tool name)-dev"
 keychain="$HOME/Library/Keychains/login.keychain-db"
 
 [ "$(uname -s)" = Darwin ] || { echo "codesign-identity: only macOS signs the frame" >&2; exit 1; }
@@ -60,12 +62,12 @@ EOF
   # it refuses the OpenSSL 3 defaults, and LibreSSL takes these too.
   openssl pkcs12 -export -name "$name" -inkey "$tmp/key.pem" -in "$tmp/cert.pem" \
     -keypbe PBE-SHA1-3DES -certpbe PBE-SHA1-3DES -macalg sha1 \
-    -passout pass:swoop -out "$tmp/id.p12"
+    -passout pass:throwaway -out "$tmp/id.p12"
   # -T lets codesign use the key without asking, every build. No
   # set-key-partition-list: the key's partition is apple-tool:, which
   # /usr/bin/codesign is in, and setting one asks for the keychain's
   # password on the terminal, a second prompt for nothing.
-  security import "$tmp/id.p12" -k "$keychain" -P swoop -T /usr/bin/codesign >/dev/null
+  security import "$tmp/id.p12" -k "$keychain" -P throwaway -T /usr/bin/codesign >/dev/null
 fi
 
 # Trust it for code signing, for this user. This is the password prompt.

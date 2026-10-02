@@ -20,9 +20,11 @@ import (
 
 	"github.com/jackmordaunt/icns/v3"
 	"howett.net/plist"
+
+	"github.com/beatzball/swoop/internal/tool"
 )
 
-// Info is the subset of Info.plist swoop shows.
+// Info is the subset of Info.plist the launcher shows.
 type Info struct {
 	Name     string
 	Version  string
@@ -61,7 +63,7 @@ func Describe(path string) Info {
 	return info
 }
 
-// ErrNoIcon says the bundle keeps its icon somewhere swoop cannot read yet:
+// ErrNoIcon says the bundle keeps its icon somewhere the launcher cannot read yet:
 // apps built with an asset catalog have no .icns file, only Assets.car.
 var ErrNoIcon = errors.New("bundle: no .icns icon")
 
@@ -146,7 +148,7 @@ func IconCacheDir() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "swoop", "icons")
+	return filepath.Join(dir, tool.Name(), "icons")
 }
 
 func (info Info) icnsPath() (string, error) {

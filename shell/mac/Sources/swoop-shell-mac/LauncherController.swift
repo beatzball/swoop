@@ -13,7 +13,7 @@ final class LauncherPanel: NSPanel {
 ///
 /// Hiding keeps the launcher as it is: the hotkey, or a click elsewhere,
 /// puts the panel away with your text still in the bar, and the next press
-/// brings the same launcher back. Only swoop ending, Esc at the root or
+/// brings the same launcher back. Only the launcher ending, Esc at the root or
 /// Enter's `become`, replaces it, and the replacement is started at once
 /// while the panel is hidden, so a press never shows an empty terminal.
 final class LauncherController: NSObject, NSWindowDelegate,
@@ -137,7 +137,7 @@ final class LauncherController: NSObject, NSWindowDelegate,
     /// while it is: see SelfWatch.
     var isShowing: Bool { panel.isVisible }
 
-    /// Start a swoop in the hidden panel, ready to be shown.
+    /// Start a launcher in the hidden panel, ready to be shown.
     private func prepare() {
         guard terminal == nil, let content = panel.contentView else { return }
         Paster.discard()
@@ -146,7 +146,7 @@ final class LauncherController: NSObject, NSWindowDelegate,
         view.delegate = self
         view.configuration = TerminalSurfaceOptions(
             backend: .exec,
-            // The frame's name and pid. swoop sends SIGUSR2 to the pid
+            // The frame's name and pid. The launcher sends SIGUSR2 to the pid
             // just before it exits, on both of its exit paths, because
             // the library does not report the process ending (its close
             // callback is never wired up for the exec backend). The frame
@@ -179,7 +179,7 @@ final class LauncherController: NSObject, NSWindowDelegate,
         panel.orderOut(nil)
     }
 
-    /// swoop said it is exiting (SIGUSR2). Replace it, and once the panel
+    /// The launcher said it is exiting (SIGUSR2). Replace it, and once the panel
     /// is off screen, paste what it asked for, if it asked.
     func launcherEnded() {
         // Taken first: replace starts the next launcher, and that clears
@@ -189,7 +189,7 @@ final class LauncherController: NSObject, NSWindowDelegate,
         if let request { Paster.paste(request) }
     }
 
-    /// swoop ended: drop its surface and start the next one, hidden.
+    /// The launcher ended: drop its surface and start the next one, hidden.
     private func replace() {
         log("replace")
         panel.orderOut(nil)
@@ -221,12 +221,12 @@ final class LauncherController: NSObject, NSWindowDelegate,
 
     func terminalDidFinishCommand(exitCode: Int?, durationNanos _: UInt64) {
         // Shell integration's "a command finished", not the process ending;
-        // swoop is not a shell, so this is not expected. Logged, not acted on.
+        // The launcher is not a shell, so this is not expected. Logged, not acted on.
         log("command finished, exit \(exitCode.map(String.init) ?? "nil")")
     }
 
     func terminalDidClose(processAlive: Bool) {
-        // swoop exited: Esc at the root, or Enter's become finished. The
+        // The launcher exited: Esc at the root, or Enter's become finished. The
         // core asks for the surface to close; replace it.
         log("close, processAlive \(processAlive)")
         DispatchQueue.main.async { self.replace() }
@@ -278,9 +278,7 @@ struct Settings: Codable {
     }
 
     static var path: String {
-        let env = ProcessInfo.processInfo.environment
-        let base = env["XDG_CONFIG_HOME"] ?? (env["HOME"] ?? "") + "/.config"
-        return base + "/swoop/shell-mac.json"
+        Tool.configDir + "/shell-mac.json"
     }
 
     static func load() -> Settings {

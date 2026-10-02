@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/beatzball/swoop/internal/settings"
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // jqFilter turns claude's stream-json into what the worker wants: the
@@ -51,7 +52,7 @@ func configPath() string {
 		}
 		dir = filepath.Join(home, ".config")
 	}
-	return filepath.Join(dir, "swoop", "ai")
+	return filepath.Join(dir, tool.Name(), "ai")
 }
 
 func configured() string {

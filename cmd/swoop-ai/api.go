@@ -128,7 +128,7 @@ func readStream(r io.Reader, responses bool, emit func(string), say func(string)
 	return sc.Err()
 }
 
-// event is the union of what the two streams send, the fields swoop reads.
+// event is the union of what the two streams send, the fields the worker reads.
 type event struct {
 	// chat completions
 	Choices []struct {

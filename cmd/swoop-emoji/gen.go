@@ -2,7 +2,7 @@
 
 // gen writes table.tsv, the emoji and symbols swoop-emoji searches, from
 // Unicode's and CLDR's own files. It is run by hand when a new Unicode
-// version is out, not at build time, so building swoop needs no network:
+// version is out, not at build time, so building the kit needs no network:
 //
 //	curl -LO https://unicode.org/Public/emoji/latest/emoji-test.txt
 //	curl -LO https://unicode.org/Public/UCD/latest/ucd/UnicodeData.txt

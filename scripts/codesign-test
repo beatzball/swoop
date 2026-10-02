@@ -1,14 +1,17 @@
 #!/usr/bin/env bash
 # codesign-test: scripts/codesign-identity and scripts/sign-frame against
 # a pretend keychain. A fake security keeps what the real one would (is
-# there a swoop-dev certificate, is it trusted for code signing) in a
+# there a <name>-dev certificate, is it trusted for code signing) in a
 # state directory, and fake openssl and codesign log what they are asked.
 # The login keychain and the real tools are never touched.
 #
 # What it holds them to: the first run makes one certificate and trusts
 # it, the second finds it and makes nothing, a certificate left untrusted
-# is trusted and not made again, and the frame is signed with swoop-dev
-# and dev.swoop.shell when the identity is there, and left ad-hoc when not.
+# is trusted and not made again, and the frame is signed with <name>-dev
+# and <id>.shell when the identity is there, and left ad-hoc when not.
+#
+# The name and the id are a tool's own, from a `tool` file the test
+# writes: the scripts must take both from the file and spell neither.
 #
 # It runs everywhere, in seconds, as part of `make test`.
 set -euo pipefail
@@ -22,6 +25,9 @@ log="$tmp/log"
 : > "$log"
 # In the keychain dir: cert (made), trusted (trusted for code signing).
 export SWOOP_TEST_LOG="$log" SWOOP_TEST_KEYCHAIN="$tmp/keychain"
+# The tool the scripts sign for. SWOOP_TOOL names its file to the launcher.
+printf 'name mytool\nid com.example.mytool\n' > "$tmp/tool"
+export SWOOP_TOOL="$tmp/tool"
 
 cat > "$tmp/bin/security" <<'EOF'
 #!/usr/bin/env bash
@@ -30,7 +36,7 @@ k="$SWOOP_TEST_KEYCHAIN"
 case "$1" in
   find-identity)
     if [ -f "$k/cert" ] && [ -f "$k/trusted" ]; then
-      echo '  1) 0123456789ABCDEF0123456789ABCDEF01234567 "swoop-dev"'
+      echo '  1) 0123456789ABCDEF0123456789ABCDEF01234567 "mytool-dev"'
       echo '     1 valid identities found'
     else
       echo '     0 valid identities found'
@@ -76,7 +82,7 @@ case "$out" in *ad-hoc*) ;; *) fail "sign-frame, no identity, said: $out" ;; esa
 # First run: make it, import it once, trust it for code signing.
 : > "$log"
 out="$("$identity")" || fail "first run failed: $out"
-[ "$out" = swoop-dev ] || fail "first run printed: $out"
+[ "$out" = mytool-dev ] || fail "first run printed: $out"
 [ "$(count '^openssl req')" = 1 ] || fail "first run did not make one certificate"
 [ "$(count '^security import')" = 1 ] || fail "first run did not import it once"
 grep -q '^security import .* -T /usr/bin/codesign' "$log" || fail "codesign was not given the key"
@@ -87,7 +93,7 @@ grep -q '^security add-trusted-cert .*-p codeSign' "$log" || fail "not trusted f
 # Second run: found, nothing made, nothing asked.
 : > "$log"
 out="$("$identity")" || fail "second run failed: $out"
-[ "$out" = swoop-dev ] || fail "second run printed: $out"
+[ "$out" = mytool-dev ] || fail "second run printed: $out"
 [ "$(count '^openssl')" = 0 ] || fail "second run made another certificate"
 [ "$(count '^security import')" = 0 ] || fail "second run imported again"
 [ "$(count '^security add-trusted-cert')" = 0 ] || fail "second run asked for trust again"
@@ -95,7 +101,7 @@ out="$("$identity")" || fail "second run failed: $out"
 # The identity is there: signed with it, under the fixed identifier.
 : > "$log"
 out="$("$sign" "$tmp/frame")" || fail "sign-frame failed: $out"
-grep -q "^codesign -f -s swoop-dev -i dev.swoop.shell $tmp/frame\$" "$log" || fail "not signed as swoop-dev, dev.swoop.shell"
+grep -q "^codesign -f -s mytool-dev -i com.example.mytool.shell $tmp/frame\$" "$log" || fail "not signed as mytool-dev, com.example.mytool.shell"
 
 # The prompt was cancelled: the run fails, and the next one trusts the
 # certificate already there instead of making a second.

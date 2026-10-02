@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // fixed is a clock, a clipboard and a UUID that never change, and counts
@@ -103,7 +105,7 @@ func home(t *testing.T) string {
 	// under HOME on a Mac: keep it in the test's directory too.
 	t.Setenv("HOME", d)
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(d, "cache"))
-	return filepath.Join(d, "swoop", "snippets")
+	return filepath.Join(d, tool.Name(), "snippets")
 }
 
 func write(t *testing.T, dir, name, body string) {
@@ -260,7 +262,7 @@ func TestHeadsCache(t *testing.T) {
 	}
 	// Another folder with a file of the same name, size and time must
 	// not get this folder's heads.
-	other := filepath.Join(t.TempDir(), "swoop", "snippets")
+	other := filepath.Join(t.TempDir(), tool.Name(), "snippets")
 	write(t, other, "a.md", "Zed\nkeyword: a\n\ntext")
 	st, _ := os.Stat(filepath.Join(d, "a.md"))
 	_ = os.Chtimes(filepath.Join(other, "a.md"), st.ModTime(), st.ModTime())

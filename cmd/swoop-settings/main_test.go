@@ -14,7 +14,7 @@ import (
 
 func TestHotkeyChoicesTakeWhatWasTyped(t *testing.T) {
 	cs := hotkeyChoices("")
-	if len(cs) != 6 || cs[0].value != "alt+shift+space" {
+	if len(cs) != 6 || cs[0].value != settings.HotkeyDefault() {
 		t.Fatalf("the fixed list: %+v", cs)
 	}
 	cs = hotkeyChoices("ctrl+alt+k")

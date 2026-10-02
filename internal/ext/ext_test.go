@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 func TestRoute(t *testing.T) {
@@ -39,7 +41,7 @@ func TestMain(m *testing.M) {
 	listTimeout = 10 * time.Second
 	// The machine's own settings file must not reach the tests: an off
 	// list there would hide the fakes.
-	cfg, err := os.MkdirTemp("", "swoop-ext-test")
+	cfg, err := os.MkdirTemp("", "ext-test")
 	if err != nil {
 		panic(err)
 	}
@@ -131,10 +133,10 @@ func TestDiscoverSkipsWhatIsOff(t *testing.T) {
 		t.Fatalf("nothing off: %s", got)
 	}
 	// Spaces, an unknown name, and settings, which cannot be turned off.
-	if err := os.MkdirAll(filepath.Join(cfg, "swoop"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(cfg, tool.Name()), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(cfg, "swoop", "config"), []byte("off =  gamma , nosuch, settings,alpha\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(cfg, tool.Name(), "config"), []byte("off =  gamma , nosuch, settings,alpha\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if got := names(Discover([]string{dir})); got != "beta,settings" {

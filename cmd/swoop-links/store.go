@@ -16,6 +16,7 @@ import (
 	"strings"
 
 	"github.com/beatzball/swoop/internal/settings"
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // Link is one quicklink.
@@ -82,19 +83,24 @@ func (l Link) Icon() string {
 	return ""
 }
 
-// defaults ship with swoop and are what the pane shows until the user's
+// header is the two comment lines at the top of the file, which name the
+// tool by its title and say what a line is.
+func header() string {
+	return "# " + tool.Read().Title + " quicklinks: name, link, app to open it with; tab-separated.\n" +
+		"# {argument} in a link asks for text first. Lines starting with # are ignored.\n"
+}
+
+// defaults ship with the tool and are what the pane shows until the user's
 // file exists. add and import start the user's file from them, so
 // adding one link does not lose the five.
-const defaults = `# swoop quicklinks: name, link, app to open it with; tab-separated.
-# {argument} in a link asks for text first. Lines starting with # are ignored.
-Google	https://www.google.com/search?q={argument}
+const defaults = `Google	https://www.google.com/search?q={argument}
 DuckDuckGo	https://duckduckgo.com/?q={argument}
 Wikipedia	https://en.wikipedia.org/w/index.php?search={argument}
 YouTube	https://www.youtube.com/results?search_query={argument}
 GitHub	https://github.com/search?q={argument}
 `
 
-// path is the user's file, ~/.config/swoop/quicklinks.tsv.
+// path is the user's file, ~/.config/<name>/quicklinks.tsv.
 func path() string {
 	dir := settings.Dir()
 	if dir == "" {
@@ -165,8 +171,7 @@ func save(links []Link) error {
 		return err
 	}
 	var b strings.Builder
-	b.WriteString("# swoop quicklinks: name, link, app to open it with; tab-separated.\n")
-	b.WriteString("# {argument} in a link asks for text first. Lines starting with # are ignored.\n")
+	b.WriteString(header())
 	for _, l := range links {
 		fmt.Fprintf(&b, "%s\t%s\t%s\n", clean(l.Name), clean(l.Link), clean(l.App))
 	}

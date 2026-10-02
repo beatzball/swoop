@@ -15,7 +15,7 @@ import (
 // and the directory walk are plain Go, so their tests run on a Mac too.
 // Only the choice of directories is Linux's, in apps_linux.go.
 
-// Desktop is the part of a .desktop file's [Desktop Entry] group that swoop
+// Desktop is the part of a .desktop file's [Desktop Entry] group that the launcher
 // uses. Localised keys such as Name[de] are ignored: the plain key is the
 // one every file has.
 type Desktop struct {
@@ -32,7 +32,7 @@ type Desktop struct {
 // app that exists but asks not to be shown (a MIME handler, a settings
 // panel); Hidden is an app the user or the system has deleted, usually by
 // shadowing a system file with one in ~/.local/share/applications.
-// OnlyShowIn and NotShowIn are ignored: swoop is not any one desktop.
+// OnlyShowIn and NotShowIn are ignored: the launcher is not any one desktop.
 func (d Desktop) Listed() bool {
 	return d.Type == "Application" && d.Name != "" && !d.NoDisplay && !d.Hidden
 }
@@ -130,7 +130,7 @@ func unescape(s string) string {
 }
 
 // fieldCodes are the Exec placeholders a launcher fills in with files,
-// URLs, the icon, the name, or the file's own path. swoop opens an app
+// URLs, the icon, the name, or the file's own path. The launcher opens an app
 // with nothing, so each is dropped. The deprecated ones (%d %D %n %N %v
 // %m) are dropped too, as the spec says to.
 var fieldCodes = "fFuUickdDnNvm"

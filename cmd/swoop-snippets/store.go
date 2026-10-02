@@ -1,5 +1,5 @@
 // The snippets folder and what a snippet file is. One markdown file per
-// snippet in ~/.config/swoop/snippets/: the first line is the name (a
+// snippet in ~/.config/<name>/snippets/: the first line is the name (a
 // leading "# " is allowed, so the file reads as markdown), an optional
 // `keyword:` line follows, and the rest is the text. Blank lines between
 // the header and the text are not part of it, and neither is the one
@@ -36,7 +36,7 @@ type Snippet struct {
 // README of the user's own, a .git) is left alone.
 const ext = ".md"
 
-// dir is the folder, ~/.config/swoop/snippets.
+// dir is the folder, ~/.config/<name>/snippets.
 func dir() string {
 	d := settings.Dir()
 	if d == "" {

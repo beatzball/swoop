@@ -28,6 +28,7 @@ import (
 
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
+	"github.com/beatzball/swoop/internal/tool"
 )
 
 // Prefix starts every id that belongs to an extension: "ext/<name>/<id>".
@@ -65,7 +66,7 @@ func Dirs() []string {
 		}
 	}
 	if base != "" {
-		dirs = append(dirs, filepath.Join(base, "swoop", "extensions"))
+		dirs = append(dirs, filepath.Join(base, tool.Name(), "extensions"))
 	}
 	for _, d := range strings.Split(os.Getenv(EnvDirs), string(os.PathListSeparator)) {
 		if d != "" {
@@ -284,7 +285,7 @@ func ListAll(exts []Extension, query string) []protocol.Item {
 			defer wg.Done()
 			items, err := e.List(query)
 			if err != nil {
-				fmt.Fprintln(os.Stderr, "swoop:", err)
+				fmt.Fprintln(os.Stderr, tool.Name()+":", err)
 				return
 			}
 			results[i] = items

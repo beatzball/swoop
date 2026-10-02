@@ -2,7 +2,7 @@
 // then into the app in front with the paste keystroke. The emoji and
 // snippets extensions use it for Enter.
 //
-// The keystroke is not sent from here. Inside swoop's own frame
+// The keystroke is not sent from here. Inside the launcher's own frame
 // (SWOOP_SHELL is set, and the frame names a request file in
 // SWOOP_PASTE), Paste copies, writes the text to that file, and returns;
 // the frame, as the launcher exits, hides its panel and pastes, but only
@@ -59,7 +59,7 @@ func Short(text string) string {
 	return line
 }
 
-// inFrame says whether swoop runs in its own frame, whose panel hides
+// inFrame says whether the launcher runs in its own frame, whose panel hides
 // once the launcher exits and leaves the user's app in front.
 func inFrame() bool { return os.Getenv("SWOOP_SHELL") != "" }
 
