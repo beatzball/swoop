@@ -221,7 +221,9 @@ cp "$root/bin/swoop" "$tmp/dir/bin/swoop"
 cp "$root/scripts/launchd.sh" "$tmp/dir/scripts/"
 cp -R "$root/templates" "$tmp/dir/templates"
 frame="$tmp/dir/bin/swoop-shell-mac"
-touch "$frame"; chmod +x "$frame"
+# A script, not an empty file: Git Bash on Windows answers `-x` by the
+# shebang, and a start looks for the frame with `-x`.
+printf '#!/usr/bin/env bash\nexit 0\n' > "$frame"; chmod +x "$frame"
 mkdir "$tmp/dir/bin/Resources.bundle"; touch "$tmp/dir/bin/Resources.bundle/terminfo"
 
 fail() { echo "launchd-test: $*" >&2; echo "--- log:" >&2; cat "$log" >&2; echo "--- processes:" >&2; cat "$procs" >&2; exit 1; }
