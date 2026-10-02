@@ -69,6 +69,11 @@ Read this before changing anything in `site/`.
 - **The README and the site say the same things.** The README is what GitHub
   shows; the site is the long form. When a README section changes, change the
   page that carries it (Getting Started, Ask AI, Extensions, Settings).
+- **`content/docs/contract.md` is `CONTRACT.md`.** The page is the
+  document at the repository root under this site's front matter, and a Go
+  test fails when the two differ. Change the document, never the page, then
+  run `go test ./cmd/swoop-check -run TestSitePageIsTheDocument -update`
+  from the repository root to copy it over.
 - **The extension guide is tested code.** Every block in
   `content/docs/writing-an-extension.md` was run through `bin/swoop`. If you
   change one, run the new script the same way before you commit it.

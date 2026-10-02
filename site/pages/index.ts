@@ -184,7 +184,7 @@ const FOOTER_COLUMNS: FooterColumn[] = [
     heading: 'Build',
     links: [
       { label: 'Writing an Extension', href: '/docs/writing-an-extension' },
-      { label: 'The extension contract', href: 'https://github.com/beatzball/swoop/issues/2' },
+      { label: 'The extension contract', href: '/docs/contract' },
     ],
   },
   {

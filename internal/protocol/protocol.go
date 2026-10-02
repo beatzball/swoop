@@ -1,8 +1,9 @@
 // Package protocol defines the one contract every swoopkit program shares: the
 // result line. A source prints lines, fzf shows them, and the picked line's
-// id goes back to swoop-run and swoop-preview. The reasoning and the open
-// questions live in the "Spec: the line protocol" issue; this file is the
-// code form of that spec and must not grow a field the spec does not have.
+// id goes back to swoop-run and swoop-preview. The contract is CONTRACT.md
+// at the repository root, and the reasoning behind it is the history in
+// the "Spec: the line protocol" issue; this file is the code form of that
+// contract and must not grow a field the contract does not have.
 package protocol
 
 import (

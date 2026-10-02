@@ -14,6 +14,10 @@
 set -euo pipefail
 shopt -s nocasematch
 
+# Spotlight is a Mac's. Where there is none, there is nothing to ask, and
+# `list` prints nothing, as reminders does: no row whose view cannot work.
+command -v mdfind > /dev/null 2>&1 || exit 0
+
 home="$HOME"
 limit=100
 

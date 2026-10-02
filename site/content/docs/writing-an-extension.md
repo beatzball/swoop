@@ -20,8 +20,11 @@ It is one bash script, and every step is a working extension. Each step ends
 with a check you can run.
 
 The contract itself, every verb and every row kind, is
-[issue #2](https://github.com/beatzball/swoop/issues/2). It is the source of
-truth. This page teaches it; where they differ, the issue wins.
+[The Extension Contract](/docs/contract), with a version number at its
+top. It is the source of truth. This page teaches it; where they differ,
+the contract wins. `swoop-check <folder>` runs an extension the way the
+launcher does and names each rule of the contract it breaks; run it on
+`clock` after any step.
 
 The contract belongs to **swoopkit**, the toolkit swoop is built on: the
 launcher, `swoop-nav`, `swoop-match` and the other small programs, and the
@@ -658,8 +661,10 @@ echo id > ~/.config/swoop/extensions/clock/icons
 
 ## Where to go next
 
-- [Issue #2](https://github.com/beatzball/swoop/issues/2): the contract,
-  every verb, kind and file, and why each one was added
+- [The Extension Contract](/docs/contract): every verb, kind, file and
+  variable, and `swoop-check`, the test for it.
+  [Issue #2](https://github.com/beatzball/swoop/issues/2) is its history:
+  why each part was added
 - `extensions/` in the repository: sixteen working extensions. `system` is
   the smallest; `define` is the smallest with a view; `files` has a
   `terminal` action

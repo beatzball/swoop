@@ -16,8 +16,8 @@ The plan, every design decision, and the work in progress live in the
 
 swoop is one tool built on **swoopkit**, the toolkit in this repository:
 the launcher script, `swoop-nav`, `swoop-run`, `swoop-preview`,
-`swoop-match` and the other small programs, the extension contract, and
-the frame. The kit has no rows and no name of its own to show. A tool is a
+`swoop-match` and the other small programs, the extension contract
+([CONTRACT.md](CONTRACT.md)), and the frame. The kit has no rows and no name of its own to show. A tool is a
 folder with an `extensions` folder and, beside it, one file called `tool`
 that says what the tool is: `name` for its folders (`~/.config/<name>` and
 the rest) and its command, `title` for what the frame shows, `id` for its
@@ -406,6 +406,12 @@ in front and the marks seen, never the text.
 
 ## Write an extension
 
+The contract is **[CONTRACT.md](CONTRACT.md)**: every verb, row kind, file
+and variable, what the launcher promises and what an extension must do,
+with a version number at the top. `swoop-check <folder>` runs your
+extension the way the launcher does and names each rule it breaks. What
+follows here is the contract in brief.
+
 An extension is a folder with one program in it, named the same:
 
 ```
@@ -496,7 +502,8 @@ A result line is five fields separated by tabs. Only the last three are shown:
 id	kind	icon	title	subtitle
 ```
 
-That is the whole contract. A shell script is enough; `extensions/system/system`
+That is the contract in brief, and [CONTRACT.md](CONTRACT.md) is all of
+it. A shell script is enough; `extensions/system/system`
 in this repository is one, and it is what puts Sleep and Lock Screen in the
 list. Any language works, as long as it starts fast: `list` runs when the
 launcher opens and `preview` on every cursor move.
