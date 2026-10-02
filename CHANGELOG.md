@@ -9,6 +9,25 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **`make bench` measures every moment you feel, and CI holds each to a
+  budget.** `scripts/bench` prints one line of JSON per metric: Open, a
+  keystroke at the root and in a view, a cursor move to the preview
+  drawn, Enter on a view row, Esc, each bundled extension's `list`, the
+  frame's show and hide, the release archive's size and the memory of
+  the frame with its fzf. A key is timed in the launcher itself, in a
+  pseudo-terminal, from the key to the text it causes; a tool is timed
+  by hyperfine. Each number is the smallest of many runs, in a home of
+  its own with the same notes and tasks on every machine. CI runs it on
+  macOS, Linux and Windows for every pull request, comments each number
+  against the last main run from the same runner, and fails a pull
+  request with a metric over its budget; the budgets are at the top of
+  the script, each with its reason. The main runs are kept on the branch
+  `bench-history`, and `scripts/bench graph` draws them. The frame logs
+  how long a show and a hide took, under `SWOOP_SHELL_DEBUG`. Nothing in
+  the launcher changed.
+
 ## [0.13.0] - 2026-10-02
 
 swoopkit is whole: the contract is a document with a checker, and one command makes a tool of your own.

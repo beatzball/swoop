@@ -1,0 +1,1320 @@
+#!/usr/bin/env python3
+"""bench: the moments a person feels, each as one number on one line of JSON.
+
+    scripts/bench [--runs N] [--only GROUP,...]       measure, and print the lines
+    scripts/bench compare --history FILE RUN...       a run against the last main run
+    scripts/bench graph [--history FILE] [METRIC...]  the history, a line per metric
+
+A line is {"metric", "ms", "rows", "commit", "os", "runner", "runs",
+"budget"}; a size has "kb" where a time has "ms". `make bench` runs the
+first form. Notes, a metric that was skipped and one over its budget, go
+to stderr, so stdout is only the lines.
+
+Four groups, and --only takes their names:
+
+  tools   one process each, timed by hyperfine with no shell: what
+          swoop-nav, swoop-preview and each extension's `list` cost alone
+  keys    one key press each, timed by this script's clock in the launcher
+          itself: bin/swoop in a pseudo-terminal, the key written to it,
+          and the clock stopped when the text the key causes arrives. fzf's
+          socket gives the state between presses, as in
+          scripts/launcher-test, so no press is sent before the last has
+          landed
+  frame   show and hide of the macOS panel, from the frame's own log, and
+          the memory of the frame and its fzf
+  size    the release archive, as scripts/package makes it
+
+Every number is the minimum of its runs, not the mean: noise on a busy
+machine only ever adds time, so the smallest run is the nearest to what
+the code costs.
+
+Everything runs in a home of its own, in a temp folder, seeded with the
+same notes, tasks and snippets on every machine, and on Linux the same
+applications. On a Mac the applications are the machine's own; "rows" says
+how many rows a metric had, so a number that moved with the row count is
+seen for what it is.
+
+Needs bin/ built (make build) and hyperfine; the keys group needs fzf and
+a pseudo-terminal, which Windows has not. The Windows numbers are the
+tools that are programs there: the Go ones.
+"""
+
+import argparse
+import codecs
+import glob
+import json
+import os
+import re
+import select
+import shlex
+import shutil
+import signal
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# The budgets: the most a metric may be, in milliseconds, or in kibibytes
+# for a size. A name that ends in a full stop is every metric that starts
+# with it; a name written out wins over one of those. scripts/bench
+# compare fails a pull request that has a metric over its budget, on any
+# runner.
+#
+# One number for every machine, so each is sized for the slowest machine
+# that runs this: a hosted CI runner, about three times slower than the
+# laptop these were first measured on (2026-10-02; each reason gives that
+# laptop's number). A budget is there to catch a step that doubled. The
+# fine instrument is the comparison with the last main run on the same
+# runner, which sees a tenth. Tighten a budget when the history shows the
+# runners have room; raise one in the pull request that needs it, with
+# the reason here.
+BUDGETS = {
+    # What a person feels: one key, through the launcher itself.
+    #
+    # Hotkey to the first paint of the root. Issue #213 began at 150 ms,
+    # where a window stops feeling as if it was already there. The laptop
+    # is at 76, so a runner is past 150 before anything got slower.
+    "open": 300,
+    # A letter typed to the list redrawn. The issue began at 30 ms, two
+    # frames of a 60 Hz display. The laptop is at 43 at the root and 37 in
+    # Tasks: swoop-nav twice and the extensions cost under 20, and the
+    # rest is fzf, which draws a list that is loading in steps of 10 ms
+    # and more. The aim stays 30 on a laptop; the budget holds on a runner.
+    "key.": 150,
+    # Down pressed to the preview drawn. The issue began at 30 ms; the
+    # laptop is at 19.
+    "move.": 80,
+    # Enter on a view row to the pane listed: the work of a keystroke in
+    # a view, and the laptop is at 45.
+    "enter": 150,
+    # Esc to the pane below drawn again. The laptop is at 174, and 100 of
+    # that is fzf waiting to see whether the Esc byte starts a longer
+    # key, on every machine alike; the rest is a keystroke at the root.
+    "esc": 400,
+
+    # The parts of those keys, one process each.
+    #
+    # The root's rows for a text: every extension that is not kept for
+    # the run is asked, side by side. The laptop is at 16.
+    "nav.rows": 60,
+    # swoop-nav deciding what a key does, and a view's own filter: no
+    # other process started, 2 to 3 ms on the laptop. 15 is a tenth of
+    # the key it is part of, so it stays the small part.
+    "nav.": 15,
+    "view.": 15,
+    # swoop-preview, the extension's shim, and the tool behind it: three
+    # processes, 7 on the laptop.
+    "preview.": 30,
+    # An extension's `list`. They run side by side at the start, so Open
+    # waits for the slowest. The issue's 50 ms; the slowest is at 6 on
+    # the laptop, so this one has room and a slow new extension has not.
+    "list.": 50,
+
+    # The frame's own part of the panel coming and going. The laptop is
+    # at 1 to show and 8 to hide; two frames of a 60 Hz display.
+    "frame.": 32,
+
+    # The sizes, in kibibytes, each about a quarter over what it was: a
+    # new dependency is seen, a few more lines of code are not. The
+    # archive is the macOS one, the largest, with the frame in it
+    # (24034). The memory is the frame and its fzf, open, at rest (94048).
+    "size.archive": 30000,
+    "size.memory": 120000,
+}
+
+# How far a metric may move from the last main run, on the same runner,
+# before the pull request says why: a tenth, and a millisecond, because a
+# tenth of a two millisecond process is the noise of the runner.
+MOVED = 0.10
+MOVED_MS = 1.0
+
+GROUPS = ("tools", "keys", "frame", "size")
+WINDOWS = os.name == "nt"
+EXE = ".exe" if WINDOWS else ""
+OS = {"darwin": "darwin", "win32": "windows", "cygwin": "windows"}.get(sys.platform, "linux")
+# The size the launcher is given: the pseudo-terminal's, and what a
+# preview is told it has.
+COLS, LINES = 120, 30
+PREVIEW_COLS, PREVIEW_LINES = 66, 28
+
+ESC = re.compile(
+    r"\x1b\[[0-?]*[ -/]*[@-~]|\x1b[()][A-Z0-9]|\x1b[=>]|\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"
+    r"|\x1b[P_][^\x1b]*\x1b\\|\x1b\\"
+)
+# What fzf asks the terminal as it starts, and what a terminal says back:
+# where the cursor is, and whether it knows a mode. fzf waits half a second
+# for each answer that does not come, which no terminal makes it do.
+ASKED = re.compile(rb"\x1b\[6n|\x1b\[\?([0-9]+)\$p")
+UP, DOWN, ENTER, ESCAPE, BACKSPACE, CTRL_C = "\x1b[A", "\x1b[B", "\r", "\x1b", "\x7f", "\x03"
+
+failed = False
+
+
+def note(text):
+    print("bench: " + text, file=sys.stderr, flush=True)
+
+
+def broken(text):
+    """A metric that should have been there and was not. The rest are still
+    measured, and the run exits 2. Not on Windows, which runs none of the
+    launcher yet: what cannot be measured there is said, and the
+    comparison with main shows it as not measured."""
+    global failed
+    failed = failed or not WINDOWS
+    note(text)
+
+
+def die(text):
+    note(text)
+    sys.exit(2)
+
+
+class Missed(Exception):
+    """The launcher never showed what a key should have caused."""
+
+
+def clean(text):
+    return ESC.sub("", text)
+
+
+def budget(metric):
+    if metric in BUDGETS:
+        return BUDGETS[metric]
+    hits = [k for k in BUDGETS if k.endswith(".") and metric.startswith(k)]
+    return BUDGETS[max(hits, key=len)] if hits else None
+
+
+def unit(line):
+    return "kb" if "kb" in line else "ms"
+
+
+class Run:
+    """What every line of one run says: the commit, the OS, the runner."""
+
+    def __init__(self):
+        # A pull request's checkout in CI is a merge commit nobody wrote;
+        # the workflow names the commit that was pushed.
+        self.commit = os.environ.get("BENCH_COMMIT", "")
+        if not self.commit:
+            got = subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD"], capture_output=True, text=True)
+            self.commit = got.stdout.strip()
+        self.commit = self.commit[:12]
+        # The kind of machine, which is what a number is compared within:
+        # the workflow gives the runner's label. Never a host name.
+        self.runner = os.environ.get("BENCH_RUNNER", "local")
+
+    def emit(self, metric, value, rows=None, runs=None):
+        size = metric.startswith("size.")
+        line = {"metric": metric}
+        line["kb" if size else "ms"] = int(round(value)) if size else round(value, 2)
+        if rows is not None:
+            line["rows"] = rows
+        line.update(commit=self.commit, os=OS, runner=self.runner)
+        if runs is not None:
+            line["runs"] = runs
+        limit = budget(metric)
+        if limit is not None:
+            line["budget"] = limit
+        print(json.dumps(line), flush=True)
+        if limit is not None and value > limit:
+            note(f"over budget: {metric} is {line[unit(line)]} {unit(line)}, and its budget is {limit}")
+
+
+# ---------------------------------------------------------------- the home
+
+
+def bash(script, *args, **kwargs):
+    """Run a bash script of this repository. Through bash by name, which
+    is how Windows runs one, and the bash on PATH: asked for by the bare
+    name, Windows starts the one in its system folder, which is not Git's.
+    Forward slashes, which bash on Windows needs to find the script's own
+    folder."""
+    script = os.path.join(ROOT, *script.split("/")).replace("\\", "/")
+    return subprocess.run([shutil.which("bash") or "bash", script, *args], capture_output=True, text=True, **kwargs)
+
+
+def tool_name():
+    """The tool's name, from the launcher, as the frame and the install
+    scripts ask it."""
+    return bash("bin/swoop", "tool", "name").stdout.strip() or "swoop"
+
+
+def seed(tmp):
+    """A home with the same things in it on every machine, and the
+    environment that points every program at it. Returns the environment
+    for a tool run by hand; launcher_env() makes the launcher's from it."""
+    env = dict(os.environ)
+    # A tool file named by the caller's environment would be another
+    # tool's, and so would its folders.
+    env.pop("SWOOP_TOOL", None)
+    name = tool_name()
+    home = os.path.join(tmp, "home")
+    config = os.path.join(home, ".config", name)
+    data = os.path.join(home, ".data", name)
+    for d in (config, data, os.path.join(home, ".state"), os.path.join(tmp, "fakes"), os.path.join(tmp, "share")):
+        os.makedirs(d)
+
+    with open(os.path.join(data, "tasks.md"), "w") as f:
+        for n in range(1, 21):
+            f.write(f"- [ ] Bench task {n:02d}\n")
+    notes = os.path.join(data, "notes")
+    os.makedirs(notes)
+    now = time.time()
+    for n in range(1, 21):
+        path = os.path.join(notes, f"bench-note-{n:02d}.md")
+        with open(path, "w") as f:
+            # The number first: a preview is known by the start of a line.
+            f.write(f"# Bench note {n:02d}\n\n{n:02d} is the number of this bench note.\n\n")
+            f.write("A paragraph of plain words, so the preview has something to draw.\n" * 8)
+        # A minute apart, so the order by time is the same on every run.
+        os.utime(path, (now - 60 * n, now - 60 * n))
+    snippets = os.path.join(config, "snippets")
+    os.makedirs(snippets)
+    for n in range(1, 11):
+        with open(os.path.join(snippets, f"bench-snippet-{n:02d}.md"), "w") as f:
+            f.write(f"Bench snippet {n:02d}\nkeyword: ;b{n:02d}\n\nHello from bench snippet {n:02d}.\n")
+    if OS == "linux":
+        # The applications of a Linux machine are files in the data home,
+        # so here they are seeded too: a hundred, the size of a desktop's
+        # list. XDG_DATA_DIRS points at an empty folder below, which keeps
+        # the machine's own out.
+        apps = os.path.join(home, ".data", "applications")
+        os.makedirs(apps)
+        for n in range(1, 101):
+            with open(os.path.join(apps, f"bench-app-{n:03d}.desktop"), "w") as f:
+                f.write(f"[Desktop Entry]\nType=Application\nName=Aaa Bench App {n:03d}\nExec=bench-app-{n:03d}\nComment=Seeded application {n:03d}\n")
+
+    # A pretend osascript, which fails at once: the Reminders view asks
+    # the real one in the background, and that would ask this Mac for
+    # permission in the middle of a measurement. As scripts/contract-test.
+    fake = os.path.join(tmp, "fakes", "osascript")
+    with open(fake, "w") as f:
+        f.write("#!/bin/sh\nexit 1\n")
+    os.chmod(fake, 0o755)
+
+    for key in list(env):
+        # Not inside a launcher or a frame, even when this is run from one.
+        # Nor inside tmux, where a picture is wrapped for tmux to pass on.
+        # ESCDELAY is how long fzf waits after an Esc byte; the caller's
+        # own would be in the Esc metric.
+        if key.startswith(("FZF_", "TMUX")) or key in ("ESCDELAY", "SWOOP_SHELL", "SWOOP_SHELL_PID", "SWOOP_PASTE", "SWOOP_STATE", "SWOOP_ONCE", "SWOOP_LAND", "SWOOP_ICONS", "SWOOP_KIND", "SWOOP_TITLE"):
+            del env[key]
+    env.update({
+        "HOME": home,
+        # Go asks Windows for the home by this name.
+        "USERPROFILE": home,
+        "XDG_CONFIG_HOME": os.path.join(home, ".config"),
+        "XDG_STATE_HOME": os.path.join(home, ".state"),
+        "XDG_DATA_HOME": os.path.join(home, ".data"),
+        "XDG_DATA_DIRS": os.path.join(tmp, "share"),
+        "TMPDIR": tmp,
+        "TERM": "xterm-256color",
+        # Pictures on, as in the frame: the icons are part of Open, and
+        # the picture is part of an application's preview.
+        "SWOOP_PICTURES": "1",
+        # The clipboard watcher outlives a launcher; none is started here.
+        "SWOOP_NO_CLIPD": "1",
+        "SWOOP_TOOL": os.path.join(ROOT, "tool"),
+        "SWOOP_TOOL_NAME": name,
+        "SWOOP_EXTENSIONS": os.path.join(ROOT, "extensions"),
+        "FZF_PREVIEW_COLUMNS": str(PREVIEW_COLS),
+        "FZF_PREVIEW_LINES": str(PREVIEW_LINES),
+        "PATH": os.pathsep.join([os.path.join(tmp, "fakes"), os.path.join(ROOT, "bin"), env.get("PATH", "")]),
+    })
+    return env
+
+
+def launcher_env(env):
+    """The environment bin/swoop starts in: it finds the tool file and the
+    bundled extensions itself, and the preview's size is fzf's to say."""
+    env = dict(env)
+    for key in ("SWOOP_TOOL", "SWOOP_TOOL_NAME", "SWOOP_EXTENSIONS", "FZF_PREVIEW_COLUMNS", "FZF_PREVIEW_LINES"):
+        env.pop(key, None)
+    return env
+
+
+# ---------------------------------------------------------------- the rows
+
+
+class Row:
+    def __init__(self, fields):
+        self.id, self.kind, self.icon, self.title, self.subtitle = fields
+        self.title, self.subtitle = clean(self.title), clean(self.subtitle)
+
+
+def rows_of(out):
+    rows = []
+    for line in out.decode("utf-8", "replace").splitlines():
+        fields = line.split("\t")
+        if len(fields) == 5:
+            rows.append(Row(fields))
+    return rows
+
+
+def run(cmd, env):
+    """Run cmd once: whether it worked, and what it printed."""
+    try:
+        got = subprocess.run(cmd, env=env, stdin=subprocess.DEVNULL, capture_output=True, timeout=60)
+    except (OSError, subprocess.TimeoutExpired) as err:
+        return False, str(err).encode()
+    return got.returncode == 0, got.stdout if got.returncode == 0 else got.stderr
+
+
+def binary(name):
+    return os.path.join(ROOT, "bin", name + EXE)
+
+
+def extensions():
+    there = os.path.join(ROOT, "extensions")
+    return sorted(n for n in os.listdir(there) if os.path.isfile(os.path.join(there, n, n)))
+
+
+def ext_cmd(name, *args):
+    """The command that asks the bundled extension `name` a verb, the way
+    the launcher does: the program in its folder. On Windows a bash script
+    is not a program; an extension that only hands its arguments to a Go
+    tool is measured as that tool, and any other is not measured."""
+    path = os.path.join(ROOT, "extensions", name, name)
+    if not WINDOWS:
+        return [path, *args]
+    with open(path, encoding="utf-8") as f:
+        shim = re.search(r'^exec (swoop-[a-z]+) "\$@"$', f.read(), re.M)
+    return [binary(shim.group(1)), *args] if shim else None
+
+
+def ext_rows(env, name, *args):
+    cmd = ext_cmd(name, *args)
+    if not cmd:
+        return []
+    ok, out = run(cmd, env)
+    return rows_of(out) if ok else []
+
+
+def find(rows, name, kind=None):
+    """The first row of the extension `name` among launcher rows."""
+    for r in rows:
+        if r.id.startswith(f"ext/{name}/") and kind in (None, r.kind):
+            return r
+    return None
+
+
+def raw(row):
+    """A launcher row's id in its extension's own terms."""
+    return row.id.split("/", 2)[2]
+
+
+class Root:
+    """What the root holds in this home, asked once, the way bin/swoop
+    asks at its start. It is also the first run of every program, which a
+    Mac checks for seconds when the program was just built."""
+
+    def __init__(self, env, tmp):
+        self.env = dict(env)
+        self.state = os.path.join(tmp, "nav-state")
+        self.env.update(SWOOP_STATE=self.state, SWOOP_ONCE=self.state + ".once", FZF_QUERY="", FZF_POS="2")
+        open(self.state, "w").close()
+        self.lists = {}
+        for name in extensions():
+            cmd = ext_cmd(name, "list")
+            if not cmd:
+                note(f"list.{name}: a bash script, which Windows does not run as a program; not measured")
+                continue
+            ok, out = run(cmd, self.env)
+            if not ok:
+                broken(f"list.{name}: {out.decode('utf-8', 'replace').strip()[:200]}")
+                continue
+            self.lists[name] = (cmd, len(rows_of(out)))
+        if OS == "darwin":
+            # The icons, converted now. A launcher that finds one missing
+            # shows the glyph and leaves a program converting them behind
+            # it, which would run under the measurements that follow.
+            apps = [r.id for r in ext_rows(self.env, "apps", "list")]
+            if apps:
+                run([binary("swoop-icons"), "-warm", "--", *apps], self.env)
+        first = dict(self.env, SWOOP_ICONS=os.path.join(tmp, "nav-icons"))
+        ok, out = run([binary("swoop-nav"), "rows"], first)
+        if not ok:
+            die("swoop-nav rows: " + out.decode("utf-8", "replace").strip()[:300])
+        self.rows = rows_of(out)
+        self.tasks = self.view_row("tasks")
+        self.settings = self.view_row("settings")
+        self.notes = self.view_row("notes")
+
+    def view_row(self, name):
+        """The row of the extension `name` that opens its pane, with the
+        id the launcher gives it. From the extension's own list, so it is
+        there also where the launcher cannot run the extension itself."""
+        for r in ext_rows(self.env, name, "list"):
+            if r.kind == "view":
+                r.id = f"ext/{name}/{r.id}"
+                return r
+        return None
+
+    def view(self, row, text=""):
+        """The rows of the pane a view row opens, for the text in its bar."""
+        name = row.id.split("/")[1]
+        return ext_rows(self.env, name, "view", raw(row), *([text] if text else []))
+
+    def preview(self, launcher_id):
+        ok, out = run([binary("swoop-preview"), launcher_id], self.env)
+        return [clean(line) for line in out.decode("utf-8", "replace").splitlines()] if ok else []
+
+
+# --------------------------------------------------------------- the tools
+
+
+def hyperfine(cmds, env, runs, tmp, prepare=None):
+    """The minimum of `runs` runs of each command, in milliseconds. No
+    shell: -N runs the program itself, so the number is the program's."""
+    out = os.path.join(tmp, "hyperfine.json")
+    args = ["hyperfine", "-N", "--runs", str(runs), "--warmup", "3", "--style", "none", "--export-json", out]
+    # Forward slashes: hyperfine reads a backslash as an escape.
+    if prepare:
+        args += ["--prepare", shlex.join(prepare).replace("\\", "/")]
+    args += [shlex.join(c).replace("\\", "/") for c in cmds]
+    got = subprocess.run(args, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+    if got.returncode != 0:
+        die("hyperfine: " + got.stderr.strip()[-500:])
+    with open(out) as f:
+        return [r["min"] * 1000 for r in json.load(f)["results"]]
+
+
+def tools(out, root, tmp, runs):
+    nav, preview = binary("swoop-nav"), binary("swoop-preview")
+    plain = []  # (metric, command, rows)
+
+    def add(metric, cmd, counted=True):
+        ok, text = run(cmd, root.env)
+        if not ok:
+            broken(f"{metric}: {text.decode('utf-8', 'replace').strip()[:200]}")
+            return
+        plain.append((metric, cmd, len(rows_of(text)) if counted else None))
+
+    # A keystroke at the root: the rows kept for the run, and each other
+    # extension asked with the text. 2+2 is a calculator row.
+    add("nav.rows", [nav, "rows", "2+2"])
+    # A keystroke in a view: the view's own program, with the text.
+    if root.tasks:
+        add("view.tasks", [binary("swoop-tasks"), "view", raw(root.tasks), "x"])
+    if root.settings:
+        add("view.settings", [binary("swoop-settings"), "view", raw(root.settings), "x"])
+    # A cursor move: swoop-nav step, and then the preview of the row.
+    add("nav.step", [nav, "step", "down", "app"], counted=False)
+    app = find(root.rows, "apps")
+    # swoop-preview runs the extension, which on Windows is no program.
+    if app and not WINDOWS:
+        add("preview.app", [preview, app.id], counted=False)
+    else:
+        note("preview.app: no application row to preview here; not measured")
+    note_row = next((r for r in root.view(root.notes) if not r.id.startswith("+")), None) if root.notes else None
+    if note_row and not WINDOWS:
+        add("preview.note", [preview, "ext/notes/" + note_row.id], counted=False)
+    else:
+        note("preview.note: no note row to preview here; not measured")
+    for name, (cmd, count) in root.lists.items():
+        plain.append((f"list.{name}", cmd, count))
+    for (metric, _, count), ms in zip(plain, hyperfine([c for _, c, _ in plain], root.env, runs, tmp)):
+        out.emit(metric, ms, count, runs)
+
+    # Enter on a view row, and Esc out of the pane: both read the stack of
+    # panes and write it, so each run starts from the same file. Put there
+    # by this script's own _copy, which is a program on every OS.
+    if not root.tasks:
+        broken("nav.enter, nav.esc: no Tasks row at the root")
+        return
+    at_root, in_pane = os.path.join(tmp, "nav-state.root"), os.path.join(tmp, "nav-state.pane")
+    open(at_root, "w").close()
+    copy = [sys.executable, os.path.abspath(__file__), "_copy"]
+    enter = [nav, "enter", root.tasks.id, "view", root.tasks.title]
+    env = dict(root.env, FZF_QUERY="tasks", FZF_POS="1")
+    shutil.copyfile(at_root, root.state)
+    ok, text = run(enter, env)
+    if not ok:
+        broken("nav.enter: " + text.decode("utf-8", "replace").strip()[:200])
+        return
+    shutil.copyfile(root.state, in_pane)
+    out.emit("nav.enter", hyperfine([enter], env, runs, tmp, prepare=copy + [at_root, root.state])[0], None, runs)
+    env = dict(root.env, FZF_QUERY="", FZF_POS="1")
+    out.emit("nav.esc", hyperfine([[nav, "esc"]], env, runs, tmp, prepare=copy + [in_pane, root.state])[0], None, runs)
+    shutil.copyfile(at_root, root.state)
+
+
+# ------------------------------------------------------------ the launcher
+
+
+class Screen:
+    """What the terminal was sent, with the escape sequences taken out, kept
+    up as it arrives. A sequence can come in two reads, and a picture is
+    one sequence of ten thousand bytes: what is not whole yet waits for
+    the rest, so each byte is looked at once and not once per read."""
+
+    def __init__(self):
+        self.text = ""
+        self.tail = ""
+
+    def feed(self, s):
+        s = self.tail + s
+        self.tail = ""
+        out, pos = [], 0
+        while True:
+            i = s.find("\x1b", pos)
+            if i < 0:
+                out.append(s[pos:])
+                break
+            out.append(s[pos:i])
+            m = ESC.match(s, i)
+            if m:
+                pos = m.end()
+                continue
+            # Not whole yet: a string sequence of any length, or the
+            # start of a short one.
+            if (s.startswith(("\x1b_", "\x1bP", "\x1b]"), i) and len(s) - i < 1 << 20) or len(s) - i < 32:
+                self.tail = s[i:]
+                break
+            pos = i + 1
+        self.text += "".join(out)
+
+
+class Launcher:
+    """One bin/swoop in a pseudo-terminal, with a clock on what it draws."""
+
+    def __init__(self, env, tmp):
+        import fcntl
+        import struct
+        import termios
+        self.tmp = tmp
+        self.key = env["FZF_API_KEY"]
+        master, slave = os.openpty()
+        # The size is set before the launcher starts, so fzf draws once.
+        fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", LINES, COLS, COLS * 10, LINES * 22))
+        # The files of launchers before this one, should one have left any.
+        before = set(glob.glob(os.path.join(tmp, "swoop-*")))
+        self.started = time.perf_counter()
+        self.pid = os.fork()
+        if self.pid == 0:
+            try:
+                # Its own session with the pseudo-terminal as its
+                # terminal: the pictures are written to /dev/tty.
+                os.setsid()
+                fcntl.ioctl(slave, termios.TIOCSCTTY, 0)
+                for fd in (0, 1, 2):
+                    os.dup2(slave, fd)
+                os.close(master)
+                if slave > 2:
+                    os.close(slave)
+                os.execve(os.path.join(ROOT, "bin", "swoop"), ["swoop"], env)
+            finally:
+                os._exit(127)
+        os.close(slave)
+        self.fd = master
+        self.before = before
+        self.screen = Screen()
+        self.decode = codecs.getincrementaldecoder("utf-8")("replace")
+        self.at = self.started  # when the last output arrived
+        self.eof = False
+        self.sock = None
+        self.mark = 0
+
+    def pump(self, timeout):
+        """Read what the terminal holds, waiting up to `timeout` for some."""
+        if self.eof:
+            return
+        r, _, _ = select.select([self.fd], [], [], timeout)
+        if not r:
+            return
+        try:
+            data = os.read(self.fd, 65536)
+        except OSError:
+            data = b""
+        self.at = time.perf_counter()
+        if not data:
+            self.eof = True
+            return
+        for asked in ASKED.finditer(data):
+            # The cursor is at the top left; the mode is known, and off.
+            os.write(self.fd, b"\x1b[?" + asked.group(1) + b";2$y" if asked.group(1) else b"\x1b[1;1R")
+        self.screen.feed(self.decode.decode(data))
+
+    def send(self, keys):
+        os.write(self.fd, keys.encode())
+
+    def sending(self):
+        """Whether fzf's start binding is still to finish: it sends the
+        pictures and then removes the file of rows bin/swoop gave fzf. A
+        key pressed while it runs is lost."""
+        return bool(set(glob.glob(os.path.join(self.tmp, "swoop-rows.*"))) - self.before)
+
+    def drawn(self, pattern, since, what, timeout=15.0):
+        """Milliseconds from `since` to the arrival of the output that
+        completes `pattern`, among what came after the mark."""
+        rx = re.compile(pattern)
+        while True:
+            if rx.search(self.screen.text, self.mark):
+                return (self.at - since) * 1000
+            if self.eof or time.perf_counter() - since > timeout:
+                raise Missed(f"never drew {what} ({pattern!r}); the screen: {self.screen.text[self.mark:][-300:]!r}")
+            self.pump(0.25)
+
+    def timed(self, keys, pattern, what):
+        """Press keys; milliseconds until the screen shows `pattern`. What
+        the terminal already holds is read first and the mark moved past
+        it, so text drawn before the keys cannot answer."""
+        while not self.eof and select.select([self.fd], [], [], 0)[0]:
+            self.pump(0)
+        self.mark = len(self.screen.text)
+        since = time.perf_counter()
+        self.send(keys)
+        return self.drawn(pattern, since, what)
+
+    def state(self, limit=30):
+        """fzf's own account of itself, through its socket. The terminal
+        is read while the answer is on its way: fzf draws with its lock
+        held and answers under the same lock, and with nobody reading a
+        full pseudo-terminal stops the draw (scripts/launcher-test,
+        Launcher.state)."""
+        if self.sock is None:
+            new = set(glob.glob(os.path.join(self.tmp, "swoop-state.*.sock"))) - self.before
+            if not new:
+                return None
+            self.sock = new.pop()
+        try:
+            with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as c:
+                c.settimeout(2)
+                c.connect(self.sock)
+                c.sendall(f"GET /?limit={limit} HTTP/1.0\r\nx-api-key: {self.key}\r\n\r\n".encode())
+                data = b""
+                end = time.perf_counter() + 2
+                while True:
+                    left = end - time.perf_counter()
+                    if left <= 0:
+                        return None
+                    r, _, _ = select.select([c] if self.eof else [c, self.fd], [], [], left)
+                    if self.fd in r:
+                        self.pump(0)
+                    if c in r:
+                        chunk = c.recv(65536)
+                        if not chunk:
+                            break
+                        data += chunk
+        except OSError:
+            return None
+        try:
+            st = json.loads(data.split(b"\r\n\r\n", 1)[-1])
+        except ValueError:
+            return None
+        return st if "query" in st else None
+
+    def settled(self, s):
+        """Whether the chain of the last key is done: fzf holds the whole
+        list, and swoop-nav has no cursor left to place (the "land" in its
+        state file; see nav.Landing)."""
+        if s["reading"]:
+            return False
+        try:
+            with open(self.sock[:-len(".sock")]) as f:
+                text = f.read()
+            return not text or "land" not in json.loads(text)
+        except (OSError, ValueError):
+            return False
+
+    def wait(self, pred, what, timeout=20.0):
+        """Wait until the launcher is settled and its state meets pred."""
+        end = time.perf_counter() + timeout
+        st = None
+        while time.perf_counter() < end and not self.eof:
+            st = self.state()
+            if st and self.settled(st) and pred(st):
+                return st
+            self.pump(0.01)
+        brief = st and {k: st.get(k) for k in ("query", "position", "totalCount", "matchCount", "reading")}
+        raise Missed(f"never reached {what}; fzf's state: {brief}; the screen: {self.screen.text[-300:]!r}")
+
+    def press(self, keys, pred, what):
+        self.send(keys)
+        return self.wait(pred, what)
+
+    def close(self):
+        """ctrl-c, which ends fzf in any pane, and bin/swoop then removes
+        its own files. The terminal is read until it is gone: a process
+        leaving a terminal waits for its output to be taken."""
+        try:
+            self.send(CTRL_C)
+        except OSError:
+            pass
+        end = time.perf_counter() + 5
+        while True:
+            try:
+                pid, _ = os.waitpid(self.pid, os.WNOHANG)
+            except OSError:
+                break
+            if pid:
+                break
+            if time.perf_counter() > end:
+                try:
+                    os.killpg(self.pid, signal.SIGKILL)
+                except OSError:
+                    pass
+                end = float("inf")
+            self.pump(0.05)
+        try:
+            os.close(self.fd)
+        except OSError:
+            pass
+
+
+def cursor(s):
+    """The id of the row under the cursor."""
+    return ((s.get("current") or {}).get("text") or "").split("\t")[0]
+
+
+def ids(s):
+    return [m["text"].split("\t")[0] for m in s.get("matches", [])]
+
+
+def shown(title, n=20):
+    """A pattern for the start of a title as a row shows it."""
+    return re.escape(title[:n].strip())
+
+
+def pointed(title):
+    """A pattern for a row with the cursor on it: fzf's pointer, the icon,
+    and the title. A row drawn anywhere else on the screen, or before the
+    cursor came to it, does not match."""
+    return "▶[^\r\n]{0,8}" + shown(title)
+
+
+def token(lines, other, title):
+    """A pattern for a piece of text that is in one preview and neither in
+    the other preview nor in the row itself: the start of a line. When the
+    screen shows it, that preview has been drawn."""
+    seen = {line.strip()[:24].strip() for line in other}
+    for line in lines:
+        piece = line.strip()[:24].strip()
+        if len(piece) >= 6 and "\t" not in piece and re.search(r"[A-Za-z0-9]{3}", piece) and piece not in seen and piece not in title and title not in piece:
+            return re.escape(piece)
+    return None
+
+
+class Keys:
+    """The key presses, each in a launcher of its own, so one that goes
+    wrong leaves the next a clean start."""
+
+    def __init__(self, out, root, env, tmp, runs):
+        self.out, self.root, self.tmp, self.runs = out, root, tmp, runs
+        self.env = dict(launcher_env(env), FZF_API_KEY="bench-key")
+        self.total = 0
+
+    def launcher(self):
+        """A launcher at the root, its list whole, ready for a key: the
+        start binding done first, and then an answer from fzf, which it
+        gives only between bindings."""
+        ln = Launcher(self.env, self.tmp)
+        try:
+            end = time.perf_counter() + 40
+            while ln.sending() or not ln.sock:
+                if ln.eof or time.perf_counter() > end:
+                    raise Missed(f"the launcher never started; the screen: {ln.screen.text[-300:]!r}")
+                ln.state()
+                ln.pump(0.01)
+            st = ln.wait(lambda s: s["totalCount"] > 0, "the root list", timeout=40.0)
+        except Missed:
+            ln.close()
+            raise
+        self.total = st["totalCount"]
+        return ln
+
+    def measure(self, metrics, fn):
+        """Run fn with a launcher; it returns {metric: (times, rows)}."""
+        ln = None
+        try:
+            ln = self.launcher()
+            for metric, (times, rows) in fn(ln).items():
+                self.out.emit(metric, min(times), rows, len(times))
+        except Missed as err:
+            broken(f"{metrics}: {err}")
+        finally:
+            if ln:
+                ln.close()
+
+    def skip(self, metrics, why):
+        note(f"{metrics}: {why}; not measured")
+
+    def all(self):
+        self.open()
+        root = self.root
+        calc = find(rows_of(run([binary("swoop-nav"), "rows", "2+2"], root.env)[1]), "calc")
+        if calc:
+            self.measure("key.root", lambda ln: self.key_root(ln, calc))
+        else:
+            self.skip("key.root", "the calculator has no row for 2+2 here")
+        for name, row in (("tasks", root.tasks), ("settings", root.settings)):
+            pick = row and self.letter(row)
+            if pick:
+                self.measure(f"key.{name}", lambda ln, name=name, row=row, pick=pick: self.key_view(ln, name, row, *pick))
+            else:
+                self.skip(f"key.{name}", "no row at the root opens that view, or no letter changes its list")
+        pair = self.pair(root.rows, lambda r: r.id.startswith("ext/apps/"), lambda r: r.id)
+        if pair:
+            self.measure("move.app", lambda ln: {"move.app": self.move(ln, *pair)})
+        else:
+            self.skip("move.app", "no two application rows together at the root")
+        notes = root.view(root.notes) if root.notes else []
+        pair = self.pair(notes, lambda r: not r.id.startswith("+"), lambda r: "ext/notes/" + r.id)
+        if pair:
+            self.measure("move.note", lambda ln: {"move.note": self.move(ln, *pair, into=(root.notes, notes))})
+        else:
+            self.skip("move.note", "no two notes together in the Notes pane")
+        tasks = [r for r in (root.view(root.tasks) if root.tasks else []) if r.kind != "group"]
+        if tasks:
+            self.measure("enter, esc", lambda ln: self.enter_esc(ln, tasks))
+        else:
+            self.skip("enter, esc", "no Tasks row at the root")
+
+    def open(self):
+        """Open: bin/swoop started to the root drawn. The second row is
+        what is looked for: the first is under the cursor, and its title
+        is in the preview too."""
+        if len(self.root.rows) < 2:
+            return self.skip("open", "the root has under two rows")
+        pattern = shown(self.root.rows[1].title)
+        times = []
+        try:
+            for _ in range(max(5, self.runs // 2)):
+                ln = Launcher(self.env, self.tmp)
+                try:
+                    times.append(ln.drawn(pattern, ln.started, "the root list", timeout=40.0))
+                    st = ln.wait(lambda s: s["totalCount"] > 0, "the root list")
+                finally:
+                    ln.close()
+            self.out.emit("open", min(times), st["totalCount"], len(times))
+        except Missed as err:
+            broken(f"open: {err}")
+
+    def key_root(self, ln, calc):
+        """2+ is in the bar; the last 2 is the key, and the calculator's
+        row for 2+2 is what it must draw."""
+        times = []
+        ln.press("2+", lambda s: s["query"] == "2+", "2+ in the bar")
+        for _ in range(self.runs):
+            times.append(ln.timed("2", shown(calc.title), "the calculator row"))
+            st = ln.wait(lambda s: s["query"] == "2+2", "2+2 in the bar")
+            ln.press(BACKSPACE, lambda s: s["query"] == "2+", "2+ in the bar again")
+        return {"key.root": (times, st["totalCount"])}
+
+    def letter(self, row):
+        """A letter to type in the pane of `row`, and the row its list then
+        has first, under the cursor, where another was: the letter x when
+        that changes the list, or the first that does."""
+        first = lambda rows: next((r.title for r in rows if r.kind != "group"), "")
+        base = self.root.view(row)
+        for letter in "xetaoinsrhldcumfpgwybvkjqz":
+            got = self.root.view(row, letter)
+            if len(first(got).strip()) >= 3 and first(got) != first(base):
+                return letter, pointed(first(got)), len(base), len(got)
+        return None
+
+    def into(self, ln, row, count):
+        """Type the title of the view row `row`, put the cursor on it, and
+        press Enter: the pane, with its `count` rows."""
+        text = row.title.lower()
+        st = ln.press(text, lambda s: s["query"] == text and s["matchCount"] > 0, f"{text} in the bar")
+        for _ in range(10):
+            if cursor(st) == row.id:
+                break
+            at = st["position"]
+            st = ln.press(DOWN, lambda s: s["position"] != at, "the cursor one row down")
+        else:
+            raise Missed(f"the {row.title} row is not among the first rows for {text!r}")
+        name = row.id.split("/")[1]
+        return ln.press(ENTER, lambda s: s["query"] == "" and s["totalCount"] == count and all(i.startswith(f"ext/{name}/") for i in ids(s)), f"the {row.title} pane")
+
+    def key_view(self, ln, name, row, letter, pattern, base, got):
+        self.into(ln, row, base)
+        times = []
+        for _ in range(self.runs):
+            times.append(ln.timed(letter, pattern, f"the {row.title} pane's list for {letter!r}"))
+            ln.wait(lambda s: s["query"] == letter and s["totalCount"] == got, f"{letter!r} in the bar")
+            ln.press(BACKSPACE, lambda s: s["query"] == "" and s["totalCount"] == base, "the bar empty again")
+        return {f"key.{name}": (times, got)}
+
+    def pair(self, rows, want, launcher_id):
+        """Two rows that follow one another, both wanted, each with a text
+        in its preview that the other's has not: (index, pattern of the
+        first, pattern of the second)."""
+        for i in range(len(rows) - 1):
+            a, b = rows[i], rows[i + 1]
+            if not (want(a) and want(b)) or "group" in (a.kind, b.kind):
+                continue
+            pa, pb = self.root.preview(launcher_id(a)), self.root.preview(launcher_id(b))
+            ta, tb = token(pa, pb, a.title), token(pb, pa, b.title)
+            if ta and tb:
+                return i, ta, tb
+        return None
+
+    def move(self, ln, index, first, second, into=None):
+        """Down from the row at `index` to the next: the key to that row's
+        preview drawn. Up, which is not timed, puts the cursor back."""
+        total = self.total
+        if into:
+            row, rows = into
+            total = self.into(ln, row, len(rows))["totalCount"]
+        st = ln.wait(lambda s: True, "the list")
+        for _ in range(index - st["position"]):
+            at = st["position"]
+            st = ln.press(DOWN, lambda s: s["position"] != at, "the cursor one row down")
+        if st["position"] != index:
+            raise Missed(f"the cursor is on row {st['position']}, not row {index}")
+        times = []
+        for _ in range(self.runs):
+            times.append(ln.timed(DOWN, second, "the preview of the next row"))
+            ln.wait(lambda s: s["position"] == index + 1, "the cursor one row down")
+            ln.timed(UP, first, "the preview of the row above")
+            ln.wait(lambda s: s["position"] == index, "the cursor back")
+        return times, total
+
+    def enter_esc(self, ln, tasks):
+        """Enter on the Tasks row: the key to the pane's first task drawn.
+        Esc there: the key to the root's Tasks row drawn again, with the
+        text that was in the bar."""
+        row = self.root.tasks
+        text = row.title.lower()
+        back = shown(row.title) + (r"\s+" + shown(row.subtitle, 12) if row.subtitle.strip() else "")
+        st = self.into(ln, row, len(self.root.view(row)))
+        count = st["totalCount"]
+        at_root = lambda s: s["query"] == text and cursor(s) == row.id
+        st = ln.press(ESCAPE, at_root, "the root again")
+        enters, escs = [], []
+        for _ in range(self.runs):
+            enters.append(ln.timed(ENTER, pointed(tasks[0].title), "the Tasks pane's first task"))
+            ln.wait(lambda s: s["query"] == "" and s["totalCount"] == count, "the Tasks pane")
+            escs.append(ln.timed(ESCAPE, back, "the root's Tasks row"))
+            st = ln.wait(at_root, "the root again")
+        return {"enter": (enters, count), "esc": (escs, st["totalCount"])}
+
+
+# --------------------------------------------------------------- the frame
+
+
+def processes():
+    """{pid: (parent, resident kibibytes, command)} of everything running."""
+    got = subprocess.run(["ps", "-axo", "pid=,ppid=,rss=,comm="], capture_output=True, text=True)
+    table = {}
+    for line in got.stdout.splitlines():
+        fields = line.split(None, 3)
+        if len(fields) == 4 and fields[0].isdigit():
+            table[int(fields[0])] = (int(fields[1]), int(fields[2]), fields[3])
+    return table
+
+
+def below(table, pid):
+    """pid and everything it started."""
+    found, more = {pid}, True
+    while more:
+        more = {p for p, (parent, _, _) in table.items() if parent in found} - found
+        found |= more
+    return found
+
+
+def frame(out, env, tmp, runs):
+    """Show and hide of the macOS panel, as the frame's own log times
+    them, and the memory of the frame and the fzf in it once it is open.
+    SIGUSR1 is the hotkey here: the frame toggles the panel on it."""
+    if OS != "darwin":
+        return note("frame.show, frame.hide, size.memory: the frame is macOS only; not measured")
+    program = os.path.join(ROOT, "shell", "mac", ".build", "release", "swoop-shell-mac")
+    if not os.path.exists(program):
+        return note("frame.show, frame.hide, size.memory: the frame is not built (make shell-mac); not measured")
+    env = dict(launcher_env(env), FZF_API_KEY="bench-key", SWOOP_LAUNCHER=os.path.join(ROOT, "bin", "swoop"), SWOOP_SHELL_DEBUG="1", SWOOP_NO_MENU_BAR="1")
+    before = set(glob.glob(os.path.join(tmp, "swoop-state.*.sock")))
+    proc = subprocess.Popen([program], env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+    os.set_blocking(proc.stderr.fileno(), False)
+    log = ""
+
+    def read(timeout):
+        nonlocal log
+        r, _, _ = select.select([proc.stderr], [], [], timeout)
+        if r:
+            log += (proc.stderr.read() or b"").decode("utf-8", "replace")
+
+    def logged(pattern, start, what, timeout=20.0):
+        """The first match of pattern in the log at or after `start`."""
+        end = time.perf_counter() + timeout
+        while True:
+            m = re.compile(pattern).search(log, start)
+            if m:
+                return m
+            if proc.poll() is not None or time.perf_counter() > end:
+                raise Missed(f"the frame never logged {what}; its log ends: {log[-300:]!r}")
+            read(0.1)
+
+    def toggle(word):
+        """The hotkey, and the frame's own time for what it did."""
+        start = len(log)
+        proc.send_signal(signal.SIGUSR1)
+        return float(logged(rf"{word} in ([0-9.]+) ms", start, f"{word!r}").group(1))
+
+    try:
+        logged(r"swoop-shell-mac: ready", 0, "that it is ready", timeout=40.0)
+        # The launcher in the hidden panel is up when fzf's socket is there.
+        end = time.perf_counter() + 40
+        sock = None
+        while not sock:
+            new = set(glob.glob(os.path.join(tmp, "swoop-state.*.sock"))) - before
+            sock = new.pop() if new else None
+            if not sock:
+                if time.perf_counter() > end:
+                    raise Missed("the launcher in the frame never started")
+                read(0.1)
+        shows, hides = [], []
+        for _ in range(max(5, runs // 2)):
+            shows.append(toggle("shown"))
+            hides.append(toggle("hidden"))
+        out.emit("frame.show", min(shows), None, len(shows))
+        out.emit("frame.hide", min(hides), None, len(hides))
+        # Open, and at rest: the frame and the fzf under it.
+        toggle("shown")
+        table = processes()
+        mine = below(table, proc.pid)
+        fzf = [p for p in mine if os.path.basename(table[p][2]) == "fzf"]
+        if fzf:
+            out.emit("size.memory", table[proc.pid][1] + sum(table[p][1] for p in fzf))
+        else:
+            broken("size.memory: no fzf under the frame")
+        toggle("hidden")
+    except Missed as err:
+        # A machine with no screen to put a panel on is not a broken
+        # frame: said, and not counted against the run.
+        note(f"frame.show, frame.hide, size.memory: {err}; not measured")
+    finally:
+        # What the frame started, noted while it is still their parent:
+        # the launcher goes when its terminal does, and one that did not
+        # is ended here.
+        under = below(processes(), proc.pid) - {proc.pid}
+        proc.terminate()
+        try:
+            proc.wait(5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+        for pid in under & set(processes()):
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except OSError:
+                pass
+
+
+# ---------------------------------------------------------------- the size
+
+
+def size(out, tmp):
+    """The release archive for this machine, as scripts/package makes it,
+    in kibibytes. The script has the caller's environment: Go's build
+    cache is under the real home. It is run in the temp folder and told a
+    folder by name alone: tar on Windows reads the colon of a drive as
+    another machine."""
+    arch = subprocess.run(["go", "env", "GOARCH"], capture_output=True, text=True).stdout.strip()
+    if not arch:
+        return broken("size.archive: go env GOARCH said nothing")
+    if OS == "darwin" and not shutil.which("swift"):
+        return note("size.archive: the macOS archive holds the frame, and there is no swift here; not measured")
+    got = bash("scripts/package", OS, arch, "dist", cwd=tmp)
+    made = got.stdout.strip().splitlines()[-1] if got.returncode == 0 and got.stdout.strip() else ""
+    path = os.path.join(tmp, made)
+    if not made or not os.path.isfile(path):
+        return broken("size.archive: scripts/package: " + got.stderr.strip()[-300:])
+    out.emit("size.archive", os.path.getsize(path) / 1024)
+
+
+# ----------------------------------------------------------------- measure
+
+
+def measure(args):
+    groups = [g.strip() for g in args.only.split(",")] if args.only else list(GROUPS)
+    for g in groups:
+        if g not in GROUPS:
+            die(f"--only: no group {g!r}; they are {', '.join(GROUPS)}")
+    if not os.path.exists(binary("swoop-nav")):
+        die("bin/swoop-nav is not built; run make build")
+    if "tools" in groups and not shutil.which("hyperfine"):
+        die("hyperfine is not on PATH; it times the tools group")
+    if "keys" in groups:
+        if WINDOWS:
+            note("open, key.*, move.*, enter, esc: these need a pseudo-terminal, which Windows has not; not measured")
+            groups.remove("keys")
+        elif not shutil.which("fzf"):
+            die("fzf is not on PATH; the keys group runs the launcher")
+    out = Run()
+    tmp = tempfile.mkdtemp(prefix="swoop-bench.")
+    try:
+        env = seed(tmp)
+        root = Root(env, tmp) if set(groups) & {"tools", "keys"} else None
+        if "tools" in groups:
+            tools(out, root, tmp, args.runs)
+        if "keys" in groups:
+            Keys(out, root, env, tmp, args.runs).all()
+        if "frame" in groups:
+            frame(out, env, tmp, args.runs)
+        if "size" in groups:
+            size(out, tmp)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+    sys.exit(2 if failed else 0)
+
+
+# ----------------------------------------------------------------- compare
+
+
+def read_lines(path):
+    lines = []
+    with open(path, encoding="utf-8") as f:
+        for text in f:
+            try:
+                line = json.loads(text)
+            except ValueError:
+                continue
+            if isinstance(line, dict) and "metric" in line and ("ms" in line or "kb" in line):
+                lines.append(line)
+    return lines
+
+
+def last_main(history, runner):
+    """The lines of the last run in the history from this runner: the
+    ones that share the commit of its last line."""
+    mine = [h for h in history if h.get("runner") == runner]
+    return [h for h in mine if h["commit"] == mine[-1]["commit"]] if mine else []
+
+
+def compare(args):
+    """The run files against the last main run of the same runner, as a
+    comment for the pull request: what moved and what is over budget
+    first, then a table for each runner, folded. Exits 1 when a metric is
+    over its budget."""
+    history = read_lines(args.history) if args.history and os.path.exists(args.history) else []
+    over, moved, tables = [], [], []
+    for path in args.files:
+        lines = read_lines(path)
+        if not lines:
+            tables.append(f"`{os.path.basename(path)}`: no numbers.\n")
+            continue
+        runner = lines[0].get("runner", "local")
+        base = {h["metric"]: h for h in last_main(history, runner)}
+        was = next(iter(base.values()))["commit"] if base else None
+        against = f"main at `{was}`" if was else "nothing: no main run from this runner yet"
+        table = [
+            f"<details><summary><b>{runner}</b>, <code>{lines[0]['commit']}</code> against {against.replace('`', '')}</summary>\n",
+            "| metric | main | this | change | budget | |",
+            "|---|--:|--:|--:|--:|---|",
+        ]
+        for line in lines:
+            u = unit(line)
+            now, old = line[u], base.get(line["metric"], {}).get(u)
+            change, flags = "", []
+            if old:
+                change = f"{(now - old) / old:+.0%}"
+                if abs(now - old) / old > MOVED and (u != "ms" or abs(now - old) > MOVED_MS):
+                    flags.append("moved")
+                    moved.append(f"`{line['metric']}` on {runner}, {old} to {now} {u} ({change})")
+            limit = line.get("budget")
+            if limit is not None and now > limit:
+                flags.append("**over budget**")
+                over.append(f"`{line['metric']}` on {runner}, {now} {u} with a budget of {limit}")
+            was_text = "" if old is None else f"{old} {u}"
+            limit_text = "" if limit is None else f"{limit} {u}"
+            table.append(f"| {line['metric']} | {was_text} | {now} {u} | {change} | {limit_text} | {', '.join(flags)} |")
+        gone = [m for m in base if m not in {l["metric"] for l in lines}]
+        if gone:
+            table.append(f"\nOn main and not measured here: {', '.join(gone)}.")
+        table.append("\n</details>\n")
+        tables.append("\n".join(table))
+    # The first line is how the workflow finds this comment again.
+    print("<!-- bench -->")
+    print("### Bench\n")
+    if over:
+        print("**Over budget**, which fails this check:\n")
+        print("\n".join(f"- {o}" for o in over))
+        print("\nMake it faster, or raise its budget at the top of `scripts/bench`, with the reason.\n")
+    if moved:
+        print(f"**Moved** by more than {MOVED:.0%} and {MOVED_MS:g} ms from the last main run:\n")
+        print("\n".join(f"- {m}" for m in moved))
+        print("\nSay why in the pull request's description.\n")
+    if not over and not moved:
+        print("Nothing is over its budget, and nothing moved by more than a tenth.\n")
+    print("\n".join(tables))
+    print("Each number is the smallest of its runs. `main` is the last run on main from the same runner.")
+    sys.exit(1 if over else 0)
+
+
+# ------------------------------------------------------------------- graph
+
+BARS = "▁▂▃▄▅▆▇█"
+
+
+def graph(args):
+    """The history as one line per metric and runner: a bar per main run,
+    oldest first, with the smallest, the largest and the last. Without
+    --history the file is read from the branch that holds it."""
+    if args.history:
+        history = read_lines(args.history)
+    else:
+        subprocess.run(["git", "-C", ROOT, "fetch", "--quiet", "origin", "bench-history"], capture_output=True)
+        got = subprocess.run(["git", "-C", ROOT, "show", "FETCH_HEAD:history.jsonl"], capture_output=True, text=True)
+        if got.returncode != 0:
+            die("no history: the branch bench-history is not on origin yet; it starts with the first run on main")
+        path = os.path.join(tempfile.gettempdir(), f"bench-history.{os.getpid()}.jsonl")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(got.stdout)
+        history = read_lines(path)
+        os.remove(path)
+    series = {}
+    for h in history:
+        if args.metrics and not any(h["metric"].startswith(m) for m in args.metrics):
+            continue
+        series.setdefault((h.get("runner", ""), h["metric"], unit(h)), []).append(h[unit(h)])
+    if not series:
+        die("no history for that")
+    width = max(len(metric) for _, metric, _ in series)
+    last = None
+    for (runner, metric, u), values in sorted(series.items()):
+        if runner != last:
+            print(("" if last is None else "\n") + runner)
+            last = runner
+        values = values[-60:]
+        low, high = min(values), max(values)
+        bars = "".join(BARS[int((v - low) / (high - low) * (len(BARS) - 1))] if high > low else BARS[0] for v in values)
+        print(f"  {metric:<{width}}  {bars}  {low:g} to {high:g}, now {values[-1]:g} {u}")
+
+
+def main():
+    if len(sys.argv) == 4 and sys.argv[1] == "_copy":
+        # For hyperfine's --prepare: a copy of a file that is a program on
+        # every OS.
+        shutil.copyfile(sys.argv[2], sys.argv[3])
+        return
+    parser = argparse.ArgumentParser(prog="bench", description="Measure the hot paths, one line of JSON per metric.")
+    parser.add_argument("--runs", type=int, default=20, help="runs per metric; the smallest is the number (default 20)")
+    parser.add_argument("--only", help="groups to measure, with commas: " + ", ".join(GROUPS))
+    sub = parser.add_subparsers(dest="verb")
+    c = sub.add_parser("compare", help="a run against the last main run, as a pull request comment")
+    c.add_argument("--history", help="the history file, lines of main runs")
+    c.add_argument("files", nargs="+", metavar="RUN", help="files of lines from scripts/bench")
+    g = sub.add_parser("graph", help="the history, one line per metric")
+    g.add_argument("--history", help="a history file; the bench-history branch when left out")
+    g.add_argument("metrics", nargs="*", help="metrics, or the start of their names")
+    args = parser.parse_args()
+    # The graph's bars and a row's title are not ASCII, and a Windows
+    # console's own encoding would stop on them.
+    for stream in (sys.stdout, sys.stderr):
+        if hasattr(stream, "reconfigure"):
+            stream.reconfigure(encoding="utf-8", errors="replace")
+    if args.verb == "compare":
+        compare(args)
+    elif args.verb == "graph":
+        graph(args)
+    else:
+        measure(args)
+
+
+if __name__ == "__main__":
+    main()

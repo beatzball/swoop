@@ -1,0 +1,202 @@
+name: bench
+
+# scripts/bench on every pull request and on main: the hot paths, each as
+# one number, on each OS. A pull request gets one comment, kept up to date,
+# with every number against the last main run from the same runner, and
+# fails when a number is over its budget; the budgets are at the top of
+# scripts/bench. A push to main adds its numbers to history.jsonl on the
+# branch bench-history.
+#
+# A branch, and not a file on main: main takes only squash-merged pull
+# requests, by a ruleset, so a workflow cannot add a line to a file there,
+# and a commit for every merge would double main's history. The branch
+# holds that one file and nothing else. To read it:
+#
+#   scripts/bench graph                          a line per metric
+#   git show origin/bench-history:history.jsonl  the lines themselves
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Actions are pinned to a commit, with the tag in a comment, as in ci.yml.
+# The token reads only; the two jobs that write say what they write.
+permissions:
+  contents: read
+
+# A newer push to a pull request makes the run before it stale. A run on
+# main is never stopped: each is a line of the history.
+concurrency:
+  group: bench-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  measure:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e  # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: go build
+        run: go build -o bin/ ./cmd/...
+      # fzf as in ci.yml, and hyperfine, which times the tools. Each from
+      # its own release at a named version, so a number does not move
+      # because a package did.
+      - name: fzf and hyperfine
+        if: runner.os == 'Linux'
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL https://github.com/junegunn/fzf/releases/download/v0.74.4/fzf-0.74.4-linux_amd64.tar.gz | tar -xz -C "$HOME/.local/bin" fzf
+          curl -fsSL https://github.com/sharkdp/hyperfine/releases/download/v1.20.0/hyperfine-v1.20.0-x86_64-unknown-linux-gnu.tar.gz | tar -xz -C "$HOME/.local/bin" --strip-components 1 hyperfine-v1.20.0-x86_64-unknown-linux-gnu/hyperfine
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: fzf and hyperfine
+        if: runner.os == 'macOS'
+        run: brew install fzf hyperfine
+      # No fzf: the launcher needs a pseudo-terminal, which Windows has
+      # not, so the keys are not measured there.
+      - name: hyperfine
+        if: runner.os == 'Windows'
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL -o "$RUNNER_TEMP/hyperfine.zip" https://github.com/sharkdp/hyperfine/releases/download/v1.20.0/hyperfine-v1.20.0-x86_64-pc-windows-msvc.zip
+          unzip -j "$RUNNER_TEMP/hyperfine.zip" '*/hyperfine.exe' -d "$HOME/.local/bin"
+          cygpath -w "$HOME/.local/bin" >> "$GITHUB_PATH"
+      # The frame, for its show and hide and for the archive's size. The
+      # same cache as ci.yml, by the same key.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9  # v6.1.0
+        if: runner.os == 'macOS'
+        with:
+          path: shell/mac/.build
+          key: swift-${{ runner.os }}-${{ hashFiles('shell/mac/Package.resolved') }}-${{ hashFiles('shell/mac/Sources/**') }}
+          restore-keys: |
+            swift-${{ runner.os }}-${{ hashFiles('shell/mac/Package.resolved') }}-
+            swift-${{ runner.os }}-
+      - name: build the macOS frame
+        if: runner.os == 'macOS'
+        run: swift build -c release --package-path shell/mac
+      # The runner's label is what a number is compared within. The
+      # commit is the one that was pushed: a pull request's checkout is a
+      # merge commit nobody wrote.
+      - name: bench
+        env:
+          BENCH_RUNNER: ${{ matrix.os }}
+          BENCH_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          case "$RUNNER_OS" in
+            Windows) python=python ;;
+            *) python=python3 ;;
+          esac
+          "$python" scripts/bench | tee "bench-$BENCH_RUNNER.jsonl"
+      # Also when a metric could not be measured: the rest are worth
+      # reading.
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        if: always()
+        with:
+          name: bench-${{ matrix.os }}
+          path: bench-${{ matrix.os }}.jsonl
+
+  # Every runner's numbers against the last main run from that runner: in
+  # the run's summary, and on a pull request as a comment. Fails when a
+  # number is over its budget.
+  report:
+    needs: measure
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          pattern: bench-*
+          merge-multiple: true
+          path: runs
+      # No branch yet is no history: the first run on main starts it.
+      - name: The history
+        run: |
+          if git fetch --depth 1 origin bench-history; then
+            git show FETCH_HEAD:history.jsonl > history.jsonl
+          else
+            : > history.jsonl
+          fi
+      - name: Compare
+        id: compare
+        run: |
+          status=0
+          scripts/bench compare --history history.jsonl runs/*.jsonl > comment.md || status=$?
+          cat comment.md >> "$GITHUB_STEP_SUMMARY"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+      # One comment, found again by its first line and written over, so a
+      # pull request with ten pushes has one table and not ten. A pull
+      # request from a fork has a token that cannot comment; its numbers
+      # are in the run's summary.
+      - name: Comment on the pull request
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          id="$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --paginate --jq '.[] | select(.body | startswith("<!-- bench -->")) | .id' | head -1)"
+          if [ -n "$id" ]; then
+            gh api -X PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -F body=@comment.md > /dev/null
+          else
+            gh api -X POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -F body=@comment.md > /dev/null
+          fi
+      - name: Over budget
+        if: steps.compare.outputs.status != '0'
+        run: |
+          echo "A metric is over its budget; the table in the summary says which."
+          exit 1
+
+  # A run on main becomes the next lines of history.jsonl on the branch
+  # bench-history. Made with git's plumbing, so there is no second
+  # checkout: the file, a tree that holds it, a commit on top of the
+  # branch's last. Two merges close together race for the branch; the one
+  # that loses the push reads the branch again and adds its lines to that.
+  record:
+    if: github.event_name == 'push'
+    needs: measure
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c  # v8.0.1
+        with:
+          pattern: bench-*
+          merge-multiple: true
+          path: runs
+      - name: Add this run to bench-history
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          cat runs/*.jsonl > new.jsonl
+          for try in 1 2 3 4 5; do
+            parent=""
+            : > history.jsonl
+            if git fetch --depth 1 origin bench-history; then
+              parent="$(git rev-parse FETCH_HEAD)"
+              git show FETCH_HEAD:history.jsonl > history.jsonl
+            fi
+            cat new.jsonl >> history.jsonl
+            blob="$(git hash-object -w history.jsonl)"
+            tree="$(printf '100644 blob %s\thistory.jsonl\n' "$blob" | git mktree)"
+            commit="$(git commit-tree "$tree" ${parent:+-p "$parent"} -m "bench: main at ${GITHUB_SHA:0:12}")"
+            if git push origin "${commit}:refs/heads/bench-history"; then
+              exit 0
+            fi
+            echo "bench-history moved; reading it again (try $try)"
+          done
+          echo "could not add to bench-history"
+          exit 1
