@@ -5,8 +5,25 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/beatzball/swoop/internal/ext"
 	"github.com/beatzball/swoop/internal/protocol"
 )
+
+// A view whose bar is a prompt and whose preview is a transcript's, and a
+// plain view a key opens: what two bundled extensions ask for in their
+// views and key files. The rules know neither by name.
+const (
+	askView      = "ext/ai/ask"
+	askTitle     = "Ask AI"
+	settingsView = "ext/settings/settings"
+)
+
+var askPane = ext.Pane{Prompt: true, Wrap: true, Follow: true}
+
+// inAsk is the stack inside that prompt pane.
+func inAsk(query string, pos int) *State {
+	return &State{Stack: []Frame{{Kind: "view", View: askView, Title: askTitle, Query: query, Pos: pos, Pane: askPane}}}
+}
 
 // run is the test's stand-in for the shell command that performs a row.
 func run(target, action string) string {
@@ -20,7 +37,7 @@ func run(target, action string) string {
 
 func TestEnterOnActionRowBecomesRun(t *testing.T) {
 	st := &State{}
-	got := Enter(st, "/Applications/Safari.app", "app", "Safari", "saf", 1, run)
+	got := Enter(st, "/Applications/Safari.app", "app", "Safari", "saf", 1, ext.Pane{}, run)
 	if got != "become:cleanup; swoop-run '/Applications/Safari.app'" {
 		t.Fatalf("got %q", got)
 	}
@@ -30,14 +47,14 @@ func TestEnterOnActionRowBecomesRun(t *testing.T) {
 }
 
 func TestEnterOnNothingIsIgnored(t *testing.T) {
-	if got := Enter(&State{}, "", "", "", "zzz", 0, run); got != "ignore" {
+	if got := Enter(&State{}, "", "", "", "zzz", 0, ext.Pane{}, run); got != "ignore" {
 		t.Fatalf("got %q", got)
 	}
 }
 
 func TestEnterOnViewRowPushesAndLoads(t *testing.T) {
 	st := &State{}
-	got := Enter(st, "ext/define/define", "view", "Define Word", "de", 3, run)
+	got := Enter(st, "ext/define/define", "view", "Define Word", "de", 3, ext.Pane{}, run)
 	want := "clear-query+disable-search+change-prompt(Define Word > )+reload-sync(swoop-nav rows {q})+first+rebind(result-final)"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
@@ -88,7 +105,7 @@ func TestEnterOnRefreshActionRunsAndReturnsToTheViewBelow(t *testing.T) {
 		{Kind: "view", View: "ext/clipboard/clipboard", Title: "Clipboard History", Query: "", Pos: 1},
 		{Kind: "actions", View: "ext/clipboard/17", Title: "hello", Query: "he", Pos: 2},
 	}}
-	got := Enter(st, "delete", "refresh", "Delete", "", 2, run)
+	got := Enter(st, "delete", "refresh", "Delete", "", 2, ext.Pane{}, run)
 	want := "execute-silent(swoop-run 'ext/clipboard/17' 'delete')+disable-search+change-prompt(Clipboard History > )+change-preview-window(right,58%,border-left,nowrap)+change-preview(swoop-preview {1})+change-query(he)+reload-sync(swoop-nav rows {q})+rebind(result-final)"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
@@ -100,7 +117,7 @@ func TestEnterOnRefreshActionRunsAndReturnsToTheViewBelow(t *testing.T) {
 
 func TestEnterOnExitingActionBecomesRunWithTheAction(t *testing.T) {
 	st := &State{Stack: []Frame{{Kind: "actions", View: "/Applications/Safari.app", Title: "Safari", Query: "saf", Pos: 1}}}
-	got := Enter(st, "reveal", "action", "Reveal in Finder", "", 2, run)
+	got := Enter(st, "reveal", "action", "Reveal in Finder", "", 2, ext.Pane{}, run)
 	if got != "become:cleanup; swoop-run '/Applications/Safari.app' 'reveal'" {
 		t.Fatalf("got %q", got)
 	}
@@ -160,14 +177,14 @@ func TestKeywordWithoutAViewScopesTheRoot(t *testing.T) {
 	}
 }
 
-func TestAIKeywordOpensTheAskPaneWithTheRest(t *testing.T) {
+func TestKeywordOpensAPromptPaneWithTheRest(t *testing.T) {
 	st := &State{}
-	got := Change(st, &Keyed{Rest: "why is the sky blue", View: AIView, Title: AITitle})
+	got := Change(st, &Keyed{Rest: "why is the sky blue", View: askView, Title: askTitle, Pane: askPane})
 	want := "change-query(why is the sky blue)+disable-search+change-prompt(Ask AI > )+change-preview-window(right,58%,border-left,wrap,follow)+reload-sync(swoop-nav rows)+first"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
-	if len(st.Stack) != 1 || st.Stack[0].Kind != "ai" || st.Stack[0].Query != "" {
+	if len(st.Stack) != 1 || !st.Stack[0].Pane.Prompt || st.Stack[0].Query != "" {
 		t.Fatalf("stack: %+v", st.Stack)
 	}
 }
@@ -212,27 +229,27 @@ func TestLoadSaveRoundTrip(t *testing.T) {
 	}
 }
 
-func TestTabOpensTheAIPaneAndKeepsTheText(t *testing.T) {
+func TestAKeyOpensAPromptPaneAndKeepsTheText(t *testing.T) {
 	st := &State{}
-	got := Ask(st, "why is the sky blue", 3)
+	got := Key(st, askView, askTitle, askPane, "why is the sky blue", 3)
 	want := "disable-search+change-prompt(Ask AI > )+change-preview-window(right,58%,border-left,wrap,follow)+reload-sync(swoop-nav rows)+first"
 	if got != want {
 		t.Fatalf("got  %q\nwant %q", got, want)
 	}
-	if len(st.Stack) != 1 || st.Stack[0].Kind != "ai" || st.Stack[0].View != AIView || st.Stack[0].Query != "why is the sky blue" || st.Stack[0].Pos != 3 {
+	if len(st.Stack) != 1 || st.Stack[0].Kind != "view" || st.Stack[0].View != askView || st.Stack[0].Pane != askPane || st.Stack[0].Query != "why is the sky blue" || st.Stack[0].Pos != 3 {
 		t.Fatalf("stack: %+v", st.Stack)
 	}
-	if got := Ask(st, "", 1); got != "ignore" {
-		t.Fatalf("Tab inside the pane does nothing: got %q", got)
+	if got := Key(st, askView, askTitle, askPane, "", 1); got != "ignore" {
+		t.Fatalf("the key inside the pane does nothing: got %q", got)
 	}
 	if got := Change(st, nil); got != "ignore" {
 		t.Fatalf("typing in the pane must not reload: got %q", got)
 	}
 }
 
-func TestTabOnAnEmptyBarOpensThePaneToo(t *testing.T) {
+func TestAKeyOnAnEmptyBarOpensThePaneToo(t *testing.T) {
 	st := &State{}
-	if got := Ask(st, "", 1); got == "ignore" {
+	if got := Key(st, askView, askTitle, askPane, "", 1); got == "ignore" {
 		t.Fatal("an empty bar still opens the pane")
 	}
 	if len(st.Stack) != 1 || st.Stack[0].Query != "" {
@@ -240,31 +257,44 @@ func TestTabOnAnEmptyBarOpensThePaneToo(t *testing.T) {
 	}
 }
 
-func TestEnterInTheAIPaneSendsThenClears(t *testing.T) {
-	st := &State{Stack: []Frame{{Kind: "ai", View: AIView, Title: AITitle}}}
-	if _, ok := AISendTarget(st, "ext/ai/new", "  "); ok {
+func TestEnterInAPromptPaneSendsThenClears(t *testing.T) {
+	st := inAsk("", 0)
+	if Sends(st, "ext/ai/new", "  ") {
 		t.Fatal("nothing to send")
 	}
-	if _, ok := AISendTarget(st, "", "why"); ok {
+	if Sends(st, "", "why") {
 		t.Fatal("no row, nothing to send to")
 	}
-	if target, ok := AISendTarget(st, "ext/ai/new", "why"); !ok || target != "new" {
-		t.Fatalf("New row sends to new: %q %v", target, ok)
+	if !Sends(st, "ext/ai/new", "why") || !Sends(st, "ext/ai/20260925-1", "and then") {
+		t.Fatal("text and a row: the text goes to the row")
 	}
-	if target, ok := AISendTarget(st, "ext/ai/20260925-1", "and then"); !ok || target != "20260925-1" {
-		t.Fatalf("a conversation row sends to itself: %q %v", target, ok)
-	}
-	if _, ok := AISendTarget(&State{}, "ext/ai/new", "why"); ok {
+	if Sends(&State{}, "ext/ai/new", "why") {
 		t.Fatal("only inside the pane")
 	}
-	if got := AfterSend(st); got != "clear-query+reload-sync(swoop-nav rows)+rebind(result-final)" {
+	if Sends(&State{Stack: []Frame{{Kind: "view", View: "ext/define/define", Title: "Define Word"}}}, "ext/define/apple", "why") {
+		t.Fatal("only where the bar is a prompt")
+	}
+	// The send named the row it wrote to: the cursor goes there.
+	if got := AfterSend(st, "ext/ai/20260925-1", 1); got != "clear-query+reload-sync(swoop-nav rows)+rebind(result-final)" {
 		t.Fatalf("got %q", got)
 	}
-	if st.Land == nil || *st.Land != (Landing{Pos: 2, Refresh: true}) {
+	if st.Land == nil || *st.Land != (Landing{ID: "ext/ai/20260925-1", Refresh: true}) {
 		t.Fatalf("the cursor goes to the conversation once the list lands: %+v", st.Land)
 	}
+	if !Find(st, "", []string{"ext/ai/new", "ext/ai/20260925-1"}) || st.Land.Pos != 2 {
+		t.Fatalf("the conversation is row 2: %+v", st.Land)
+	}
+	// The pane's own worker reloads it, so the event does not stay bound.
+	if got := Landed(st, "", "conversation", 1); got != "pos(2)+transform(swoop-nav step down {2} 0)+refresh-preview+unbind(result-final)" {
+		t.Fatalf("got %q", got)
+	}
+	// It named none: the row number it was on, redrawn.
+	AfterSend(st, "", 3)
+	if st.Land == nil || *st.Land != (Landing{Pos: 3, Refresh: true}) {
+		t.Fatalf("the cursor stays on its row: %+v", st.Land)
+	}
 	st.Land = nil
-	if got := Enter(st, "ext/ai/20260925-1", "conversation", "earlier", "and then", 2, run); got != "ignore" {
+	if got := Enter(st, "ext/ai/20260925-1", "conversation", "earlier", "and then", 2, ext.Pane{}, run); got != "ignore" {
 		t.Fatalf("Enter itself neither runs nor pushes in the pane: %q", got)
 	}
 	if len(st.Stack) != 1 {
@@ -272,8 +302,8 @@ func TestEnterInTheAIPaneSendsThenClears(t *testing.T) {
 	}
 }
 
-func TestEscFromTheAIPaneRestoresTheBar(t *testing.T) {
-	st := &State{Stack: []Frame{{Kind: "ai", View: AIView, Title: AITitle, Query: "why is the sky blue", Pos: 2}}}
+func TestEscFromAPromptPaneRestoresTheBar(t *testing.T) {
+	st := inAsk("why is the sky blue", 2)
 	if got := Esc(st, "draft"); got != "clear-query" {
 		t.Fatalf("text first: %q", got)
 	}
@@ -291,9 +321,9 @@ func TestEscFromTheAIPaneRestoresTheBar(t *testing.T) {
 	}
 }
 
-func TestPoppingActionsInsideTheAIPaneKeepsItsWindow(t *testing.T) {
+func TestPoppingActionsInsideAPaneKeepsItsWindow(t *testing.T) {
 	st := &State{Stack: []Frame{
-		{Kind: "ai", View: AIView, Title: AITitle, Query: "", Pos: 1},
+		inAsk("", 1).Stack[0],
 		{Kind: "actions", View: "ext/ai/20260925-1", Title: "earlier", Query: "draft", Pos: 2},
 	}}
 	got := Esc(st, "")
@@ -309,50 +339,100 @@ func TestDividerKeepsThePanesShape(t *testing.T) {
 	if got := Divider(&State{}); got != "change-preview-window(right,63%,border-left,nowrap)" {
 		t.Fatalf("root: %q", got)
 	}
-	st := &State{Stack: []Frame{{Kind: "ai", View: AIView, Title: AITitle}}}
+	st := inAsk("", 0)
 	if got := Divider(st); got != "change-preview-window(right,63%,border-left,wrap,follow)" {
-		t.Fatalf("ai pane: %q", got)
+		t.Fatalf("a wrapped pane: %q", got)
 	}
-	if got := Window(false); got != "right,63%,border-left,nowrap" {
+	// An actions pane keeps the window of the pane it was opened from.
+	st.Stack = append(st.Stack, Frame{Kind: "actions", View: "ext/ai/new", Title: "New conversation"})
+	if got := Divider(st); got != "change-preview-window(right,63%,border-left,wrap,follow)" {
+		t.Fatalf("its actions pane: %q", got)
+	}
+	if got := Window(ext.Pane{}); got != "right,63%,border-left,nowrap" {
 		t.Fatalf("Window: %q", got)
+	}
+}
+
+// A view's own preview width is set on the way in, from a key or from
+// Enter on its row, and the user's is put back on the way out.
+func TestAViewsOwnPreviewWidth(t *testing.T) {
+	wide := ext.Pane{Percent: 70}
+	st := &State{}
+	got := Enter(st, "ext/fake/wide", "view", "Wide", "wi", 2, wide, run)
+	want := "clear-query+disable-search+change-prompt(Wide > )+change-preview-window(right,70%,border-left,nowrap)+reload-sync(swoop-nav rows {q})+first+rebind(result-final)"
+	if got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+	if !OwnWidth(st) || OwnWidth(&State{}) || OwnWidth(inAsk("", 0)) {
+		t.Fatal("only the pane with a width of its own")
+	}
+	if got := Divider(st); got != "change-preview-window(right,70%,border-left,nowrap)" {
+		t.Fatalf("the divider leaves it: %q", got)
+	}
+	// A plain view opened from it gets the plain window back, and a pop
+	// to it the wide one.
+	got = Enter(st, "ext/fake/inner", "view", "Inner", "", 1, ext.Pane{}, run)
+	if !strings.Contains(got, "change-preview-window(right,58%,border-left,nowrap)") {
+		t.Fatalf("a plain view over it: %q", got)
+	}
+	if got := Esc(st, ""); !strings.Contains(got, "change-preview-window(right,70%,border-left,nowrap)") {
+		t.Fatalf("back to it: %q", got)
+	}
+	if got := Esc(st, ""); !strings.Contains(got, "change-preview-window(right,58%,border-left,nowrap)") {
+		t.Fatalf("back to the root: %q", got)
+	}
+}
+
+// Enter on a view row whose view is a prompt pane opens it with the bar
+// empty: the text there found the row, and is not a prompt.
+func TestEnterOnARowOpensAPromptPaneEmpty(t *testing.T) {
+	st := &State{}
+	got := Enter(st, askView, "view", askTitle, "ask", 2, askPane, run)
+	want := "clear-query+disable-search+change-prompt(Ask AI > )+change-preview-window(right,58%,border-left,wrap,follow)+reload-sync(swoop-nav rows)+first"
+	if got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
 	}
 }
 
 func TestRefreshRowInAViewRunsAndReturns(t *testing.T) {
 	st := &State{Stack: []Frame{
-		{Kind: "view", View: SettingsView, Title: SettingsTitle, Query: "", Pos: 1},
+		{Kind: "view", View: settingsView, Title: "Settings", Query: "", Pos: 1},
 		{Kind: "view", View: "ext/settings/preview", Title: "Preview width", Query: "", Pos: 2},
 	}}
-	got := Enter(st, "ext/settings/preview=65", "refresh", "65%", "", 3, run)
+	got := Enter(st, "ext/settings/preview=65", "refresh", "65%", "", 3, ext.Pane{}, run)
 	if !strings.HasPrefix(got, "execute-silent(swoop-run 'ext/settings/preview=65')+") {
 		t.Fatalf("runs the row quietly: %q", got)
 	}
 	if !strings.Contains(got, "change-prompt(Settings > )") || !strings.Contains(got, "reload-sync(swoop-nav rows {q})") {
 		t.Fatalf("returns to the pane below, reloaded: %q", got)
 	}
-	if len(st.Stack) != 1 || st.Stack[0].View != SettingsView {
+	if len(st.Stack) != 1 || st.Stack[0].View != settingsView {
 		t.Fatalf("stack: %+v", st.Stack)
 	}
 	// At the root a refresh row is just a row: it runs and the launcher ends.
-	if got := Enter(&State{}, "ext/x/y", "refresh", "y", "", 1, run); !strings.HasPrefix(got, "become:") {
+	if got := Enter(&State{}, "ext/x/y", "refresh", "y", "", 1, ext.Pane{}, run); !strings.HasPrefix(got, "become:") {
 		t.Fatalf("at the root: %q", got)
 	}
 }
 
-func TestSettingsKeyOpensThePaneOnce(t *testing.T) {
+func TestAKeyOpensAPlainViewOnce(t *testing.T) {
 	st := &State{}
-	got := Settings(st, "typed", 4)
+	got := Key(st, settingsView, "Settings", ext.Pane{}, "typed", 4)
+	// As Enter on its row: the bar cleared, and no change of window.
+	if got != "clear-query+disable-search+change-prompt(Settings > )+reload-sync(swoop-nav rows {q})+first+rebind(result-final)" {
+		t.Fatalf("got %q", got)
+	}
 	if !strings.Contains(got, "change-prompt(Settings > )") || len(st.Stack) != 1 || st.Stack[0].Query != "typed" {
 		t.Fatalf("got %q, stack %+v", got, st.Stack)
 	}
-	if got := Settings(st, "", 1); got != "ignore" {
+	if got := Key(st, settingsView, "Settings", ext.Pane{}, "", 1); got != "ignore" {
 		t.Fatalf("inside the pane: %q", got)
 	}
 }
 
 func TestToggleRowInAViewRunsAndStays(t *testing.T) {
 	st := &State{Stack: []Frame{{Kind: "view", View: "ext/tasks/tasks", Title: "Tasks", Query: "", Pos: 1}}}
-	got := Enter(st, "ext/tasks/t\x1fbuy milk", "toggle", "buy milk", "milk", 3, run)
+	got := Enter(st, "ext/tasks/t\x1fbuy milk", "toggle", "buy milk", "milk", 3, ext.Pane{}, run)
 	if !strings.HasPrefix(got, "execute-silent(swoop-run 'ext/tasks/t\x1fbuy milk')+") {
 		t.Fatalf("runs the row quietly: %q", got)
 	}
@@ -365,7 +445,7 @@ func TestToggleRowInAViewRunsAndStays(t *testing.T) {
 		t.Fatalf("the pane was popped: %+v", st.Stack)
 	}
 	// At the root a toggle row is just a row: it runs and the launcher ends.
-	if got := Enter(&State{}, "ext/x/y", "toggle", "y", "", 1, run); !strings.HasPrefix(got, "become:") {
+	if got := Enter(&State{}, "ext/x/y", "toggle", "y", "", 1, ext.Pane{}, run); !strings.HasPrefix(got, "become:") {
 		t.Fatalf("at the root: %q", got)
 	}
 }
@@ -374,20 +454,20 @@ func TestToggleRowInAViewRunsAndStays(t *testing.T) {
 // then does nothing.
 func TestGroupRowDoesNothing(t *testing.T) {
 	st := &State{Stack: []Frame{{Kind: "view", View: "ext/tasks/tasks", Title: "Tasks", Query: "", Pos: 1}}}
-	if got := Enter(st, "ext/tasks/group\x1fToday", "group", "Today", "", 1, run); got != "ignore" {
+	if got := Enter(st, "ext/tasks/group\x1fToday", "group", "Today", "", 1, ext.Pane{}, run); got != "ignore" {
 		t.Fatalf("a header ran: %q", got)
 	}
 	if len(st.Stack) != 1 || st.Land != nil {
 		t.Fatalf("a header moved the stack: %+v", st)
 	}
-	if got := Enter(&State{}, "ext/x/group", "group", "y", "", 1, run); got != "ignore" {
+	if got := Enter(&State{}, "ext/x/group", "group", "y", "", 1, ext.Pane{}, run); got != "ignore" {
 		t.Fatalf("at the root: %q", got)
 	}
 }
 
 func TestTerminalRowHandsOverTheTerminalAndStays(t *testing.T) {
 	st := &State{Stack: []Frame{{Kind: "view", View: "ext/notes/notes", Title: "Notes", Query: "", Pos: 1}}}
-	got := Enter(st, "ext/notes/fake.md", "terminal", "Fake (draft)", "zuc", 2, run)
+	got := Enter(st, "ext/notes/fake.md", "terminal", "Fake (draft)", "zuc", 2, ext.Pane{}, run)
 	want := "execute[env SWOOP_KIND='terminal' SWOOP_TITLE='Fake (draft)' swoop-run 'ext/notes/fake.md']" +
 		"+transform(swoop-nav back 'ext/notes/fake.md')"
 	if got != want {
@@ -400,7 +480,7 @@ func TestTerminalRowHandsOverTheTerminalAndStays(t *testing.T) {
 		t.Fatalf("the pane was popped: %+v", st.Stack)
 	}
 	// At the root too: the launcher stays open.
-	if got := Enter(&State{}, "ext/x/y", "terminal", "y", "", 1, run); !strings.HasPrefix(got, "execute(") {
+	if got := Enter(&State{}, "ext/x/y", "terminal", "y", "", 1, ext.Pane{}, run); !strings.HasPrefix(got, "execute(") {
 		t.Fatalf("at the root: %q", got)
 	}
 }
@@ -410,7 +490,7 @@ func TestTerminalActionPopsBackToThePaneBelow(t *testing.T) {
 		{Kind: "view", View: "ext/tasks/tasks", Title: "Tasks", Query: "", Pos: 1},
 		{Kind: "actions", View: "ext/tasks/t\x1fmilk", Title: "milk", Query: "mi", Pos: 3},
 	}}
-	got := Enter(st, "edit", "terminal", "Edit the list", "", 1, run)
+	got := Enter(st, "edit", "terminal", "Edit the list", "", 1, ext.Pane{}, run)
 	if !strings.HasPrefix(got, "execute(swoop-run 'ext/tasks/t\x1fmilk' 'edit')+enable-search") && !strings.HasPrefix(got, "execute(swoop-run 'ext/tasks/t\x1fmilk' 'edit')+disable-search") {
 		t.Fatalf("runs the action with the terminal: %q", got)
 	}
@@ -573,19 +653,19 @@ func TestNoChainWaits(t *testing.T) {
 		}}
 	}
 	inView := func() *State { return &State{Stack: view().Stack[:1]} }
-	ai := &State{Stack: []Frame{{Kind: "ai", View: AIView, Title: AITitle}}}
 	chains := map[string]string{
 		"pop":             Esc(inView(), ""),
 		"pop actions":     Esc(view(), ""),
-		"refresh action":  Enter(view(), "delete", "refresh", "Delete", "", 1, run),
-		"terminal action": Enter(view(), "edit", "terminal", "Edit", "", 1, run),
-		"refresh row":     Enter(&State{Stack: view().Stack[:1]}, "x", "refresh", "x", "", 1, run),
-		"toggle":          Enter(inView(), "t", "toggle", "t", "", 2, run),
-		"terminal row":    Enter(inView(), "n", "terminal", "n", "", 2, run),
-		"push":            Enter(&State{}, "v", "view", "V", "", 1, run),
+		"refresh action":  Enter(view(), "delete", "refresh", "Delete", "", 1, ext.Pane{}, run),
+		"terminal action": Enter(view(), "edit", "terminal", "Edit", "", 1, ext.Pane{}, run),
+		"refresh row":     Enter(&State{Stack: view().Stack[:1]}, "x", "refresh", "x", "", 1, ext.Pane{}, run),
+		"toggle":          Enter(inView(), "t", "toggle", "t", "", 2, ext.Pane{}, run),
+		"terminal row":    Enter(inView(), "n", "terminal", "n", "", 2, ext.Pane{}, run),
+		"push":            Enter(&State{}, "v", "view", "V", "", 1, ext.Pane{}, run),
 		"actions":         Actions(&State{}, "v", "view", "V", "", 1),
-		"ask":             Ask(&State{}, "", 1),
-		"send":            AfterSend(ai),
+		"key":             Key(&State{}, settingsView, "Settings", ext.Pane{}, "", 1),
+		"key, a prompt":   Key(&State{}, askView, askTitle, askPane, "", 1),
+		"send":            AfterSend(inAsk("", 0), "ext/ai/1", 2),
 		"back":            Back(inView(), ""),
 		"back, landing":   Back(inView(), "ext/notes/new.md"),
 	}

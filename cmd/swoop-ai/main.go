@@ -1,6 +1,10 @@
 // swoop-ai is the Ask AI pane: the extension behind Tab. It speaks the
 // extension contract, so the launcher routes to it like any other, and
-// one verb more, `send`, which the pane's Enter uses.
+// the launcher knows nothing of it. Three files beside the shim in
+// extensions/ai say what is its own: `key` claims Tab for the ask view,
+// `views` says that view's bar is a prompt and its preview is wrapped
+// and follows, and `keyword` gives it "ai". `send` is the contract's
+// verb for a pane whose bar is a prompt: Enter there.
 //
 //	swoop-ai list                       nothing: Tab is the way in
 //	swoop-ai view ask [text]            rows: New conversation, then the past ones
@@ -32,7 +36,6 @@ import (
 	"github.com/beatzball/swoop/internal/chat"
 	"github.com/beatzball/swoop/internal/markdown"
 	"github.com/beatzball/swoop/internal/models"
-	"github.com/beatzball/swoop/internal/nav"
 	"github.com/beatzball/swoop/internal/paste"
 	"github.com/beatzball/swoop/internal/protocol"
 	"github.com/beatzball/swoop/internal/settings"
@@ -41,6 +44,15 @@ import (
 
 // newID is the row that starts a conversation.
 const newID = "new"
+
+// askView is the pane's view, as the launcher names it: what an open is
+// counted under in the usage log.
+const askView = "ext/ai/ask"
+
+// envLand names the file a send writes the conversation's id to, so the
+// launcher puts the cursor on it once the list is back: a new
+// conversation is a new row, and an old one moves to the top.
+const envLand = "SWOOP_LAND"
 
 func main() {
 	if len(os.Args) < 2 {
@@ -316,9 +328,14 @@ func send(store chat.Store, id, prompt string) error {
 		return fmt.Errorf("still answering")
 	}
 	c.Ask(prompt)
-	_ = usage.Record(nav.AIView, "ai", "Ask AI")
+	_ = usage.Record(askView, "ai", "Ask AI")
 	if err := store.Save(c); err != nil {
 		return err
+	}
+	if file := os.Getenv(envLand); file != "" {
+		// Not worth failing the send for: without it the cursor stays on
+		// its row number.
+		_ = os.WriteFile(file, []byte(c.ID+"\n"), 0o600)
 	}
 	return startWorker(c.ID)
 }
