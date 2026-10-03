@@ -146,8 +146,8 @@ startup time is felt directly.
   showing how much, and a reason
 - `make bench` (`scripts/bench`) is where the number comes from: every hot
   path as one line of JSON, the smallest of many runs. CI runs it on every
-  pull request and comments each number against the last main run from the
-  same runner. A metric over its budget fails the pull request; the
+  pull request and comments each number against the band of the last ten
+  main runs from the same runner (no flags until there are five). A metric over its budget fails the pull request; the
   budgets, each with its reason, are at the top of `scripts/bench`, and a
   pull request that raises one says why there. One that moves a metric by
   more than a tenth says why in its description
