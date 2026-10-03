@@ -68,6 +68,37 @@ def fail(msg, tail=""):
     sys.exit(1)
 
 
+# How long a launcher has to answer for the first time. As it starts, the
+# launcher waits for the lists it keeps for the run, each for up to the
+# start's limit (startTimeout in internal/ext, ten seconds since #227),
+# and fzf has no socket until they are in. The limit is read from the
+# source, so this wait follows it when it changes. The margin is for what
+# the limit does not cover: bash, swoop-nav's other calls, fzf itself, and
+# the list that is asked again when one was late. Timed on a 16-core
+# laptop with every core busy and bin/ just built, which is when the
+# system checks each program on its first run: the first answer came
+# after 1.9 to 10.9 seconds and the whole list after 1.9 to 12.4, against
+# 0.6 once the programs had run. A wait of ten seconds, the limit itself,
+# is one a cold start outlasts.
+START_MARGIN = 20.0
+
+
+def first_state_wait():
+    with open(os.path.join(ROOT, "internal", "ext", "ext.go")) as f:
+        m = re.search(r"^var startTimeout = (\d+) \* time\.Second", f.read(), re.M)
+    if not m:
+        fail("no startTimeout in internal/ext/ext.go; the wait for a launcher's first state is that limit and a margin")
+    return int(m.group(1)) + START_MARGIN
+
+
+FIRST_STATE = first_state_wait()
+
+
+def sockets():
+    """The socket of every launcher in the test's folder, live or left."""
+    return glob.glob(os.path.join(os.environ["SWOOP_TEST_TMP"], "swoop-state.*.sock"))
+
+
 def write_exe(path, body):
     with open(path, "w") as f:
         f.write(body)
@@ -112,6 +143,9 @@ class Launcher:
     """One swoop in a pseudo-terminal."""
 
     def __init__(self, env, cols=120, rows=30, script=None):
+        # The sockets in the folder before this launcher starts are other
+        # launchers'. Its own is the one that was not there: see state().
+        self.others = set(sockets())
         self.pid, self.fd = pty.fork()
         if self.pid == 0:
             os.execvpe(script or os.path.join(ROOT, "bin", "swoop"), ["swoop"], env)
@@ -196,12 +230,25 @@ class Launcher:
         keeps one of two requests that wait together, either one, and
         when it kept the old list's, that list stayed on the screen under
         the new one's count. It looked like a lost Esc, and was not
-        (#216)."""
+        (#216).
+
+        The socket asked is this launcher's own: the one in the folder
+        that was not there before it started. Any socket in the folder
+        was good enough once, and one of them could be the last
+        launcher's. kill() ends the script, and fzf outlives it by the
+        few milliseconds it takes to hear the hangup and take its socket
+        away. A launcher that looked in those milliseconds took that
+        socket for its own. Its wait for the list passed, on the dead
+        launcher's rows; then it typed into its own bar and watched a
+        socket nobody answered on, for the whole of the wait: "last
+        state None", once on the macOS runner. The trace had it: the
+        new launcher's first state 7 ms after the old one's last, and
+        every app in it, with apps turned off (#235)."""
         if self.sock is None:
-            socks = glob.glob(os.path.join(os.environ["SWOOP_TEST_TMP"], "swoop-state.*.sock"))
-            if not socks:
+            mine = [s for s in sockets() if s not in self.others]
+            if not mine:
                 return None
-            self.sock = socks[0]
+            self.sock = mine[0]
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as c:
                 c.settimeout(2)
@@ -263,7 +310,12 @@ class Launcher:
         """Wait until fzf's state satisfies pred; returns it. The state
         carries up to `limit` matches, for a pred that looks past the
         current row. The looks come close together: each is a few
-        milliseconds, and the failure trace is made of them."""
+        milliseconds, and the failure trace is made of them.
+
+        A launcher that has not answered yet is still starting, and that
+        has the start's wait, whatever the step asks for: FIRST_STATE."""
+        if self.seen is None:
+            timeout = max(timeout, FIRST_STATE)
         end = time.time() + timeout
         while time.time() < end:
             st = self.state(limit)
@@ -575,8 +627,9 @@ esac
             # the first run of bin/'s programs when they were just built,
             # and the system may take seconds to let each one start; the
             # launcher waits for the list it keeps for the run for up to
-            # ten of them (ext.ListStart), so this wait is longer than that.
-            L.wait_state(lambda s: s["totalCount"] > 3, timeout=30.0, what="the launcher's list")
+            # ten of them (ext.ListStart). The wait for a launcher's first
+            # state is longer than that: FIRST_STATE, in wait_state.
+            L.wait_state(lambda s: s["totalCount"] > 3, what="the launcher's list")
             L.press("fake", lambda s: s["query"] == "fake" and has(s, "Fake Things") and has(s, "Fake Plain Row"), what="the fake view row and plain row after typing 'fake'")
             L.press(" plain", lambda s: s["query"] == "fake plain" and s["matchCount"] == 1 and "Fake Plain Row" in cur(s), what="one match for 'fake plain', the plain row")
         check("root list and filter", root)
@@ -1438,6 +1491,32 @@ printf 'b\\tcommand\\t\\tSlow Live Row\\tasked again\\n'
             finally:
                 t.kill()
         check("the template: new makes a tool that opens, lists and runs", template)
+
+        # 20. two launchers at once (#235). Each has a socket of its own,
+        # and the harness asks each one on its own: text typed into the
+        # second is in the second's bar, and the first's stays empty. The
+        # second starts while the first's socket is the only one in the
+        # folder, which is when it was taken for the second's
+        def side_by_side():
+            x = Launcher(env)
+            x.key = key
+            y = None
+            try:
+                x.wait_state(lambda s: s["totalCount"] > 3, what="the first launcher's list")
+                y = Launcher(env)
+                y.key = key
+                y.wait_state(lambda s: s["totalCount"] > 3, what="the second launcher's list")
+                if x.sock == y.sock:
+                    fail(f"two launchers, and one socket asked for both: {x.sock}", y.buf)
+                y.press("fake", lambda s: s["query"] == "fake" and has(s, "Fake Things"), what="'fake' in the second launcher's bar")
+                st = x.state()
+                if not st or st["query"] != "":
+                    fail(f"the first launcher's bar after typing into the second: {st}", x.buf)
+            finally:
+                x.kill()
+                if y:
+                    y.kill()
+        check("two launchers at once: each answers for itself", side_by_side)
     finally:
         L.kill()
         # The worker may still be around on a fast failure.
