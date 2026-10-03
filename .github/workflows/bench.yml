@@ -2,10 +2,15 @@ name: bench
 
 # scripts/bench on every pull request and on main: the hot paths, each as
 # one number, on each OS. A pull request gets one comment, kept up to date,
-# with every number against the last main run from the same runner, and
+# with every number against the last main runs from the same runner, and
 # fails when a number is over its budget; the budgets are at the top of
 # scripts/bench. A push to main adds its numbers to history.jsonl on the
 # branch bench-history.
+#
+# The last main runs, and not the last one: a hosted runner is not one
+# machine, and the same code gives it numbers half as large again from
+# one run to the next. What moved is what is outside the band those runs
+# span; BAND_RUNS in scripts/bench has the numbers that say why.
 #
 # A branch, and not a file on main: main takes only squash-merged pull
 # requests, by a ruleset, so a workflow cannot add a line to a file there,
@@ -103,9 +108,9 @@ jobs:
           name: bench-${{ matrix.os }}
           path: bench-${{ matrix.os }}.jsonl
 
-  # Every runner's numbers against the last main run from that runner: in
+  # Every runner's numbers against the last main runs from that runner: in
   # the run's summary, and on a pull request as a comment. Fails when a
-  # number is over its budget.
+  # number is over its budget, and not when one moved.
   report:
     needs: measure
     runs-on: ubuntu-latest

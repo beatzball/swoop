@@ -2,7 +2,7 @@
 """bench: the moments a person feels, each as one number on one line of JSON.
 
     scripts/bench [--runs N] [--only GROUP,...]       measure, and print the lines
-    scripts/bench compare --history FILE RUN...       a run against the last main run
+    scripts/bench compare --history FILE RUN...       a run against the last main runs
     scripts/bench graph [--history FILE] [METRIC...]  the history, a line per metric
 
 A line is {"metric", "ms", "rows", "commit", "os", "runner", "runs",
@@ -67,10 +67,10 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # that runs this: a hosted CI runner, about three times slower than the
 # laptop these were first measured on (2026-10-02; each reason gives that
 # laptop's number). A budget is there to catch a step that doubled. The
-# fine instrument is the comparison with the last main run on the same
-# runner, which sees a tenth. Tighten a budget when the history shows the
-# runners have room; raise one in the pull request that needs it, with
-# the reason here.
+# fine instrument is the comparison with the last main runs on the same
+# runner, which sees a tenth where the runner is steady enough to show
+# one. Tighten a budget when the history shows the runners have room;
+# raise one in the pull request that needs it, with the reason here.
 BUDGETS = {
     # What a person feels: one key, through the launcher itself.
     #
@@ -131,11 +131,32 @@ BUDGETS = {
     "size.memory": 120000,
 }
 
-# How far a metric may move from the last main run, on the same runner,
+# How far a metric may be outside the band of main, on the same runner,
 # before the pull request says why: a tenth, and a millisecond, because a
 # tenth of a two millisecond process is the noise of the runner.
 MOVED = 0.10
 MOVED_MS = 1.0
+# The band: the smallest and the largest a metric was in the last
+# BAND_RUNS runs on main from the same runner. Not the last run alone,
+# because a hosted runner is not one machine, and two runs of the same
+# code are not one number (#239). On 2026-10-02, four main runs in a row
+# with no hot path touched between them had nav.rows on macos-latest at
+# 70, 48, 68 and 71 ms and list.calc at 4, 6, 31 and 28; windows-latest
+# gave one pull request every number a third lower, which is another
+# machine. Against the last run alone, the three pull requests of that
+# day, none near a hot path, had 35, 36 and 31 numbers flagged. What main
+# itself does from run to run is the noise of the runner, so the band is
+# how wide the flag has to be there: a tenth on a steady runner, and as
+# much as the runner swings on one that is not.
+#
+# Ten runs: enough to have met the runner's slow machines and its fast
+# ones, and few enough that a step main took on purpose is out of the
+# band again ten merges later. Under BAND_LEAST runs nothing is flagged,
+# and the comment says so: the largest of two runs is not yet what the
+# runner can do, and a flag from it would be the noise this is here to
+# keep out.
+BAND_RUNS = 10
+BAND_LEAST = 5
 
 GROUPS = ("tools", "keys", "frame", "size")
 WINDOWS = os.name == "nt"
@@ -1185,51 +1206,106 @@ def read_lines(path):
     return lines
 
 
-def last_main(history, runner):
-    """The lines of the last run in the history from this runner: the
-    ones that share the commit of its last line."""
-    mine = [h for h in history if h.get("runner") == runner]
-    return [h for h in mine if h["commit"] == mine[-1]["commit"]] if mine else []
+def main_runs(history, runner):
+    """The last BAND_RUNS runs in the history from this runner, oldest
+    first, each as {metric: line}: a run is the lines that share a
+    commit."""
+    runs = {}
+    for h in history:
+        if h.get("runner") == runner:
+            runs.setdefault(h["commit"], {})[h["metric"]] = h
+    return list(runs.values())[-BAND_RUNS:]
+
+
+def middle(values, u):
+    """The median, written as a line writes a number of that unit."""
+    values = sorted(values)
+    half = len(values) // 2
+    mid = values[half] if len(values) % 2 else (values[half - 1] + values[half]) / 2
+    return int(round(mid)) if u == "kb" else round(mid, 2)
 
 
 def compare(args):
-    """The run files against the last main run of the same runner, as a
+    """The run files against the last main runs of the same runner, as a
     comment for the pull request: what moved and what is over budget
-    first, then a table for each runner, folded. Exits 1 when a metric is
-    over its budget."""
+    first, then a table for each runner, folded. A metric moved when it
+    is outside the band of those main runs by more than MOVED; see
+    BAND_RUNS. Exits 1 when a metric is over its budget, and for nothing
+    else: a metric that moved is said, and does not fail."""
     history = read_lines(args.history) if args.history and os.path.exists(args.history) else []
-    over, moved, tables = [], [], []
+    over, moved, few, tables = [], [], [], []
+    # Whether any runner had the main runs to say what moved.
+    looked = False
     for path in args.files:
         lines = read_lines(path)
         if not lines:
             tables.append(f"`{os.path.basename(path)}`: no numbers.\n")
             continue
         runner = lines[0].get("runner", "local")
-        base = {h["metric"]: h for h in last_main(history, runner)}
-        was = next(iter(base.values()))["commit"] if base else None
-        against = f"main at `{was}`" if was else "nothing: no main run from this runner yet"
+        runs = main_runs(history, runner)
+        if not runs:
+            against = "nothing: no main run from this runner yet"
+        elif len(runs) == 1:
+            against = f"the one main run, {next(iter(runs[0].values()))['commit']}"
+        else:
+            against = f"the last {len(runs)} main runs, up to {next(iter(runs[-1].values()))['commit']}"
+        if len(runs) < BAND_LEAST:
+            few.append(f"{runner}, with {len(runs)} on main")
+        else:
+            looked = True
         table = [
-            f"<details><summary><b>{runner}</b>, <code>{lines[0]['commit']}</code> against {against.replace('`', '')}</summary>\n",
-            "| metric | main | this | change | budget | |",
-            "|---|--:|--:|--:|--:|---|",
+            f"<details><summary><b>{runner}</b>, <code>{lines[0]['commit']}</code> against {against}</summary>\n",
+            "| metric | main | band | this | change | budget | |",
+            "|---|--:|--:|--:|--:|--:|---|",
         ]
+        # The times of this runner that are past the band, by side, each
+        # with how far past, and how many times had a band to be past.
+        above, below, banded = [], [], 0
         for line in lines:
             u = unit(line)
-            now, old = line[u], base.get(line["metric"], {}).get(u)
-            change, flags = "", []
-            if old:
-                change = f"{(now - old) / old:+.0%}"
-                if abs(now - old) / old > MOVED and (u != "ms" or abs(now - old) > MOVED_MS):
+            now = line[u]
+            was = [r[line["metric"]][u] for r in runs if u in r.get(line["metric"], {})]
+            mid, change, band, flags = None, "", "", []
+            if was:
+                mid, low, high = middle(was, u), min(was), max(was)
+                if mid:
+                    change = f"{(now - mid) / mid:+.0%}"
+                if len(was) > 1:
+                    band = f"{low} to {high}"
+                # How far outside the band, and the end of the band it is
+                # past: a tenth is a tenth of that end.
+                past, edge = (now - high, high) if now > high else (low - now, low)
+                share = past / edge if edge else 1.0
+                known = len(was) >= BAND_LEAST
+                if known and u == "ms":
+                    banded += 1
+                if known and past > MOVED * edge and (u != "ms" or past > MOVED_MS):
                     flags.append("moved")
-                    moved.append(f"`{line['metric']}` on {runner}, {old} to {now} {u} ({change})")
+                    text = f"`{line['metric']}` on {runner}, {now} {u}: {'above' if now > high else 'below'} the {low} to {high} of the last {len(was)} main runs, by {share:.0%}"
+                    if u != "ms":
+                        moved.append(text)
+                    else:
+                        (above if now > high else below).append((text, share))
             limit = line.get("budget")
             if limit is not None and now > limit:
                 flags.append("**over budget**")
                 over.append(f"`{line['metric']}` on {runner}, {now} {u} with a budget of {limit}")
-            was_text = "" if old is None else f"{old} {u}"
+            was_text = "" if mid is None else f"{mid} {u}"
             limit_text = "" if limit is None else f"{limit} {u}"
-            table.append(f"| {line['metric']} | {was_text} | {now} {u} | {change} | {limit_text} | {', '.join(flags)} |")
-        gone = [m for m in base if m not in {l["metric"] for l in lines}]
+            table.append(f"| {line['metric']} | {was_text} | {band} | {now} {u} | {change} | {limit_text} | {', '.join(flags)} |")
+        # More than half of a runner's times past the band on one side is
+        # one thing, not that many: the run had a slower or a faster
+        # machine than main has had, which moves every time together, or
+        # the change is in what every program shares. One line says so;
+        # a line for each would say the machine's name sixteen times.
+        for side, word, machine in ((above, "above", "slower"), (below, "below", "faster")):
+            if len(side) * 2 > banded:
+                shares = [share for _, share in side]
+                moved.append(f"{len(side)} of the {banded} times on {runner} are {word} the band of main together, by {min(shares):.0%} to {max(shares):.0%}: a {machine} machine than main has had, or a change in what every program shares. The table has each")
+            else:
+                moved.extend(text for text, _ in side)
+        measured = {l["metric"] for l in lines}
+        gone = [m for m in (runs[-1] if runs else {}) if m not in measured]
         if gone:
             table.append(f"\nOn main and not measured here: {', '.join(gone)}.")
         table.append("\n</details>\n")
@@ -1242,13 +1318,15 @@ def compare(args):
         print("\n".join(f"- {o}" for o in over))
         print("\nMake it faster, or raise its budget at the top of `scripts/bench`, with the reason.\n")
     if moved:
-        print(f"**Moved** by more than {MOVED:.0%} and {MOVED_MS:g} ms from the last main run:\n")
+        print(f"**Moved**: outside what main itself gave on the same runner, by more than {MOVED:.0%} and {MOVED_MS:g} ms:\n")
         print("\n".join(f"- {m}" for m in moved))
         print("\nSay why in the pull request's description.\n")
     if not over and not moved:
-        print("Nothing is over its budget, and nothing moved by more than a tenth.\n")
+        print("Nothing is over its budget" + (", and nothing is outside the band of main by more than a tenth.\n" if looked else ".\n"))
+    if few:
+        print(f"Held to the budgets only, and not looked at for what moved: {', '.join(few)}. It takes {BAND_LEAST} runs on main to know how far a runner swings by itself.\n")
     print("\n".join(tables))
-    print("Each number is the smallest of its runs. `main` is the last run on main from the same runner.")
+    print(f"Each number is the smallest of its runs. `main` is the median of the last main runs from the same runner, {BAND_RUNS} at most, and `band` is the smallest and the largest of them: how far that runner swings with nothing changed. `change` is against the median. A number has moved when it is outside the band by more than a tenth.")
     sys.exit(1 if over else 0)
 
 
@@ -1302,7 +1380,7 @@ def main():
     parser.add_argument("--runs", type=int, default=20, help="runs per metric; the smallest is the number (default 20)")
     parser.add_argument("--only", help="groups to measure, with commas: " + ", ".join(GROUPS))
     sub = parser.add_subparsers(dest="verb")
-    c = sub.add_parser("compare", help="a run against the last main run, as a pull request comment")
+    c = sub.add_parser("compare", help="a run against the last main runs, as a pull request comment")
     c.add_argument("--history", help="the history file, lines of main runs")
     c.add_argument("files", nargs="+", metavar="RUN", help="files of lines from scripts/bench")
     g = sub.add_parser("graph", help="the history, one line per metric")
