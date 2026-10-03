@@ -1,7 +1,7 @@
 # The three things you run by hand. CI runs the same ones.
 #
 #   make build   compile every tool into bin/, beside the swoop script
-#   make test    gofmt, vet, the unit tests, and the script tests
+#   make test    build, then gofmt, vet, the unit tests, and the script tests
 #   make bench   every hot path as one line of JSON (needs hyperfine and fzf)
 #   make e2e     the launcher driven through a pseudo-terminal (needs fzf)
 
@@ -26,7 +26,10 @@ install:
 uninstall:
 	scripts/uninstall
 
-test:
+# Builds first: scripts/template-test runs swoop-check from bin/, and a
+# fresh worktree has only the swoop script there. CI spells its steps out
+# and builds once on its own, so this costs it nothing.
+test: build
 	@unformatted="$$(gofmt -l .)"; if [ -n "$$unformatted" ]; then echo "gofmt: $$unformatted"; exit 1; fi
 	go vet ./...
 	go test ./...

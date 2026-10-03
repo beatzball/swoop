@@ -10,10 +10,11 @@
 # that define keeps its words in the folder of the tool it runs under.
 # scripts/reminders-test holds reminders to the same, with its fakes.
 #
-# No fzf and no built tools: the launcher's verbs are bash, and where it
-# would start a program a fake stands in. scripts/launcher-test opens the
-# made tool in a real fzf. It runs everywhere, in seconds, as part of
-# `make test`.
+# No fzf, and one built tool: the launcher's verbs are bash, and where it
+# would start a program a fake stands in. The one is swoop-check, from
+# bin/, which `make test` builds first; run by hand in a fresh checkout,
+# this says to `make build`. scripts/launcher-test opens the made tool in
+# a real fzf. It runs everywhere, in seconds, as part of `make test`.
 set -euo pipefail
 # A tool file or a name from the caller's environment would be another
 # tool's.
@@ -36,6 +37,13 @@ with_kit="$root/bin:$PATH"
 
 fail() { echo "template-test: FAIL: $*" >&2; exit 1; }
 check() { printf '  %s ...' "$1"; "$2"; echo " ok"; }
+
+# Asked for here, by name, so a fresh checkout hears what to run and not
+# "command not found" from the middle of the third check. In bin/ itself,
+# not on PATH: an installed swoop-check would answer for this checkout.
+if ! { [ -x "$root/bin/swoop-check" ] || [ -x "$root/bin/swoop-check.exe" ]; }; then
+  fail "bin/swoop-check is not built: run make build first"
+fi
 
 made() {
   local out f want got left
