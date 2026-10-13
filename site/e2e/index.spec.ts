@@ -13,7 +13,7 @@ const DOC_ROUTES = [
 /** The list, and every post. A new post is a line here, like a new doc. */
 const BLOG_ROUTES = [
   '/blog',
-  '/blog/why-the-unix-way',
+  '/blog/small-programs-that-print-lines',
 ];
 
 const PRERENDERED_ROUTES = ['/', ...DOC_ROUTES, ...BLOG_ROUTES];
@@ -85,7 +85,7 @@ test('landing page copy is in the server HTML', async ({ request }) => {
   expect(response.status()).toBe(200);
   const body = await response.text();
 
-  expect(body).toContain('A launcher one key away, built the Unix way.');
+  expect(body).toContain('fzf finds. libghostty draws. Every extension is a program that prints lines.');
   expect(body).toContain('brew install beatzball/tap/swoop');
   expect(body).toContain('/docs/getting-started');
   expect(body).toContain('Start the panel');             // litro-steps

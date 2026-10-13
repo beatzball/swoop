@@ -1,7 +1,7 @@
 export const siteConfig = {
   title: 'swoop',
   description:
-    'An open-source keyboard launcher built the Unix way: fzf does the finding, libghostty does the drawing, and every extension is a program that prints lines.',
+    'fzf finds. libghostty draws. Every extension is a program that prints lines. An open-source keyboard launcher for a Mac or Linux, one key away.',
   logo: null,
   editUrlBase: 'https://github.com/beatzball/swoop/edit/main/site/content/docs',
   nav: [

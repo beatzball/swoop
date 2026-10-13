@@ -62,14 +62,14 @@ the list and `pages/blog/[slug].ts` is a post. A post is a doc page with no
 sidebar: the same header, column, typography and image sizing.
 
 1. Create `content/blog/<slug>.md`. The filename becomes the URL:
-   `content/blog/why-the-unix-way.md` → `/blog/why-the-unix-way`.
+   `content/blog/small-programs-that-print-lines.md` → `/blog/small-programs-that-print-lines`.
 
 2. Give it frontmatter. `title`, `date` and `description` are required.
    The list is newest first, by `date`:
 
    ```markdown
    ---
-   title: Why I built a launcher the Unix way
+   title: Small programs that print lines
    date: 2026-10-13
    description: One sentence. It is under the title on /blog, and it is the OG image.
    ---
