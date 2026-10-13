@@ -9,6 +9,15 @@ so here.
 
 ## [Unreleased]
 
+### Changed
+
+- **The macOS frame runs on libghostty-spm 2.2, and presses keys as keys.**
+  The frame pins the package from 2.2.0 and tracks its weekly release. The
+  keys it sends the launcher, `cmd+,` and the menu's Settings…, `cmd+k`,
+  `cmd+[` and `cmd+]`, are true key presses now, which the terminal encodes
+  the way a keyboard's would, where before they were bytes written as text.
+  Dependabot watches the Swift package weekly.
+
 ## [0.14.0] - 2026-10-02
 
 A made tool gets its own frame, and every hot path is measured on every pull request.

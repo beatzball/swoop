@@ -11,7 +11,7 @@ let package = Package(
         // libghostty prebuilt as a Swift package, Metal rendering included,
         // tracking Ghostty's main branch. Its .exec backend spawns the
         // command and reports when it exits, which is all the frame needs.
-        .package(url: "https://github.com/Lakr233/libghostty-spm.git", from: "1.6.0"),
+        .package(url: "https://github.com/Lakr233/libghostty-spm.git", from: "2.2.0"),
     ],
     targets: [
         .executableTarget(

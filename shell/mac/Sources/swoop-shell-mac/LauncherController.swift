@@ -69,10 +69,22 @@ final class LauncherController: NSObject, NSWindowDelegate,
         edgeHint = hintView
         panel.acceptsMouseMovedEvents = true
 
+        // The cmd keys the frame owns. The terminal never sees a cmd key;
+        // the frame takes these before libghostty does.
+        //
         // cmd+plus, cmd+minus, cmd+0 change the font size and the change is
         // kept for next time. The frame takes these keys rather than
         // libghostty, because libghostty does not say what size it ended up
         // at, and a size that resets on every open is worse than none.
+        //
+        // The rest are keys the launcher binds, pressed on its surface as
+        // true key presses (sendKey), so the terminal's key encoding
+        // applies and nothing is framed as a paste: cmd+k is the action
+        // menu, as in the launchers you know, so it presses ctrl-k, which
+        // bin/swoop binds. cmd+[ and cmd+] move the divider between list
+        // and preview: alt+left and alt+right to fzf. cmd+, opens
+        // Settings, the Mac convention: alt+, to fzf, the key the Settings
+        // extension claims.
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             guard let self, event.window === self.panel,
                   event.modifierFlags.intersection(.deviceIndependentFlagsMask).contains(.command)
@@ -81,6 +93,10 @@ final class LauncherController: NSObject, NSWindowDelegate,
             case "=", "+": self.changeFontSize(by: 1)
             case "-": self.changeFontSize(by: -1)
             case "0": self.changeFontSize(to: Settings.defaultFontSize)
+            case "k": self.sendKey(.k, modifiers: .ctrl)
+            case "[": self.sendKey(.arrowLeft, modifiers: .alt)
+            case "]": self.sendKey(.arrowRight, modifiers: .alt)
+            case ",": self.sendKey(.comma, modifiers: .alt)
             default: return event
             }
             return nil
@@ -99,22 +115,36 @@ final class LauncherController: NSObject, NSWindowDelegate,
             builder.withWindowPaddingY(8)
             // The cursor is fzf's; a blinking block would fight with it.
             builder.withCursorStyleBlink(false)
-            // The frame owns these keys; see the key monitor above.
-            for key in ["super+equal", "super+plus", "super+minus", "super+zero"] {
+            // The frame owns these keys; see the key monitor above. The
+            // monitor takes each before the terminal sees it, and the
+            // unbind keeps libghostty's own default for the key (clear
+            // screen on cmd+k, say) from ever running should one slip past.
+            for key in [
+                "super+equal", "super+plus", "super+minus", "super+zero",
+                "super+k", "super+bracket_left", "super+bracket_right", "super+comma",
+            ] {
                 builder.withCustom("keybind", "\(key)=unbind")
             }
-            // cmd+K is the action menu, as in the launchers you know. The terminal never
-            // sees cmd keys, so the frame turns it into ctrl-k, which
-            // bin/swoop binds.
-            builder.withCustom("keybind", "super+k=text:\\x0b")
-            // cmd+[ and cmd+] move the divider between list and preview:
-            // alt+left and alt+right to fzf, sent as the escape sequences
-            // a terminal sends for them.
-            builder.withCustom("keybind", "super+bracket_left=text:\\x1b[1;3D")
-            builder.withCustom("keybind", "super+bracket_right=text:\\x1b[1;3C")
-            // cmd+, opens Settings, the Mac convention: alt+, to fzf.
-            builder.withCustom("keybind", "super+comma=text:\\x1b,")
+            // A key press the frame sends goes through libghostty's own
+            // bindings first, and Ghostty binds alt+left and alt+right on
+            // macOS to word moves (esc then b, esc then f), so the
+            // divider's key never reached fzf as alt+left. Unbound, the
+            // key encodes as the terminal sequence fzf binds, from cmd+[
+            // and from the keyboard alike.
+            for key in ["alt+left", "alt+right"] {
+                builder.withCustom("keybind", "\(key)=unbind")
+            }
         }
+    }
+
+    /// Press and release a key with modifiers on the launcher's surface,
+    /// as a hardware key: libghostty encodes it the way the terminal's key
+    /// mode asks, so a program sees a key, never pasted text.
+    @discardableResult
+    private func sendKey(_ key: TerminalKey, modifiers: TerminalInputModifiers) -> Bool {
+        let sent = terminal?.sendKey(key, modifiers: modifiers) ?? false
+        log("key \(key) \(modifiers.rawValue), sent \(sent)")
+        return sent
     }
 
     private func changeFontSize(by delta: Float) {
@@ -187,42 +217,42 @@ final class LauncherController: NSObject, NSWindowDelegate,
     /// Press key in the launcher, by fzf's name for the key, and show the
     /// panel first when it is hidden: how the menu's Settings… opens the
     /// Settings pane. The launcher in a hidden panel is already running,
-    /// so the key lands on it as it would on an open one. A key with no
-    /// bytes here is not pressed; false says so.
+    /// so the key lands on it as it would on an open one. A key the frame
+    /// cannot press is not pressed; false says so.
     @discardableResult
     func press(_ key: String) -> Bool {
-        guard let text = Self.text(for: key) else {
+        guard let press = Self.keyPress(for: key) else {
             log("press \(key): not a key the frame can send")
             return false
         }
         if !panel.isVisible { show() }
-        // A text binding, the same way cmd+, is sent: straight to the
-        // launcher. The view's paste would wrap the bytes as pasted text,
-        // and fzf would put them in the bar.
-        let sent = terminal?.performBindingAction("text:" + text) ?? false
+        // A true key press, the same way cmd+, is sent: the terminal
+        // encodes it as the key. A paste would frame the bytes as pasted
+        // text, and fzf would put them in the bar.
+        let sent = terminal?.sendKey(press) ?? false
         log("press \(key), sent \(sent)")
         return sent
     }
 
-    /// What a terminal sends for a key an extension may claim, written as
-    /// a `text:` binding takes it: tab, shift-tab, f1 to f12, and alt with
-    /// one lower-case letter, digit, comma, full stop or slash. The same
-    /// set as ext.ValidKey, and nil for anything else.
-    static func text(for key: String) -> String? {
+    /// The key press for a key an extension may claim: tab, shift-tab, f1
+    /// to f12, and alt with one lower-case letter, digit, comma, full stop
+    /// or slash. The same set as ext.ValidKey, and nil for anything else.
+    static func keyPress(for key: String) -> TerminalKeyPress? {
         switch key {
-        case "tab": return "\\x09"
-        case "shift-tab": return "\\x1b[Z"
+        case "tab": return TerminalKeyPress(.tab)
+        case "shift-tab": return TerminalKeyPress(.tab, modifiers: .shift)
         default: break
         }
-        let function = ["OP", "OQ", "OR", "OS", "[15~", "[17~", "[18~", "[19~", "[20~", "[21~", "[23~", "[24~"]
+        let function: [TerminalKey] = [.f1, .f2, .f3, .f4, .f5, .f6, .f7, .f8, .f9, .f10, .f11, .f12]
         if key.hasPrefix("f"), let n = Int(key.dropFirst()), function.indices.contains(n - 1) {
-            return "\\x1b" + function[n - 1]
+            return TerminalKeyPress(function[n - 1])
         }
         if key.hasPrefix("alt-"), key.utf8.count == 5, let c = key.unicodeScalars.last,
            ("a"..."z").contains(c) || ("0"..."9").contains(c) || ",./".unicodeScalars.contains(c)
         {
-            // alt is Esc and then the key.
-            return "\\x1b" + String(c)
+            // The key that types the character on a US layout, with alt
+            // held: alt is Esc and then the key, once encoded.
+            return TerminalKeyPress(typing: Character(c), modifiers: .alt)
         }
         return nil
     }
