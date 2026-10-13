@@ -1,27 +1,64 @@
 ---
 title: Small programs that print lines
 date: 2026-10-13
-description: fzf finds. libghostty draws. Every extension is a program that prints lines. What that means in practice, and where it breaks down.
+description: This started as an excuse to build something on libghostty. It turned into a launcher where fzf finds, libghostty draws, and every extension is a program that prints lines.
 ---
 
-## Why I keep saying this
+## Where this started
 
-The README opens with three short facts: fzf finds, libghostty draws, and
-every extension is a program that prints lines. Underneath those facts is
-an older idea that I didn't want to lean on without explaining it, so this
-post is the explanation.
+I'll be honest about the order things happened in. I didn't set out to
+build a launcher. I'd been using [Ghostty](https://ghostty.org) as my
+terminal for a while, and when libghostty showed up, the embeddable core
+of it that any app can put a real terminal inside of, I wanted an excuse
+to use it for something. A launcher was the excuse. The question I
+actually wanted answered was: can you build the whole thing, the panel, the
+list, the preview, the lot, out of a terminal and a handful of small
+programs, and have it feel as fast and as nice as the launchers people
+pay for?
 
-The idea is the Unix philosophy, and it comes down to three rules. A
-program does one job. Programs talk to each other in plain text, usually
-one line at a time, because a line is something you can read and another
-program can parse. And because of the first two, programs can be combined
-in ways their authors never planned for.
+So this project is an experiment first, and a launcher second. The
+experiment went better than I expected, and this post is partly a thank
+you to the people who made that possible, and partly a look at what
+"small programs" turned out to mean in practice.
+
+## libghostty draws
+
+On a Mac the panel is a small Swift program. It shows a floating window on
+a hotkey, and inside that window is a terminal drawn by libghostty, the
+same renderer Ghostty itself uses. That's the part I didn't have to build,
+and it's the part that makes the rest possible. Text is crisp, emoji and
+Nerd Font glyphs just work, images in the preview come through as terminal
+graphics, and the window shows and hides in a couple of milliseconds. None
+of that is mine. I got it by linking a library, through the
+[libghostty-spm](https://github.com/Lakr233/libghostty-spm) package that
+wraps it up as a Swift dependency with Metal rendering included.
+
+Ghostty's own quick terminal was the template for the panel: a window that
+drops down on a key and goes away on the same key. I took the idea, kept it
+small, and pointed it at a launcher instead of a shell.
+
+The panel knows nothing about launching. It shows a window, owns the
+hotkey, hosts the terminal, and runs swoop in it. The panel and the
+launcher talk in two signals, one to show or hide, one from the launcher
+to say it's about to exit so the panel can hide first. One bit each way.
+I'd like to keep it that way, so a Linux or Windows panel is the same small
+thing on a different desktop, with libghostty doing the same job there.
+
+## The three rules
+
+Everything else in swoop follows from an older idea that I didn't want to
+lean on without explaining it. The idea is the Unix philosophy, and it
+comes down to three rules. A program does one job. Programs talk to each
+other in plain text, usually one line at a time, because a line is
+something you can read and another program can parse. And because of the
+first two, programs can be combined in ways their authors never planned
+for.
 
 I think most launchers started out agreeing with this and then grew away
 from it. They became one large app with a plugin system, and writing a
-plugin meant learning that app. I wanted to see what happens if you take
-the three rules seriously and build a launcher out of pieces that each do
-one thing. Here's how it turned out, piece by piece, including the places
+plugin meant learning that app. With the drawing handled by libghostty, I
+could try the other direction: a launcher made of pieces that each do one
+thing. Here's how it turned out, piece by piece, including the places
 where I had to bend a rule.
 
 ## Finding is fzf's job
@@ -110,19 +147,6 @@ several jobs in one program. I chose that on purpose. An extension is the
 thing a person writes in ten minutes, and one file is what you write in
 ten minutes.
 
-## The panel
-
-On a Mac, the panel is a small Swift program. It shows a floating window on
-a hotkey, puts a terminal inside it drawn by libghostty, and runs swoop in
-that terminal. It knows nothing about launching, and I'd like to keep it
-that way so a Linux or Windows panel is the same small thing on a different
-desktop.
-
-The panel and the launcher don't talk in lines at all. They use two
-signals, one to show or hide the window and one from the launcher to say
-it's about to exit so the panel can hide first. One bit in each direction,
-which is roughly all they have to say to each other.
-
 ## So does it hold up?
 
 Mostly, I think. The rules hold where they matter most, at the boundary
@@ -130,6 +154,12 @@ between the launcher and your program. They bend where something had to
 remember, draw a picture, or stop. I've written each bend down so the next
 one has to be argued for instead of slipping in while nobody's looking.
 Every setting is a line in a text file, and you can grep all of it.
+
+And the experiment? A terminal plus a handful of small programs really is
+enough for a launcher that feels native, which I half expected and half
+didn't. Most of the credit for the "feels native" part goes to libghostty.
+If you're a Ghostty user, you already know why. If you're not, this is a
+good reason to go look.
 
 If you'd rather check my work than take my word for it, the contract fits
 on one page, and ten lines of shell will tell you whether I'm right.
