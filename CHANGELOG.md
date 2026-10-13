@@ -9,6 +9,10 @@ so here.
 
 ## [Unreleased]
 
+## [0.15.0] - 2026-10-13
+
+The frame on libghostty 2.2, and a blog on the site.
+
 ### Changed
 
 - **The macOS frame runs on libghostty-spm 2.2, and presses keys as keys.**
@@ -795,7 +799,8 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.14.0...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.15.0...HEAD
+[0.15.0]: https://github.com/beatzball/swoop/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/beatzball/swoop/compare/v0.13.0...v0.14.0
 [0.13.0]: https://github.com/beatzball/swoop/compare/v0.12.0...v0.13.0
 [0.12.0]: https://github.com/beatzball/swoop/compare/v0.11.0...v0.12.0
