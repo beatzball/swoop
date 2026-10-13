@@ -10,7 +10,21 @@ const DOC_ROUTES = [
   '/docs/build-your-own',
 ];
 
-const PRERENDERED_ROUTES = ['/', ...DOC_ROUTES];
+/** The list, and every post. A new post is a line here, like a new doc. */
+const BLOG_ROUTES = [
+  '/blog',
+  '/blog/small-programs-that-print-lines',
+];
+
+const PRERENDERED_ROUTES = ['/', ...DOC_ROUTES, ...BLOG_ROUTES];
+
+/** The page element a route hydrates into: the tag its page module registers. */
+function pageTag(route: string): string {
+  if (route === '/') return 'page-home';
+  if (route === '/blog') return 'page-blog';
+  if (route.startsWith('/blog/')) return 'page-blog-slug';
+  return 'page-docs-slug';
+}
 
 /**
  * Everything the browser itself reports: an uncaught exception, a
@@ -71,7 +85,7 @@ test('landing page copy is in the server HTML', async ({ request }) => {
   expect(response.status()).toBe(200);
   const body = await response.text();
 
-  expect(body).toContain('A launcher one key away, built the Unix way.');
+  expect(body).toContain('fzf finds. libghostty draws. Every extension is a program that prints lines.');
   expect(body).toContain('brew install beatzball/tap/swoop');
   expect(body).toContain('/docs/getting-started');
   expect(body).toContain('Start the panel');             // litro-steps
@@ -164,6 +178,8 @@ test('all prerendered routes return 200', async ({ request }) => {
  *
  * Every doc page is required to start its body at `##` (see site/AGENTS.md), so
  * "the content slot contains a visible, non-empty <h2>" holds for all of them.
+ * A blog post follows the same rule, and the blog index renders each post's
+ * title as an <h2>, so the same selector covers /blog and every post.
  */
 function contentHeadingSelector(route: string): string {
   return route === '/' ? 'page-home h2' : '[slot="content"] h2';
@@ -188,7 +204,7 @@ test('every prerendered route hydrates without a browser error', async ({ page }
     await page.goto(route, { waitUntil: 'networkidle' });
     // Hydration proper: the page component has to be defined. When the client
     // chunk throws on the way in, the registration never runs.
-    const tag = route === '/' ? 'page-home' : 'page-docs-slug';
+    const tag = pageTag(route);
     await expect
       .poll(
         () => page.evaluate((t) => !!customElements.get(t), tag),

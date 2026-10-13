@@ -40,6 +40,22 @@ import type { FooterColumn } from '../src/components/litro-site-footer.js';
  */
 
 /**
+ * The headline is the three facts, and nothing else: what finds, what
+ * draws, and what an extension is. Each is a thing a reader can check.
+ * The README's first line and content/docs/getting-started.md open with
+ * the same three sentences; change one and change the others.
+ */
+const HERO_HEADLINE = 'fzf finds. libghostty draws. Every extension is a program that prints lines.';
+
+/**
+ * The line under it: what the thing is, for a reader who has never seen
+ * it. The site description in server/starlight.config.js carries the
+ * facts for the link card, so this one does not repeat them.
+ */
+const HERO_LEDE =
+  'An open-source keyboard launcher. Press one key, type a few letters, press Enter: apps, files, notes, tasks, window moves and an AI you choose, in one list.';
+
+/**
  * The command a reader copies. Homebrew, because it is one line on a Mac and
  * on Linux; the curl line is in the note under it and in Getting Started.
  */
@@ -190,6 +206,7 @@ const FOOTER_COLUMNS: FooterColumn[] = [
   {
     heading: 'Project',
     links: [
+      { label: 'Blog', href: '/blog' },
       { label: 'GitHub', href: 'https://github.com/beatzball/swoop' },
       { label: 'Changelog', href: 'https://github.com/beatzball/swoop/blob/main/CHANGELOG.md' },
       { label: 'Releases', href: 'https://github.com/beatzball/swoop/releases' },
@@ -661,7 +678,6 @@ export class HomePage extends LitroPage {
     const data = this.serverData as HomeData | null;
     const {
       siteTitle = 'swoop',
-      description = '',
       nav = [],
       features = [],
     } = data ?? {};
@@ -696,8 +712,8 @@ export class HomePage extends LitroPage {
             ${MARK}
             <section class="hero shell">
               <div class="hero-copy">
-                <h1>A launcher one key away, built the Unix way.</h1>
-                <p class="lede">${description}</p>
+                <h1>${HERO_HEADLINE}</h1>
+                <p class="lede">${HERO_LEDE}</p>
                 <litro-install-command command="${INSTALL_COMMAND}">
                   <span slot="note"
                     >On a Mac or on Linux. No Homebrew? Getting Started has a

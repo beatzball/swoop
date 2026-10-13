@@ -4,6 +4,6 @@
   "mode": "ssg",
   "contentDir": "content",
   "options": {
-    "blog": false
+    "blog": true
   }
 }

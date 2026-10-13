@@ -7,9 +7,10 @@ sidebar:
 
 ## What it is
 
-swoop is an open-source keyboard launcher built the Unix way. fzf does the
-finding, libghostty does the drawing, and every extension is a program that
-prints lines.
+fzf finds. libghostty draws. Every extension is a program that prints
+lines. swoop is an open-source keyboard launcher. Built the Unix way:
+[small programs that do one job and talk in lines of
+text](/blog/small-programs-that-print-lines).
 
 ![swoop: filtering apps, the action menu, the calculator, and Ask AI answering a question](/swoop.webp)
 
