@@ -125,6 +125,15 @@ final class LauncherController: NSObject, NSWindowDelegate,
             ] {
                 builder.withCustom("keybind", "\(key)=unbind")
             }
+            // A key press the frame sends goes through libghostty's own
+            // bindings first, and Ghostty binds alt+left and alt+right on
+            // macOS to word moves (esc then b, esc then f), so the
+            // divider's key never reached fzf as alt+left. Unbound, the
+            // key encodes as the terminal sequence fzf binds, from cmd+[
+            // and from the keyboard alike.
+            for key in ["alt+left", "alt+right"] {
+                builder.withCustom("keybind", "\(key)=unbind")
+            }
         }
     }
 
