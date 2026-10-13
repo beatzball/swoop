@@ -147,19 +147,33 @@ several jobs in one program. I chose that on purpose. An extension is the
 thing a person writes in ten minutes, and one file is what you write in
 ten minutes.
 
+## And then it became a kit
+
+Once the launcher knew nothing about its own extensions, something odd
+fell out. Take the bundled extensions away and what's left is a panel, a
+finder, and a contract. That's not a launcher any more, it's a kit for
+making one. So that's what it is now: the core is called swoopkit, swoop is
+the tool built on it with sixteen extensions in the box, and one command
+makes you a tool of your own, with its own name, hotkey, and folder of
+programs. I didn't plan that. It's the kind of thing that happens when the
+pieces are small enough to pull apart.
+
 ## So does it hold up?
 
-Mostly, I think. The rules hold where they matter most, at the boundary
-between the launcher and your program. They bend where something had to
-remember, draw a picture, or stop. I've written each bend down so the next
-one has to be argued for instead of slipping in while nobody's looking.
-Every setting is a line in a text file, and you can grep all of it.
+I set out to find out if a launcher could be built out of a terminal and
+small programs, and the answer is yes, with a few bends I've been honest
+about above. It was a fun question to chase, and I don't think I'd have
+chased it without libghostty sitting there, asking to be used for
+something. Thanks to the people behind Ghostty for making a terminal good
+enough to build on. Everything swoop gets right about how it looks, it gets
+from them.
 
-And the experiment? A terminal plus a handful of small programs really is
-enough for a launcher that feels native, which I half expected and half
-didn't. Most of the credit for the "feels native" part goes to libghostty.
-If you're a Ghostty user, you already know why. If you're not, this is a
-good reason to go look.
-
-If you'd rather check my work than take my word for it, the contract fits
-on one page, and ten lines of shell will tell you whether I'm right.
+If any of this sounds like your kind of thing, [try it](/docs/getting-started).
+It's one `brew install` on a Mac, and the hotkey is yours to pick. When
+you want it to do something it doesn't, the answer is a small program that
+prints lines, in whatever language you already know, and
+[one page](/docs/contract) tells you everything it needs to say. And if
+what you really want is a launcher of your own, with your own name on it
+and only the pieces you care about,
+[`swoop new`](/docs/build-your-own) gets you there in a minute. I'd
+genuinely like to see what people build.
