@@ -1,4 +1,4 @@
-import { html, css } from 'lit';
+import { html } from 'lit';
 import { unsafeHTML } from 'lit/directives/unsafe-html.js';
 import { customElement } from 'lit/decorators.js';
 import { LitroPage, pageReset } from '@beatzball/litro/runtime';
@@ -10,6 +10,8 @@ import { siteConfig } from '../../server/starlight.config.js';
 import { extractHeadings, addHeadingIds } from '../../src/extract-headings.js';
 import { starlightHead } from '../../src/route-meta.js';
 import { buildSeoHead, buildSeoTitle } from '../../src/seo.js';
+import { contentStyles } from '../../src/content-styles.js';
+import { annotateImages } from '../../src/annotate-images.js';
 
 // Register components used in render()
 import '../../src/components/starlight-page.js';
@@ -49,128 +51,6 @@ function computePrevNext(
       ? { label: flat[idx + 1].label, href: `/docs/${flat[idx + 1].slug}` }
       : null,
   };
-}
-
-/** Reports already printed by this build. See where it is read. */
-const reported = new Set<string>();
-
-/**
- * Give every image in the rendered Markdown the attributes it cannot carry
- * itself: an intrinsic size, and lazy loading below the first one.
- *
- * **width and height** are what stop the page jumping. Without them a
- * Markdown image reserves no space, so every paragraph below it moves once
- * the bytes arrive — /docs/pipes measured CLS 0.174 against Google's 0.1
- * limit. The pair is only a ratio here, because the stylesheet sets
- * `max-width:100%; height:auto`, so the browser reserves the right box at
- * whatever width the column happens to be.
- *
- * **loading** is deferred on every image except the first. The recordings are
- * the heaviest thing the site serves and a page often has one near the top
- * and others most readers never scroll to. The first stays eager: it is
- * usually above the fold and is the thing the reader is waiting for.
- *
- * **An image that cannot be sized stops the build.** sizeOf reads PNG and
- * WebP headers and returns null for everything else, which is the right
- * fallback — a wrong number is worse than none — but on its own it is silent:
- * add a .jpg and that page quietly reserves nothing again, the build passes,
- * the probe passes, and nothing measures CLS. Nobody noticing is the failure
- * mode, so the omission is raised here instead of shipped. The opt-out is
- * writing BOTH width and height yourself; see the message below.
- *
- * Reported and `process.exitCode`, deliberately NOT `throw`. litro's page
- * handler wraps every pageData fetcher in a try/catch that calls console.warn
- * and renders the page without data — "Data fetch failure is non-fatal" — so a
- * throw here is caught, `pnpm build` still exits 0, AND the page ships with
- * the Loading placeholder instead of its content. Measured both ways on the
- * fixture: throw gave exit 0 and a blank /docs/pipes; this gives exit 1 and a
- * complete page. Turning this back into a throw would silently restore the
- * bug it was written to close.
- *
- * Every image is checked before anything is reported, so one build names every
- * problem rather than one per round trip.
- */
-function annotateImages(
-  html: string,
-  where: string,
-  sizeOf: (src: string) => { w: number; h: number } | null,
-): string {
-  let seen = 0;
-  const unsized: string[] = [];
-  const attr = (name: string, attrs: string) =>
-    // Anchored to a quote or whitespace so `data-width=` cannot match.
-    new RegExp(`[\\s"']${name}\\s*=`).test(' ' + attrs);
-
-  const out = html.replace(/<img\b([^>]*)>/g, (tag, attrs: string) => {
-    // Count every image, including ones skipped below. Counting only the ones
-    // that get rewritten would make a hand-written eager <img> promote the
-    // NEXT image to "first" as well, and neither would be deferred.
-    const isFirst = ++seen === 1;
-    const add: string[] = [];
-
-    if (!isFirst && !attr('loading', attrs)) {
-      add.push('loading="lazy"', 'decoding="async"');
-    }
-
-    const hasW = attr('width', attrs);
-    const hasH = attr('height', attrs);
-    const src = /\ssrc\s*=\s*["']([^"']+)["']/.exec(attrs)?.[1] ?? '(no src)';
-
-    if (hasW && hasH) {
-      // Both by hand: the author has taken the size on themselves. This is
-      // the opt-out, and it is the only one.
-    } else if (hasW || hasH) {
-      // Exactly one. The stylesheet sets `max-width:100%; height:auto`, so a
-      // lone dimension gives the browser no ratio and reserves no box — the
-      // original CLS bug, on a tag that looks as though it were handled.
-      //
-      // Deliberately not completed from the header either: the author's
-      // `width="100"` beside a measured `height="620"` is a ratio nobody
-      // chose, which is exactly the wrong number src/image-size.ts refuses to
-      // invent. Reported instead, so the author writes the other half.
-      unsized.push(`${src}  (has ${hasW ? 'width' : 'height'}, needs both)`);
-    } else {
-      // Site-root paths only: anything remote has no file to read at build
-      // time. It is collected rather than skipped, because an unsized remote
-      // image shifts the layout exactly as much as an unsized local one.
-      const local = src.startsWith('/') && !src.startsWith('//');
-      const size = local ? sizeOf(src) : null;
-      if (size) add.push(`width="${size.w}"`, `height="${size.h}"`);
-      else unsized.push(src);
-    }
-
-    return add.length ? `<img${attrs} ${add.join(' ')}>` : tag;
-  });
-
-  if (unsized.length) {
-    const report =
-      `${where}: ${unsized.length} image(s) have no intrinsic size, so the page would ` +
-      `reserve no space for them and the layout would shift as they load:\n` +
-      unsized.map((s) => `  ${s}`).join('\n') +
-      `\nsrc/image-size.ts reads PNG and WebP headers only, and nothing remote can be ` +
-      `measured at build time. Convert the image to WebP, or write the tag in the ` +
-      `Markdown with BOTH dimensions, which is the opt-out, e.g.\n` +
-      `  <img src="..." alt="..." width="1400" height="620">`;
-
-    // Printed once per distinct report. This fetcher runs twice for every doc
-    // — litro's og-handler calls the same pageData to build /__og/<slug>.png —
-    // so without this every list appears twice and a build with a few bad
-    // pages buries each real one in its own duplicate.
-    if (!reported.has(report)) {
-      reported.add(report);
-      console.error(report);
-    }
-    // Guarded because this function is defined in the page component's module
-    // and so is emitted into the client bundle. Nothing calls it there today
-    // (pageData is serialized into the HTML server-side, and vite.config.ts
-    // stubs imageSize away), but `process` does not exist in a browser, and an
-    // unguarded assignment would be a ReferenceError inside litro's catch —
-    // which renders the Loading placeholder, the exact outcome the paragraph
-    // above says this design avoids.
-    if (typeof process !== 'undefined') process.exitCode = 1;
-  }
-
-  return out;
 }
 
 export const pageData = definePageData(async (event) => {
@@ -264,90 +144,10 @@ export const routeMeta = {
 export class DocPage extends LitroPage {
   /**
    * Styles injected into page-docs-slug's shadow root so they reach the
-   * <div slot="content"> subtree. Global stylesheets (starlight.css,
-   * highlight.css) cannot pierce shadow DOM boundaries.
+   * <div slot="content"> subtree. Defined in src/content-styles.ts, which
+   * says why, and shared with the blog post page.
    */
-  static override styles = [
-    pageReset,
-    css`
-    /* ── Typography for slotted doc content ─────────────────────────── */
-    h1, h2, h3, h4, h5, h6 {
-      margin-top: 1.5em; margin-bottom: 0.5em;
-      font-weight: 600; line-height: 1.25;
-      color: var(--sl-color-text);
-    }
-    h1 { font-size: var(--sl-text-4xl, 2.25rem); }
-    h2 { font-size: var(--sl-text-2xl, 1.5rem); border-bottom: 1px solid var(--sl-color-border, #e8e8e8); padding-bottom: 0.25em; }
-    h3 { font-size: var(--sl-text-xl, 1.25rem); }
-    h4 { font-size: var(--sl-text-lg, 1.125rem); }
-    p  { margin-top: 0; margin-bottom: 1rem; line-height: 1.7; }
-    a  { color: var(--sl-color-text-accent, var(--sl-color-accent)); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    /* An inline code span holds unbreakable tokens — a flag, a path, a package
-       name — and one longer than the screen takes the whole page sideways. A
-       code BLOCK keeps its own horizontal scroll instead, so the pre rule below
-       puts wrapping back. */
-    code {
-      font-family: var(--sl-font-mono, ui-monospace, monospace);
-      font-size: 0.875em;
-      background-color: var(--sl-color-bg-inline-code, #e8e8e8);
-      border: 1px solid var(--sl-color-border, #e8e8e8);
-      border-radius: 0.25rem;
-      padding: 0.15em 0.4em;
-      overflow-wrap: anywhere;
-    }
-    pre {
-      background-color: #0d0e11;
-      color: #e2e4e9;
-      border-radius: 0.375rem;
-      padding: 1rem 1.25rem;
-      overflow-x: auto;
-      margin: 1.5rem 0;
-      font-size: var(--sl-text-sm, 0.875rem);
-      line-height: 1.6;
-    }
-    pre code { background: none; border: none; padding: 0; font-size: inherit; overflow-wrap: normal; }
-    ul, ol { padding-left: 1.5rem; margin: 0 0 1rem; }
-    li { margin-bottom: 0.25rem; line-height: 1.7; }
-    blockquote {
-      margin: 1.5rem 0; padding: 0.75rem 1rem;
-      border-left: 4px solid var(--sl-color-accent, #ea580c);
-      background-color: var(--sl-color-accent-low, #fff7ed);
-      border-radius: 0 0.375rem 0.375rem 0;
-    }
-    hr { border: none; border-top: 1px solid var(--sl-color-border, #e8e8e8); margin: 2rem 0; }
-    img { max-width: 100%; height: auto; }
-    table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; font-size: var(--sl-text-sm, 0.875rem); }
-    th, td { border: 1px solid var(--sl-color-border, #e8e8e8); padding: 0.5rem 0.75rem; text-align: left; }
-    /* A long unbreakable token in a cell — an env var name, a flag, a path —
-       sets the table's min-content width, and a table will not shrink below
-       that. On a phone it takes the whole page sideways with it. Breaking
-       mid-token is the lesser evil; without this /docs/theming pushed the
-       viewport 15px wide on a 390px screen. Same family as
-       beatzball/litro#137. */
-    th, td { overflow-wrap: anywhere; }
-    th { background-color: var(--sl-color-gray-1, #f6f6f6); font-weight: 600; }
-
-    /* ── highlight.js fire theme ─────────────────────────────────────── */
-    pre:has(.hljs) { background-color: #0d0d10; color: #cbd5e1; }
-    .hljs { color: #cbd5e1; background: transparent; }
-    .hljs-keyword, .hljs-selector-tag, .hljs-tag { color: #f97316; }
-    .hljs-string, .hljs-attr, .hljs-attribute { color: #38bdf8; }
-    .hljs-number, .hljs-literal { color: #fbbf24; }
-    .hljs-title, .hljs-title.class_, .hljs-title.function_, .hljs-built_in { color: #fb923c; }
-    .hljs-comment { color: #6b7280; font-style: italic; }
-    .hljs-variable, .hljs-params { color: #cbd5e1; }
-    .hljs-operator, .hljs-punctuation { color: #94a3b8; }
-    .hljs-meta, .hljs-meta .hljs-keyword { color: #38bdf8; }
-    .hljs-type { color: #fb923c; }
-    .hljs-deletion { color: #f87171; background: rgba(248,113,113,.1); }
-    .hljs-addition { color: #4ade80; background: rgba(74,222,128,.1); }
-    .hljs-section, .hljs-selector-class, .hljs-selector-id { color: #fb923c; }
-    .hljs-symbol, .hljs-bullet, .hljs-link { color: #38bdf8; }
-    .hljs-emphasis { font-style: italic; }
-    .hljs-strong { font-weight: bold; }
-  `,
-  ];
+  static override styles = [pageReset, contentStyles];
 
   override render() {
     const data = this.serverData as DocPageData | null;

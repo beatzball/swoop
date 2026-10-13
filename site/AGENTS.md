@@ -11,6 +11,8 @@ Read this before changing anything in `site/`.
 | Path | What it is |
 |------|-----------|
 | `content/docs/*.md` | Every documentation page. One file = one page. |
+| `content/blog/*.md` | Every blog post. One file = one post, newest first on `/blog`. |
+| `pages/blog/index.ts`, `pages/blog/[slug].ts` | The blog list and the post template. Do not edit to add a post. |
 | `server/starlight.config.js` | Site title, top nav, and the sidebar tree. |
 | `_data/metadata.js` | Site title, canonical URL, description (used for SEO and OG images). |
 | `pages/index.ts` | The landing page (a Lit component, not Markdown). Its copy is in the lists at the top of the file. |
@@ -52,6 +54,39 @@ Read this before changing anything in `site/`.
 4. Add the route to `DOC_ROUTES` in `e2e/index.spec.ts`.
 
 5. Build to verify (see below).
+
+## Add a blog post
+
+The blog is the starlight recipe's, at `/blog`: `pages/blog/index.ts` is
+the list and `pages/blog/[slug].ts` is a post. A post is a doc page with no
+sidebar: the same header, column, typography and image sizing.
+
+1. Create `content/blog/<slug>.md`. The filename becomes the URL:
+   `content/blog/why-the-unix-way.md` → `/blog/why-the-unix-way`.
+
+2. Give it frontmatter. `title`, `date` and `description` are required.
+   The list is newest first, by `date`:
+
+   ```markdown
+   ---
+   title: Why I built a launcher the Unix way
+   date: 2026-10-13
+   description: One sentence. It is under the title on /blog, and it is the OG image.
+   ---
+
+   ## First heading
+
+   Body starts here.
+   ```
+
+3. Add the route to `BLOG_ROUTES` in `e2e/index.spec.ts`.
+
+4. Build to verify (see below). The list page needs no change: it reads
+   every file in `content/blog/`.
+
+The same rules as a doc page apply: the body starts at `##`, internal links
+are absolute paths, images are `.webp` or `.png`, no rival named, no home
+path.
 
 ## Rules
 

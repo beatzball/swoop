@@ -7,6 +7,7 @@ export const siteConfig = {
   nav: [
     { label: 'Docs', href: '/docs/getting-started' },
     { label: 'Extensions', href: '/docs/writing-an-extension' },
+    { label: 'Blog', href: '/blog' },
     { label: 'GitHub', href: 'https://github.com/beatzball/swoop' },
   ],
   sidebar: [

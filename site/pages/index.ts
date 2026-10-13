@@ -190,6 +190,7 @@ const FOOTER_COLUMNS: FooterColumn[] = [
   {
     heading: 'Project',
     links: [
+      { label: 'Blog', href: '/blog' },
       { label: 'GitHub', href: 'https://github.com/beatzball/swoop' },
       { label: 'Changelog', href: 'https://github.com/beatzball/swoop/blob/main/CHANGELOG.md' },
       { label: 'Releases', href: 'https://github.com/beatzball/swoop/releases' },
