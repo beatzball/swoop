@@ -9,6 +9,19 @@ so here.
 
 ## [Unreleased]
 
+### Changed
+
+- **The third fact in the headline is "Any program can be an extension."**
+  It was "Every extension is a program that prints lines." Hero, README,
+  getting-started and the site's test all say the new one. Under the
+  recording, a line says it was recorded in a terminal window, and that the
+  installed launcher is the same program in a floating panel on a hotkey.
+- **The demo is recorded on 0.15.0.** The README's recording, and the
+  site's, now show the app filter, the action menu, the calculator, the
+  tasks view with its Past due, Today and Later headers, and Ask AI. The
+  tape seeds the tasks from `demo/tasks.md` and pins the day, so the same
+  recording comes out on any day it is run.
+
 ## [0.15.0] - 2026-10-13
 
 The frame on libghostty 2.2, and a blog on the site.

@@ -1,0 +1,5 @@
+- [ ] renew the passport due: 2026-10-09
+- [ ] send the invoice due: 2026-10-14
+- [ ] water the plants due: 2026-10-14
+- [ ] book the dentist due: 2026-11-03
+- [x] buy milk

@@ -85,7 +85,7 @@ test('landing page copy is in the server HTML', async ({ request }) => {
   expect(response.status()).toBe(200);
   const body = await response.text();
 
-  expect(body).toContain('fzf finds. libghostty draws. Every extension is a program that prints lines.');
+  expect(body).toContain('fzf finds. libghostty draws. Any program can be an extension.');
   expect(body).toContain('brew install beatzball/tap/swoop');
   expect(body).toContain('/docs/getting-started');
   expect(body).toContain('Start the panel');             // litro-steps

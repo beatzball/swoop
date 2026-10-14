@@ -5,12 +5,15 @@ writing your own extension.
 
 Say it like a bird does: swoop down, grab the thing, gone.
 
-fzf finds. libghostty draws. Every extension is a program that prints
-lines. swoop is an open-source keyboard launcher. Built the Unix way:
+fzf finds. libghostty draws. Any program can be an extension. swoop is an
+open-source keyboard launcher. Built the Unix way:
 [small programs that do one job and talk in lines of
 text](https://swoop.sh/blog/small-programs-that-print-lines).
 
-![swoop: filtering apps, the action menu, the calculator, and Ask AI answering a question](demo/swoop.gif)
+![swoop: filtering apps, the action menu, the calculator, tasks under Past due, Today and Later, and Ask AI answering a question](demo/swoop.gif)
+
+*This is swoop in a terminal window. The launcher you install is the same
+program, in a floating panel on a hotkey.*
 
 The plan, every design decision, and the work in progress live in the
 [issues](https://github.com/beatzball/swoop/issues). Start there.

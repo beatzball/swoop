@@ -7,8 +7,8 @@ sidebar:
 
 ## What it is
 
-fzf finds. libghostty draws. Every extension is a program that prints
-lines. swoop is an open-source keyboard launcher. Built the Unix way:
+fzf finds. libghostty draws. Any program can be an extension. swoop is an
+open-source keyboard launcher. Built the Unix way:
 [small programs that do one job and talk in lines of
 text](/blog/small-programs-that-print-lines).
 
