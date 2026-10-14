@@ -45,7 +45,7 @@ import type { FooterColumn } from '../src/components/litro-site-footer.js';
  * The README's first line and content/docs/getting-started.md open with
  * the same three sentences; change one and change the others.
  */
-const HERO_HEADLINE = 'fzf finds. libghostty draws. Every extension is a program that prints lines.';
+const HERO_HEADLINE = 'fzf finds. libghostty draws. Any program can be an extension.';
 
 /**
  * The line under it: what the thing is, for a reader who has never seen
@@ -652,6 +652,16 @@ export class HomePage extends LitroPage {
       border-radius: var(--nova-radius);
     }
 
+    /* Under the recording: it was recorded in a terminal, and the installed
+       launcher is a panel. Dim, so it reads as a caption, not a paragraph. */
+    .demo-note {
+      max-width: 48rem;
+      margin: 0.75rem auto 0;
+      color: var(--nova-text-dim);
+      font-size: 0.9rem;
+      text-align: center;
+    }
+
     /* The row's heading says what; this says where to read more. Underlined,
        not just colored: a link in running text has to be told apart from the
        words around it by something other than color. */
@@ -740,6 +750,10 @@ export class HomePage extends LitroPage {
               loading="lazy"
               decoding="async"
             />
+            <p class="demo-note">
+              This is swoop in a terminal window. The launcher you install is
+              the same program, in a floating panel on a hotkey.
+            </p>
           </section>
 
           <section class="rows shell" aria-label="What it does">
