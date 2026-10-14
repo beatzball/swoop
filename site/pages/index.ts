@@ -659,6 +659,7 @@ export class HomePage extends LitroPage {
       margin: 0.75rem auto 0;
       color: var(--nova-text-dim);
       font-size: 0.9rem;
+      font-style: italic;
       text-align: center;
     }
 
