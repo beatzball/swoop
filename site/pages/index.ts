@@ -734,7 +734,7 @@ export class HomePage extends LitroPage {
           <section class="demo shell" aria-label="swoop in use">
             <img
               src="/swoop.webp"
-              alt="swoop: filtering apps, the action menu, the calculator, and Ask AI answering a question"
+              alt="swoop: filtering apps, the action menu, the calculator, tasks under Past due, Today and Later, and Ask AI answering a question"
               width="1000"
               height="560"
               loading="lazy"

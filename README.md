@@ -10,7 +10,7 @@ lines. swoop is an open-source keyboard launcher. Built the Unix way:
 [small programs that do one job and talk in lines of
 text](https://swoop.sh/blog/small-programs-that-print-lines).
 
-![swoop: filtering apps, the action menu, the calculator, and Ask AI answering a question](demo/swoop.gif)
+![swoop: filtering apps, the action menu, the calculator, tasks under Past due, Today and Later, and Ask AI answering a question](demo/swoop.gif)
 
 The plan, every design decision, and the work in progress live in the
 [issues](https://github.com/beatzball/swoop/issues). Start there.

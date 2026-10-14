@@ -9,6 +9,14 @@ so here.
 
 ## [Unreleased]
 
+### Changed
+
+- **The demo is recorded on 0.15.0.** The README's recording, and the
+  site's, now show the app filter, the action menu, the calculator, the
+  tasks view with its Past due, Today and Later headers, and Ask AI. The
+  tape seeds the tasks from `demo/tasks.md` and pins the day, so the same
+  recording comes out on any day it is run.
+
 ## [0.15.0] - 2026-10-13
 
 The frame on libghostty 2.2, and a blog on the site.
