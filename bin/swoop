@@ -558,6 +558,7 @@ fzf < "$rows" \
   --no-info \
   --prompt '  ' \
   --pointer '▶' \
+  --gutter ' ' \
   --preview 'swoop-preview {1}' \
   --preview-window "$(swoop-nav window)" \
   --bind 'alt-left:transform:swoop-nav divider +5' \

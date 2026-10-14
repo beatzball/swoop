@@ -9,6 +9,16 @@ so here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **No more vertical bar down the left of the list.** fzf 0.74 draws a
+  gutter mark on every row that is not the current one, and it grew with
+  the list. The launcher now passes `--gutter ' '`, which is what the
+  gutter column was before. The demo is recorded again without it, and the
+  tape now runs every program once, hidden, before the launch it records:
+  the system's first-run check of a fresh copy is one to five seconds per
+  program, a minute in all, and a fixed pause could not cover it.
+
 ### Changed
 
 - **The third fact in the headline is "Any program can be an extension."**
