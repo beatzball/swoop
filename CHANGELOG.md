@@ -9,6 +9,13 @@ so here.
 
 ## [Unreleased]
 
+### Fixed
+
+- **No more vertical bar down the left of the list.** fzf 0.74 draws a
+  gutter mark on every row that is not the current one, and it grew with
+  the list. The launcher now passes `--gutter ' '`, which is what the
+  gutter column was before.
+
 ### Changed
 
 - **The third fact in the headline is "Any program can be an extension."**
