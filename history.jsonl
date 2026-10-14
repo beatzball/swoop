@@ -944,3 +944,89 @@
 {"metric": "nav.enter", "ms": 9.29, "commit": "207e5b8c70e4", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 15}
 {"metric": "nav.esc", "ms": 8.96, "commit": "207e5b8c70e4", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 15}
 {"metric": "size.archive", "kb": 21614, "commit": "207e5b8c70e4", "os": "windows", "runner": "windows-latest", "budget": 30000}
+{"metric": "nav.rows", "ms": 52.63, "rows": 136, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 120}
+{"metric": "view.tasks", "ms": 2.87, "rows": 1, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 15}
+{"metric": "view.settings", "ms": 3.26, "rows": 1, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 15}
+{"metric": "nav.step", "ms": 2.88, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 15}
+{"metric": "preview.app", "ms": 11.51, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 80}
+{"metric": "preview.note", "ms": 12.79, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 80}
+{"metric": "list.ai", "ms": 11.05, "rows": 0, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.apps", "ms": 6.96, "rows": 86, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.calc", "ms": 4.7, "rows": 0, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.clipboard", "ms": 4.39, "rows": 1, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.define", "ms": 4.63, "rows": 1, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.emoji", "ms": 7.62, "rows": 1, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.files", "ms": 5.02, "rows": 1, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.links", "ms": 8.58, "rows": 5, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.notes", "ms": 7.83, "rows": 1, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.reminders", "ms": 6.98, "rows": 1, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.settings", "ms": 6.87, "rows": 1, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.snippets", "ms": 6.95, "rows": 11, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.stats", "ms": 6.52, "rows": 1, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.system", "ms": 4.13, "rows": 5, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.tasks", "ms": 6.99, "rows": 1, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "list.window", "ms": 9.82, "rows": 19, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 50}
+{"metric": "nav.enter", "ms": 3.55, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 15}
+{"metric": "nav.esc", "ms": 3.38, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 15}
+{"metric": "open", "ms": 153.29, "rows": 135, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 10, "budget": 300}
+{"metric": "key.root", "ms": 68.36, "rows": 136, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 150}
+{"metric": "key.tasks", "ms": 76.32, "rows": 1, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 150}
+{"metric": "key.settings", "ms": 31.58, "rows": 1, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 150}
+{"metric": "move.app", "ms": 23.85, "rows": 135, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 80}
+{"metric": "move.note", "ms": 22.04, "rows": 21, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 80}
+{"metric": "enter", "ms": 48.52, "rows": 21, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 150}
+{"metric": "esc", "ms": 204.89, "rows": 135, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 20, "budget": 400}
+{"metric": "frame.show", "ms": 1.53, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 10, "budget": 32}
+{"metric": "frame.hide", "ms": 7.67, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "runs": 10, "budget": 32}
+{"metric": "size.memory", "kb": 67456, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "budget": 120000}
+{"metric": "size.archive", "kb": 24129, "commit": "2cb77312933f", "os": "darwin", "runner": "macos-latest", "budget": 30000}
+{"metric": "nav.rows", "ms": 22.87, "rows": 148, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 120}
+{"metric": "view.tasks", "ms": 1.5, "rows": 1, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 15}
+{"metric": "view.settings", "ms": 2.52, "rows": 1, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 15}
+{"metric": "nav.step", "ms": 1.42, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 15}
+{"metric": "preview.app", "ms": 5.01, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 80}
+{"metric": "preview.note", "ms": 5.82, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 80}
+{"metric": "list.ai", "ms": 4.9, "rows": 0, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.apps", "ms": 4.76, "rows": 100, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.calc", "ms": 2.23, "rows": 0, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.clipboard", "ms": 2.21, "rows": 1, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.define", "ms": 2.29, "rows": 1, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.emoji", "ms": 3.37, "rows": 1, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.files", "ms": 2.2, "rows": 0, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.links", "ms": 3.48, "rows": 5, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.notes", "ms": 4.0, "rows": 1, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.reminders", "ms": 3.41, "rows": 0, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.settings", "ms": 4.01, "rows": 1, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.snippets", "ms": 3.52, "rows": 11, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.stats", "ms": 3.32, "rows": 1, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.system", "ms": 2.32, "rows": 5, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.tasks", "ms": 3.54, "rows": 1, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "list.window", "ms": 3.39, "rows": 19, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 50}
+{"metric": "nav.enter", "ms": 1.94, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 15}
+{"metric": "nav.esc", "ms": 1.91, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 15}
+{"metric": "open", "ms": 61.6, "rows": 147, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 10, "budget": 300}
+{"metric": "key.root", "ms": 39.93, "rows": 148, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 150}
+{"metric": "key.tasks", "ms": 30.38, "rows": 1, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 150}
+{"metric": "key.settings", "ms": 24.72, "rows": 1, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 150}
+{"metric": "move.app", "ms": 10.07, "rows": 147, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 80}
+{"metric": "move.note", "ms": 11.18, "rows": 21, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 80}
+{"metric": "enter", "ms": 32.53, "rows": 21, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 150}
+{"metric": "esc", "ms": 153.81, "rows": 147, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "runs": 20, "budget": 400}
+{"metric": "size.archive", "kb": 21141, "commit": "2cb77312933f", "os": "linux", "runner": "ubuntu-latest", "budget": 30000}
+{"metric": "nav.rows", "ms": 10.89, "rows": 0, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 120}
+{"metric": "view.tasks", "ms": 7.88, "rows": 1, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 15}
+{"metric": "view.settings", "ms": 10.53, "rows": 1, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 15}
+{"metric": "nav.step", "ms": 7.78, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 15}
+{"metric": "list.ai", "ms": 10.88, "rows": 0, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 50}
+{"metric": "list.apps", "ms": 7.7, "rows": 0, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 50}
+{"metric": "list.emoji", "ms": 7.28, "rows": 1, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 50}
+{"metric": "list.links", "ms": 7.69, "rows": 5, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 50}
+{"metric": "list.notes", "ms": 8.56, "rows": 1, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 50}
+{"metric": "list.settings", "ms": 8.99, "rows": 1, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 50}
+{"metric": "list.snippets", "ms": 7.71, "rows": 11, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 50}
+{"metric": "list.stats", "ms": 7.08, "rows": 1, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 50}
+{"metric": "list.tasks", "ms": 7.57, "rows": 1, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 50}
+{"metric": "list.window", "ms": 7.28, "rows": 19, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 50}
+{"metric": "nav.enter", "ms": 9.89, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 15}
+{"metric": "nav.esc", "ms": 9.43, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "runs": 20, "budget": 15}
+{"metric": "size.archive", "kb": 21613, "commit": "2cb77312933f", "os": "windows", "runner": "windows-latest", "budget": 30000}
