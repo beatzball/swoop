@@ -24,9 +24,16 @@ Set TypingSpeed 55ms
 Hide
 Type "export PATH=$PWD/bin:$PATH XDG_DATA_HOME=$PWD/data XDG_STATE_HOME=$PWD/state XDG_CONFIG_HOME=$PWD/config SWOOP_NO_CLIPD=1 SWOOP_TASKS_NOW=2026-10-14T10:00 && clear"
 Enter
-# One launch nobody sees. The programs were copied a moment ago, and the
-# system checks each one the first time it runs: that is seconds on the
-# first launch and nothing on the second, which is the one recorded.
+# Nobody sees this. The programs were copied a moment ago, and the system
+# checks each one the first time it runs: one to five seconds each, one
+# after another, about a minute for all of them. Run every one once here,
+# with nothing on stdin so each exits on its own, then one launch for the
+# rest. The launch that is recorded is then as quick as an installed one.
+# The word waited for is split in the typed line, so the wait matches the
+# output and not the command.
+Type 'for b in bin/swoop-*; do $b </dev/null >/dev/null 2>&1; done; echo rea""dy'
+Enter
+Wait+Screen@120s /ready/
 Type "swoop"
 Enter
 Sleep 6s
