@@ -19,6 +19,17 @@ so here.
   release, then how to move over one thing at a time. Getting Started and
   the README link to it.
 
+- **A skill for coding agents: `skills/swoop/SKILL.md`.** One file that
+  teaches Claude Code, Codex, opencode or Cursor to write an extension,
+  run `swoop-check` on it, reload the launcher and confirm the rows show,
+  add a quicklink, and back up a settings file before editing it.
+  Installed with `npx skills add https://github.com/beatzball/swoop
+  --skill swoop`, or by copying the folder. It links the contract and
+  Writing an Extension rather than repeating them, and names the contract
+  version it was written against. The site has it at
+  [/docs/agent-skill](https://swoop.sh/docs/agent-skill), and the README
+  one line under Install
+
 ## [0.15.1] - 2026-10-14
 
 The gutter bar gone, and the demo recorded on 0.15.0.

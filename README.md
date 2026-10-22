@@ -62,6 +62,8 @@ latest. Run it again to upgrade. Logs are in `~/Library/Logs/swoop`, and
 `~/.local/share/swoop/current/scripts/uninstall` removes the agents and keeps
 your history.
 
+For a coding agent: `npx skills add https://github.com/beatzball/swoop --skill swoop` installs a skill that writes and checks an extension for you. See [Agent Skill](https://swoop.sh/docs/agent-skill).
+
 However it was installed, `swoop restart` restarts the frame and the
 clipboard watcher, `swoop stop` and `swoop start` stop and start them, and
 `swoop status` says whether they run, where from, and how they were

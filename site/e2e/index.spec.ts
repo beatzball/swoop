@@ -9,6 +9,7 @@ const DOC_ROUTES = [
   '/docs/writing-an-extension',
   '/docs/contract',
   '/docs/build-your-own',
+  '/docs/agent-skill',
 ];
 
 /** The list, and every post. A new post is a line here, like a new doc. */
