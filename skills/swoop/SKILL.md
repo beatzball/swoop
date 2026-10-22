@@ -33,7 +33,7 @@ user can, with the same permissions, and runs the same programs.
 | what | where |
 |---|---|
 | the user's settings | `~/.config/swoop/config`, one `key = value` per line |
-| the user's extensions | `~/.config/swoop/extensions/<name>/<name>` |
+| the user's extensions | `~/.config/swoop/extensions/<name>/<name>`: a folder, and in it a program of the same name, so `sessions/sessions` |
 | quicklinks | `~/.config/swoop/quicklinks.tsv`: name, link, app, tab-separated |
 | the bundled extensions, installed with curl | `~/.local/share/swoop/current/extensions/` |
 | the bundled extensions, installed with Homebrew | `$(brew --prefix)/opt/swoop/libexec/extensions/` |
