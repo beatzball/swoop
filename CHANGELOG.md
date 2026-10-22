@@ -9,6 +9,10 @@ so here.
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-10-22
+
+A page for people coming from a GUI launcher, and a skill for coding agents.
+
 ### Added
 
 - **A docs page for people coming from a GUI launcher.** [Coming from a
@@ -847,7 +851,8 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.15.1...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.16.0...HEAD
+[0.16.0]: https://github.com/beatzball/swoop/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/beatzball/swoop/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/beatzball/swoop/compare/v0.14.0...v0.15.0
 [0.14.0]: https://github.com/beatzball/swoop/compare/v0.13.0...v0.14.0
