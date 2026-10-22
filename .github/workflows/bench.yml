@@ -64,7 +64,11 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       - name: fzf and hyperfine
         if: runner.os == 'macOS'
-        run: brew install fzf hyperfine
+        run: |
+          brew install fzf
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL https://github.com/sharkdp/hyperfine/releases/download/v1.20.0/hyperfine-v1.20.0-aarch64-apple-darwin.tar.gz | tar -xz -C "$HOME/.local/bin" --strip-components 1 hyperfine-v1.20.0-aarch64-apple-darwin/hyperfine
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
       # No fzf: the launcher needs a pseudo-terminal, which Windows has
       # not, so the keys are not measured there.
       - name: hyperfine
