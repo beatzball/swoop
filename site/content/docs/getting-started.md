@@ -162,6 +162,8 @@ what it never keeps.
 
 ## Next
 
+- [Coming from a GUI Launcher](/docs/coming-from-a-gui-launcher): what swoop
+  calls the things you know, and what it does not do
 - [Extensions](/docs/extensions): everything that ships in the list
 - [Ask AI](/docs/ask-ai): Tab, and any model you like
 - [Writing an Extension](/docs/writing-an-extension): add your own rows with

@@ -2,7 +2,7 @@
 title: Ask AI
 description: Press Tab and ask. swoop runs any command you name with the conversation on its stdin and shows what it prints, as it prints it.
 sidebar:
-  order: 2
+  order: 3
 ---
 
 ## Tab, type, Enter

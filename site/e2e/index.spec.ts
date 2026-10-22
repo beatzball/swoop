@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 
 const DOC_ROUTES = [
   '/docs/getting-started',
+  '/docs/coming-from-a-gui-launcher',
   '/docs/ask-ai',
   '/docs/extensions',
   '/docs/settings',

@@ -2,7 +2,7 @@
 title: Build Your Own Tool
 description: Make a keyboard tool of your own on swoopkit, the toolkit under swoop, in one command. What the folder holds, how to add rows, how to name the frame, and how to ship it.
 sidebar:
-  order: 6
+  order: 7
 ---
 
 ## What swoopkit is

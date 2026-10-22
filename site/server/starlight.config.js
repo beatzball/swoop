@@ -15,6 +15,7 @@ export const siteConfig = {
       label: 'Start Here',
       items: [
         { label: 'Getting Started', slug: 'getting-started' },
+        { label: 'Coming from a GUI Launcher', slug: 'coming-from-a-gui-launcher' },
       ],
     },
     {

@@ -9,6 +9,16 @@ so here.
 
 ## [Unreleased]
 
+### Added
+
+- **A docs page for people coming from a GUI launcher.** [Coming from a
+  GUI Launcher](https://swoop.sh/docs/coming-from-a-gui-launcher) sits
+  after Getting Started: one table of the things such a launcher taught
+  you to expect, each with swoop's word for it, where it lives on disk
+  and the page that covers it, then what swoop does not do as of this
+  release, then how to move over one thing at a time. Getting Started and
+  the README link to it.
+
 ## [0.15.1] - 2026-10-14
 
 The gutter bar gone, and the demo recorded on 0.15.0.
