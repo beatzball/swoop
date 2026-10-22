@@ -2,7 +2,7 @@
 title: Settings
 description: One row per setting, the value beside it, Enter to change it. Every value is one line in a plain text file you can also edit.
 sidebar:
-  order: 4
+  order: 5
 ---
 
 ## Open Settings

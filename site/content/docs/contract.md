@@ -2,7 +2,7 @@
 title: The Extension Contract
 description: The contract between swoopkit's launcher and an extension, with a version number, a compatibility promise, and swoop-check, the test an extension author runs.
 sidebar:
-  order: 6
+  order: 7
 ---
 
 **contract 1**, 2026-10-02

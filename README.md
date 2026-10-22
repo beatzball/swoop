@@ -3,6 +3,9 @@
 **[swoop.sh](https://swoop.sh)**: install, every feature, and a guide to
 writing your own extension.
 
+Coming from a GUI launcher? [One page](https://swoop.sh/docs/coming-from-a-gui-launcher)
+says what swoop calls the things you know, and what it does not do.
+
 Say it like a bird does: swoop down, grab the thing, gone.
 
 fzf finds. libghostty draws. Any program can be an extension. swoop is an

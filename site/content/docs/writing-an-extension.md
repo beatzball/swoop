@@ -2,7 +2,7 @@
 title: Writing an Extension
 description: Build a swoop extension from nothing, a shell script that lists, previews and runs, then opens a pane, then offers actions, and try it in the launcher at every step.
 sidebar:
-  order: 5
+  order: 6
 ---
 
 ## What you will build

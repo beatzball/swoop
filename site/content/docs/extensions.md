@@ -2,7 +2,7 @@
 title: Extensions
 description: Everything that ships in the list, from quicklinks and emoji to notes, tasks, window moves and clipboard history. Each one is an extension.
 sidebar:
-  order: 3
+  order: 4
 ---
 
 ## Every row is an extension
