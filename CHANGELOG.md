@@ -9,6 +9,18 @@ so here.
 
 ## [Unreleased]
 
+### Changed
+
+- **After `brew install`, swoop says what to do next.** The formula's
+  caveats are three numbered steps: start the frame with `brew services
+  start swoop`, press the hotkey, and turn on Accessibility the first
+  time macOS asks. The frame posts one notification the first time it
+  starts on a machine, "swoop is running. Press alt+shift+space", and
+  never again, a restart included. `swoop status` names the command that
+  starts a stopped frame for how it was installed, and the launcher,
+  closed in a terminal on a Mac whose Homebrew-installed frame is not
+  running, prints that same line. (#268)
+
 ## [0.16.0] - 2026-10-22
 
 A page for people coming from a GUI launcher, and a skill for coding agents.

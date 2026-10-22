@@ -167,6 +167,10 @@ swoop_service() {
     */Cellar/*|/opt/homebrew/*|/home/linuxbrew/*) how=homebrew ;;
   esac
   [ -n "$how" ] || [ ! -f "$agents/$tool_id.shell.plist" ] || how=launchd
+  # This script under Homebrew's prefix: brew put it there, frame and all,
+  # and its service is the one to start. Cheaper than brew's list, which
+  # takes a second, and the same answer.
+  [ -n "$how" ] || [ -z "$own" ] || ! _swoop_under_brew "$here" || how=homebrew
   if [ -z "$how" ] && command -v brew >/dev/null 2>&1 &&
     brew services list 2>/dev/null | awk -v n="$tool_name" '$1 == n { f = 1 } END { exit !f }'; then
     how=homebrew
@@ -228,6 +232,25 @@ swoop_service() {
 # not loaded or has no process now. Reads domain from the caller.
 _swoop_service_pid() { # label
   launchctl print "$domain/$1" 2>/dev/null | sed -n 's/^[[:space:]]*pid = \([0-9][0-9]*\)$/\1/p' | head -1
+}
+
+# Whether a path is under a Homebrew prefix: a Cellar anywhere, or the
+# default prefix on Apple silicon or Linux. Intel Macs keep a Cellar
+# under /usr/local, which the first pattern finds.
+_swoop_under_brew() { # path
+  case "$1" in */Cellar/*|/opt/homebrew/*|/home/linuxbrew/*) return 0 ;; esac
+  return 1
+}
+
+# The command that starts the frame, for how it was installed: Homebrew's
+# service for a Homebrew install, this script's own verb for every other.
+# The one answer for `status` and for the line the launcher leaves on
+# exit, so the two never disagree.
+_swoop_start_command() { # how
+  case "$1" in
+    homebrew) echo "brew services start $tool_name" ;;
+    *) echo "$tool_name start" ;;
+  esac
 }
 
 # The frame and the two agents of a tool that runs the kit's programs
@@ -314,8 +337,13 @@ _swoop_status() { # how pid path
   fi
   if [ -n "$pid" ]; then
     echo "frame:   running, pid $pid, hotkey $hotkey, version $version, ${path:-?}, installed by ${how:-hand}"
+  elif [ -n "$how" ]; then
+    # Installed and stopped: say what starts it, so nobody has to
+    # remember which installer they used. Not installed is said below
+    # the status, by _swoop_not_installed.
+    echo "frame:   not running, hotkey $hotkey, version $version, ${path:-?}, installed by $how; start it with: $(_swoop_start_command "$how")"
   else
-    echo "frame:   not running, hotkey $hotkey, version $version, ${path:-?}, installed by ${how:-nothing}"
+    echo "frame:   not running, hotkey $hotkey, version $version, ${path:-?}, installed by nothing"
   fi
   # This tool's watcher: the one that holds the lock in the tool's own
   # folder. A watcher too old to say which process it is still holds it.
@@ -585,6 +613,22 @@ rm -f "$icons" "$rows" "$SWOOP_STATE" "$SWOOP_LAND" "$SWOOP_ONCE" "$sock"
 # Inside a frame of our own, tell it we are leaving, so it can put the
 # panel away before the terminal prints "Process exited".
 [ -n "${SWOOP_SHELL_PID:-}" ] && kill -USR2 "$SWOOP_SHELL_PID" 2>/dev/null
+# In a terminal, on a Mac, from a Homebrew install whose frame nobody has
+# started: the one line that makes the panel appear (#268). `brew services
+# start` puts nothing on screen and the caveats have scrolled away, so
+# this is where a person lands who installed the tool and typed its name
+# to see. Only the kit's own tool, which is the one brew installs; only
+# outside the frame, which does not need telling; and told by launchd
+# alone, which is two quick asks. A frame started by hand from brew's
+# files gets the line too, and loses nothing by it: the by-hand check
+# reads every process, too much for every exit.
+if [ -z "${SWOOP_SHELL_PID:-}" ] && { [ "$SWOOP_TOOL" = "$here/../tool" ] || [ "$SWOOP_TOOL" -ef "$here/../tool" ]; } &&
+  _swoop_under_brew "$here" && [ "$(uname -s)" = Darwin ]; then
+  domain="gui/$(id -u)"
+  if [ -z "$(_swoop_service_pid "$tool_id.shell")" ] && [ -z "$(_swoop_service_pid "homebrew.mxcl.$tool_name")" ]; then
+    echo "$tool_name: the frame is installed but not running; start it with: $(_swoop_start_command homebrew)" >&2
+  fi
+fi
 # Esc and ctrl-c make fzf exit 130. Closing the launcher is not a failure,
 # and Ghostty treats a fast non-zero exit as one: it keeps the pane open
 # with "Process exited" until a key is pressed. Anything else is real.

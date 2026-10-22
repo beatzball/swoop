@@ -1517,6 +1517,64 @@ printf 'b\\tcommand\\t\\tSlow Live Row\\tasked again\\n'
                 if y:
                     y.kill()
         check("two launchers at once: each answers for itself", side_by_side)
+
+        # 21. installed by Homebrew, frame never started (#268). The kit
+        # as brew lays it out: a Cellar folder with the launcher and its
+        # programs under libexec, and no frame under either launchd
+        # label. `status` names the command that starts it, and the
+        # launcher, closed in a terminal, leaves the same line on stderr.
+        # launchd, brew and uname are fakes, so this is the same on a Mac
+        # whose own frame runs and on Linux, where there is no frame
+        def brew_stopped():
+            cellar = os.path.join(tmp, "Cellar", NAME, "0.0.0", "libexec")
+            os.makedirs(os.path.join(cellar, "bin"))
+            # A copy of the script, not a link: the launcher follows its
+            # own links before it looks at where it is.
+            shutil.copy(os.path.join(ROOT, "bin", "swoop"), os.path.join(cellar, "bin", "swoop"))
+            for f in os.listdir(os.path.join(ROOT, "bin")):
+                if f != "swoop":
+                    os.symlink(os.path.join(ROOT, "bin", f), os.path.join(cellar, "bin", f))
+            for f in ("tool", "extensions", "scripts", "VERSION"):
+                os.symlink(os.path.join(ROOT, f), os.path.join(cellar, f))
+            fakes = os.path.join(tmp, "brewfakes")
+            os.makedirs(fakes)
+            write_exe(os.path.join(fakes, "uname"), "#!/bin/sh\necho Darwin\n")
+            # Nothing loaded under any label.
+            write_exe(os.path.join(fakes, "launchctl"), "#!/bin/sh\nexit 113\n")
+            write_exe(os.path.join(fakes, "brew"), f"""#!/bin/sh
+[ "$*" = "services list" ] && printf 'Name Status\\n{NAME} none\\n'
+exit 0
+""")
+            benv = dict(env, PATH=fakes + os.pathsep + env["PATH"])
+            launcher = os.path.join(cellar, "bin", "swoop")
+            want = f"start it with: brew services start {NAME}"
+            st = subprocess.run([launcher, "status"], env=benv, capture_output=True, text=True)
+            if "installed by homebrew; " + want not in st.stdout:
+                fail(f"status under a Cellar, frame stopped, said:\n{st.stdout}{st.stderr}")
+            t = Launcher(benv, script=launcher)
+            t.key = key
+            try:
+                t.wait_state(lambda s: s["totalCount"] > 3, what="the Cellar launcher's list")
+                t.send("\x1b")
+                code = t.wait_exit()
+                if code != 0:
+                    fail(f"the Cellar launcher exited {code}", t.buf)
+                if f"{NAME}: the frame is installed but not running; {want}" not in t.buf:
+                    fail("the launcher closed in a terminal without saying how to start the frame", t.buf)
+            finally:
+                t.kill()
+            # Inside the frame the line would be noise: the frame is running.
+            t = Launcher(dict(benv, SWOOP_SHELL_PID="1"), script=launcher)
+            t.key = key
+            try:
+                t.wait_state(lambda s: s["totalCount"] > 3, what="the Cellar launcher's list, inside a frame")
+                t.send("\x1b")
+                t.wait_exit()
+                if "start it with" in t.buf:
+                    fail("the launcher said how to start the frame from inside the frame", t.buf)
+            finally:
+                t.kill()
+        check("a Homebrew install with the frame stopped: status and the launcher say how to start it", brew_stopped)
     finally:
         L.kill()
         # The worker may still be around on a fast failure.

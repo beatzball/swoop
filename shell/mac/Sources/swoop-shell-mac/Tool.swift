@@ -61,6 +61,17 @@ struct Tool {
         return base + "/" + current.name
     }
 
+    /// The tool's folder under the user's state home, where the kit's
+    /// programs keep what is theirs to remember and not the user's to
+    /// edit: the usage log, the done tasks (see internal/usage in Go,
+    /// which spells the same path). The frame keeps its once-only marks
+    /// there, so a tool made of the kit has them in its own folder.
+    static var stateDir: String {
+        let env = ProcessInfo.processInfo.environment
+        let base = env["XDG_STATE_HOME"] ?? (env["HOME"] ?? "") + "/.local/state"
+        return base + "/" + current.name
+    }
+
     private static func fail(_ message: String) -> Never {
         FileHandle.standardError.write(Data("swoop-shell-mac: \(message)\n".utf8))
         exit(1)

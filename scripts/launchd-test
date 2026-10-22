@@ -387,7 +387,7 @@ others "a stop"
 # Stopped, with another tool's frame running: that frame is not this
 # tool's, whatever its program is called.
 verb 0 "$mytool" status
-case "$out" in *"frame:   not running, hotkey ctrl+space"*"installed by launchd"*) ;; *) fail "status, stopped: $out" ;; esac
+case "$out" in *"frame:   not running, hotkey ctrl+space"*"installed by launchd; start it with: mytool start"*) ;; *) fail "status, stopped: $out" ;; esac
 case "$out" in *"$frame"*) ;; *) fail "status does not say where the frame is: $out" ;; esac
 case "$out" in *"watcher: not running"*) ;; *) fail "status, stopped, watcher: $out" ;; esac
 
@@ -432,14 +432,15 @@ rm -f "$HOME/Library/LaunchAgents/$id".*.plist
 SWOOP_TEST_BREW_LISTS=1 verb 0 "$mytool" stop
 grep -q '^brew services stop mytool$' "$log" || fail "brew's list did not make stop a brew services stop"
 SWOOP_TEST_BREW_LISTS=1 verb 0 "$mytool" status
-case "$out" in *"installed by homebrew"*) ;; *) fail "status, Homebrew: $out" ;; esac
+case "$out" in *"installed by homebrew; start it with: brew services start mytool"*) ;; *) fail "status, Homebrew: $out" ;; esac
 
 # Neither: say how to install it, and exit 1. The other tool's frame runs
 # all the while, and is no sign of an install of this one.
 verb 1 "$mytool" restart
 case "$out" in "mytool: the frame is not installed"*) ;; *) fail "no install, restart said: $out" ;; esac
 verb 1 "$mytool" status
-case "$out" in *"frame:   not running"*) ;; *) fail "no install, status: $out" ;; esac
+case "$out" in *"frame:   not running"*"installed by nothing"*) ;; *) fail "no install, status: $out" ;; esac
+case "$out" in *"start it with"*) fail "no install, and status names a start command: $out" ;; esac
 
 # Linux and Windows: no frame yet.
 SWOOP_TEST_UNAME=Linux verb 1 "$mytool" restart
