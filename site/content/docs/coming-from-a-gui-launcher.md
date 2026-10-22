@@ -16,7 +16,7 @@ where it lives on disk, and the page that covers it. Every row below is an
 |---|---|---|---|
 | quicklinks | a quicklink: a name, a link, what opens it. `{argument}` in the link asks first | one line in `~/.config/swoop/quicklinks.tsv` | [Quicklinks](/docs/extensions#quicklinks) |
 | snippets | a snippet, pasted into the app you came from. `{date}`, `{clipboard}`, `{cursor}` are filled | one markdown file each in `~/.config/swoop/snippets/` | [Snippets](/docs/extensions#snippets) |
-| script commands | an extension: a program that prints rows, in any language that starts fast | a folder, `~/.config/swoop/extensions/<name>/<name>` | [Writing an Extension](/docs/writing-an-extension) |
+| script commands | an extension: a program that prints rows, in any language that starts fast | a folder, and in it a program of the same name: `~/.config/swoop/extensions/clock/clock` | [Writing an Extension](/docs/writing-an-extension) |
 | a store | none. An extension is a folder: copy it in, and it is installed | `~/.config/swoop/extensions/` | [Extensions](/docs/extensions) |
 | AI chat | Ask AI: Tab from anywhere, any command that reads a question and prints an answer | the command in `~/.config/swoop/ai`, or `ai =` in `~/.config/swoop/config` | [Ask AI](/docs/ask-ai) |
 | clipboard history | Clipboard History, kept by `swoop-clipd`. It skips the password managers | `~/.local/share/swoop/clipboard/history.jsonl`, yours only | [Clipboard History](/docs/extensions#clipboard-history) |
