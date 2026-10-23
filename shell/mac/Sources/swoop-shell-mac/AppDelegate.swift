@@ -75,6 +75,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         endedSignal = ended
 
         FileHandle.standardError.write(Data("swoop-shell-mac: ready as \(tool.title) (\(tool.id).shell, folder \(tool.name)); hotkey \(spec); running \(command)\n".utf8))
+        // The first start on this machine, and no other: a service starts
+        // silent, and this is how the person who just ran the right
+        // command learns it worked. See Hello.
+        Hello.once(hotkey: spec)
     }
 
     /// Register spec as the hotkey, in place of the one before. A key that

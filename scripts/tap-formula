@@ -94,23 +94,37 @@ class $class < Formula
     error_log_path var/"log/$name.log"
   end
 
+  # Numbered, because the person reading this has just typed brew install
+  # and wants to know what to do next: start it, press the key, and the
+  # one permission macOS asks for later. Getting Started on the site says
+  # the same three things at more length.
   def caveats
-    <<~EOS
-      In any terminal, on any OS: $name
+    if OS.mac?
+      <<~EOS
+        1. Start the frame, now and at every login:
+             brew services start $name
+        2. Press $hotkey. Esc hides it.
+        3. The first time you paste a snippet or an emoji, or move a
+           window, macOS asks for Accessibility for swoop-shell-mac.
+           Turn it on and try again. Nothing else needs a permission.
 
-      On a Mac, the frame (a panel on $hotkey) runs at login with:
-        brew services start $name
-      After that, $name restart, $name stop, $name start, $name status;
-      the bird in the menu bar has Restart and Quit.
+        Releases are not signed yet, so after each brew upgrade remove
+        swoop-shell-mac from System Settings > Privacy & Security >
+        Accessibility and add it again.
 
-      After each upgrade, remove swoop-shell-mac from System Settings,
-      Privacy & Security, Accessibility and add it again: releases are
-      not signed yet, so a new version needs a new grant.
+        The service sees Homebrew's PATH only. If your AI command lives
+        elsewhere, name it in full in ~/.config/$name/ai, for example:
+          ~/.local/bin/claude -p
 
-      The service sees Homebrew's PATH only. If your AI command lives
-      elsewhere, name it in full in ~/.config/$name/ai, for example:
-        ~/.local/bin/claude -p
-    EOS
+        $name restart, $name stop, $name start and $name status look after
+        the frame. More: https://swoop.sh/docs/getting-started
+      EOS
+    else
+      <<~EOS
+        Run $name in a terminal. There is no frame on Linux yet.
+        More: https://swoop.sh/docs/getting-started
+      EOS
+    end
   end
 
   test do

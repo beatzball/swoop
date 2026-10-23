@@ -102,7 +102,9 @@ enum Paster {
     /// A notification titled with the tool's title, through osascript: a bare binary has
     /// no bundle, and the notification frameworks want one. The text goes
     /// and the title go in as arguments, so no quoting can break them.
-    private static func notify(_ note: String) {
+    /// The frame's one way to say something on screen, so Hello, the
+    /// first-start note, goes through it too.
+    static func notify(_ note: String) {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         p.arguments = ["-e", "on run argv", "-e", "display notification (item 1 of argv) with title (item 2 of argv)", "-e", "end run", note, Tool.current.title]
