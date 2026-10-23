@@ -9,6 +9,10 @@ so here.
 
 ## [Unreleased]
 
+## [0.16.1] - 2026-10-22
+
+After `brew install`, swoop says what to do next.
+
 ### Changed
 
 - **After `brew install`, swoop says what to do next.** The formula's
@@ -863,7 +867,8 @@ build and test but have no app source or frame yet.
 The first run on a machine converts every app icon once and costs about half
 a second (#19).
 
-[Unreleased]: https://github.com/beatzball/swoop/compare/v0.16.0...HEAD
+[Unreleased]: https://github.com/beatzball/swoop/compare/v0.16.1...HEAD
+[0.16.1]: https://github.com/beatzball/swoop/compare/v0.16.0...v0.16.1
 [0.16.0]: https://github.com/beatzball/swoop/compare/v0.15.1...v0.16.0
 [0.15.1]: https://github.com/beatzball/swoop/compare/v0.15.0...v0.15.1
 [0.15.0]: https://github.com/beatzball/swoop/compare/v0.14.0...v0.15.0
